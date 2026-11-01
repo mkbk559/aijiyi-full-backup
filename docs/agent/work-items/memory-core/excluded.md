@@ -474,6 +474,19 @@
       **不要**再去找"自动余额接口"或抓 SPA 页面（用浏览器自动化抓 dashboard 的收益不值）
     → 脚本留档：`tools/probe_gateway_credits.py`、`tools/probe_gateway_headers.py`（换网关先跑一遍）
 
+66. **"`git add -A` 一下就能给清理做回滚点"**（2026-11-02 实测被打断三次）
+    → ① 仓库根有个 0 字节的 `nul`（Windows 保留名，某次重定向留下的）：`git add -A` 直接
+      `error: invalid path 'nul'` / `unable to add 'nul'`，**整次 add 回滚**。删法只有
+      `del /f /q "\\?\D:\AIJiYi\nul"`（普通 `Remove-Item` 删不掉）
+    → ② 还有两个 0 字节、名字是半截 Python 代码的文件（PowerShell heredoc 被打断的产物）：
+      `, data[choices][0][message][content])@` 这种，必须先删再 add
+    → ③ `git commit -m "带空格和括号的中文句子"` 在 `cmd /c` 里被拆成 pathspec，报
+      `pathspec 'before' did not match any file(s)`；**用单 token 的 message**（`snapshot-before-cleanup-2026-11-02`）
+    → ④ `.tmp` 里两个 git 克隆（`octop-gateway`、`dsh-plugin-audit-*`）的 `objects/pack/*.idx` 是只读，
+      `shutil.rmtree` 报 `WinError 5`；先 `attrib -R -S -H /S /D` 再 `rmdir /S /Q` 才干净
+    → 教训：**清理脚本要 dry-run 优先**（`tools/cleanup_junk.py` 默认只打印），删前先有一份
+      "全量 commit"，否则这个仓库（当时 0 次提交）删了就真没了
+
 
 
 

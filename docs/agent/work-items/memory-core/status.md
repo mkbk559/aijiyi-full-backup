@@ -664,3 +664,15 @@
   `aiji quota` 真网关输出 `cost 0.08 / allowed 8 / note 399→8`（见 borrow-plan §9.5）。
 - **新否定性证据**（excluded #65）：两个反代都不吐余额（无 quota 头、无余额 JSON、dashboard 是 SPA），
   所以余额走"手填 + 过期可见"，探测脚本留 `tools/probe_gateway_{credits,headers}.py`。
+
+## 2026-11-02 全项目体检 + 清垃圾（省 4.9 GB，478 条单测仍全绿）
+
+- **回滚点**：清理前 `git commit` = `46b83d1`（仓库之前 **0 次提交**）；清理后 = `ffe185d`。
+- **新增工具**：`tools/cleanup_junk.py`（默认 dry-run）、`tools/audit_unused.py`、`tools/audit_pkg_dead.py`。
+- **删了 4,921.7 MB / 12,536 项**：`.tmp` 下 12,373 个测试目录、`.dsh-vision-router`、
+  130+ 个 `aiji-style-*` 空目录、6 个 `tmp*`、`build/`、`dist/` 旧包 ×6、各类 cache/egg-info、
+  12 个一次性审计/调试脚本（详见 `excluded.md` #66 与 `PROJECT_STATE.md` 决策日志）。
+- **保留**：`data/`、`voice-engine/`（9 GB 真实引擎与音色）、`.tmp/research`+`.tmp/pdf`（证据原文）、
+  `dist/aiji-0.8.3*`、`baseline.json`、全部 `*_smoke.py`。
+- **体检结论**：`aiji/` 包 **0 个死模块**（43 个模块都有 import 方）；垃圾全是文件系统残留，不是代码。
+- 测试：`python -m unittest discover -s tests` → **478 条 OK**（归档 sha256 `076d8a00…`）。

@@ -92,6 +92,20 @@ python bench/demo_loop.py                                       # 端到端：�
     换说法 R@1 0.417 / R@5 0.500；自检 hit@5 1.0 / abstain 0.5 / stale 1.0 / **leak 0**。
   - **两条被实测打回的**（excluded #63/#64）：弃答门 0.15 会误伤短问句（默认关）；
     RRF 在单路候选上与手工权重**完全一致**（默认仍 weighted，等向量层接入再开影子对比）。
+- 2026-11-02 **全项目体检 + 清垃圾（省 4.9 GB，测试仍全绿）**：
+  - **先建回滚点**：仓库此前**一次提交都没有**（`git stash` 都会失败），清理前先 `git add -A && commit`
+    → `46b83d1`；清理后 `ffe185d`。删错可 `git checkout 46b83d1 -- <path>` 取回。
+  - 新增 `tools/cleanup_junk.py`（**默认 dry-run**，`--apply` 才删）+ `tools/audit_unused.py`
+    （每个 .py 数一遍外部引用）+ `tools/audit_pkg_dead.py`（`aiji/` 包内有没有没人 import 的模块）。
+  - **删了什么**（4,921.7 MB / 12,536 项）：`.tmp/` 下 12,373 个测试工作目录（4.4 GB）、
+    `.dsh-vision-router/` 视觉截图（17.6 MB）、根目录 130+ 个 `aiji-style-*` 空目录、6 个 `tmp*`（86 MB）、
+    `build/`、`dist/` 旧版本 6 个包（52 MB）、`.pytest_cache`/`.ruff_cache`/`.coverage`/`egg-info`/`__pycache__`、
+    12 个一次性审计/调试脚本（`tools/probe/_audit6h_*`、`_check_*`、`_voice_*`、`summarize_field_audit_6h.py` 等）。
+  - **明确保留**：`data/`（真库 22 MB + dafeiyu 音色 477 MB + 歌曲）、`voice-engine/`（9 GB：Seed-VC .venv
+    6.1 GB + checkpoints 1.8 GB + audio-separator .venv 1 GB）、`.tmp/research` + `.tmp/pdf`（docs 引用的证据原文）、
+    `dist/aiji-0.8.3*`、`baseline.json`、所有 `*_smoke.py`（OCR/语音/whisper 唯一的手工验证入口）。
+  - **结论**：`aiji/` 包 **0 个死模块**（43 个模块都有真实 import 方）；4.6 GB 垃圾全是文件系统残留，不是代码。
+  - 清理后全量 **478 条单测仍 OK**（`...\031800-aiji-suite-after-cleanup-740e12`，sha256 `076d8a00…`）。
 - 2026-11-02 **主动配额改为"反代积分折算"（用户口径）+ 自我记忆进注入块**：
   - `aiji/quota.py`：`allowed_24h = min(8, floor(剩余积分×0.8 ÷ 单条单价))`；积分取不到就退回 3/天。
     来源四级：配置 URL → 响应头 → `data/credits.json` → 静态/`AIJI_CREDITS`。
