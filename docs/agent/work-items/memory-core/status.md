@@ -688,3 +688,16 @@
   Chatterbox-TTS-Server 的 Windows 便携模式（`start.bat`，相对路径拷走即用）、Kokoro-FastAPI 的 `/dev/unload`。
 - **未验证**：5 个候选一个都没在本机装过；显存/RTF 全是上游自述；IndexTTS 是否真无 OpenAI 端点只核了 README。
 - 等用户选 A（只做外壳）/ B（+ 接 CosyVoice2 或 GPT-SoVITS）/ C（换轻量 OpenAI 兼容引擎）再动手。
+
+## 2026-11-02 换音色（SVC）开源项目调研（只调研，未安装任何东西）
+
+- 产出：`docs/agent/research/voice-conversion-options-2026-11-02.md`。
+- **关键区分**：① 给合成语音套音色 → 用克隆式 TTS 即可，**不需要 SVC**；
+  ② 给唱歌套音色（`song_service.py:306-315`）→ 真 SVC，克隆式 TTS 替代不了。
+- 候选：RVC 官方（MIT，:7865，requirements 内置 pku/nju 国内镜像）、**Applio**（MIT，`run-install.bat` /
+  `run-applio.bat` / **`run-updater.bat` 原地升级保留模型** = 升级便利化最强）、OpenVoice V2（MIT，原生中文，
+  零样本 tone color）、kNN-VC（3 个依赖 + `torch.hub` 一行、无需训练）、DDSP-SVC 6.0（唱歌专用、CPU 友好）。
+- **本机网络实测**：huggingface.co 直连 0.96 MB/s、hf-mirror 0.45、modelscope **SSL EOF**、
+  download.pytorch.org **0.06 MB/s（不可用）**、mirrors.pku.edu.cn 0.59 MB/s、
+  `git clone` 需 `-c http.sslBackend=openssl`（schannel 报 SEC_E_NO_CREDENTIALS）。
+- **未验证**：六个候选一个都没装；kNN-VC/DDSP-SVC/so-vits 的 LICENSE 未核对；唱歌相似度无量化对比。

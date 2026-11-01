@@ -86,6 +86,21 @@
 **不推荐动 Seed-VC 的理由**：它做的是"任意 TTS → 大肥鱼音色"的转换，别的项目都不替代这件事。
 真要省空间，走"CPU 版 torch"（省 ~5 GB）而不是删它。
 
+### 5.1 Seed-VC 到底能不能删？（代码证据）
+
+用户的问题：既然接真 TTS，为什么还要 Seed-VC？查到的事实：
+
+| 位置 | 事实 | 含义 |
+|---|---|---|
+| `data/voices/dafeiyu/profile.json` | `provider: "edge"`、`voice: zh-CN-XiaoyiNeural`、`postprocess.url: http://127.0.0.1:9880/convert` | 现在的声音 = **edge 合成 + Seed-VC 换音色**（两段式），Seed-VC 就是在补 edge"不能克隆"的短板 |
+| `voice_service.py:383-392` | postprocess 是**可选**后处理，抛错就保留原音色（`pass`） | 删掉 postprocess 不影响主链路 |
+| `voice_service.py:496-538` | `_gptsovits()` 已实现 api_v2 `/tts`，参数含 `ref_audio_path` + `prompt_text` | 真 TTS **自带 zero-shot 克隆**，所以"说"这条链路确实不需要 Seed-VC |
+| `song_service.py:306-315` | 唱歌链路调 `self.voices.convert_audio(...)` 把分离出的人声转成目标音色 | **唱歌是 SVC（音色转换）不是 TTS**，GPT-SoVITS / CosyVoice 都不做这个 |
+
+**结论**：接真中文 TTS 后，"说话"这一路可以完全去掉 Seed-VC（省 8 GB，其中 CUDA torch 5.5 GB）；
+**唯一保留理由是唱歌**——除非放弃"用大肥鱼的声音唱歌"，或另找 RVC 类 SVC 替代。
+换句话说：`voice-engine/` 的 9 GB 里，"说话用"的那部分是可删的，"唱歌用"的那部分要单独决定。
+
 ## 6. 明确"不抄"的
 
 - **不引入 Docker 作为主路径**：本机 Docker Desktop + WSL2 是额外一层依赖，4 GB 显存还要和 WSL 抢；
