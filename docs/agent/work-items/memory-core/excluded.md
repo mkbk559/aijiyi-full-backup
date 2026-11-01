@@ -484,8 +484,16 @@
       `pathspec 'before' did not match any file(s)`；**用单 token 的 message**（`snapshot-before-cleanup-2026-11-02`）
     → ④ `.tmp` 里两个 git 克隆（`octop-gateway`、`dsh-plugin-audit-*`）的 `objects/pack/*.idx` 是只读，
       `shutil.rmtree` 报 `WinError 5`；先 `attrib -R -S -H /S /D` 再 `rmdir /S /Q` 才干净
-    → 教训：**清理脚本要 dry-run 优先**（`tools/cleanup_junk.py` 默认只打印），删前先有一份
-      "全量 commit"，否则这个仓库（当时 0 次提交）删了就真没了
+67. **"在 DSH 沙箱里能用 WMI / 计划任务把进程脱离出去，做成开机自启"**（2026-11-02 实测双拦）
+    → `Invoke-CimMethod Win32_Process Create` → `无法从客户端中访问 CIM 资源`
+    → `schtasks /Query`（连查询都不行）→ `ERROR: The system cannot find the path specified.`
+    → 现象：从工具调用里 `Start-Process` 起的 python 会随调用结束被收掉（留下
+      1 线程 / 5MB / CPU 0.015s 的空壳 pid）；`Get-NetTCPConnection -LocalPort 9880` 对它**假阴性**
+    → 结论：**沙箱内无法创建常驻进程**。凡是"重启后要继续跑"的东西（Seed-VC 9880 等），
+      只能写进用户双击的 `.bat`（`启动控制台.bat` 已自动调用 `tools\ensure_voice_engine.ps1`），
+      或由用户手工起；**别在这里反复试 WMI/schtasks/Start-Process 脱离**。
+    → 判活一律用 `netstat -ano | findstr :PORT` 或 TcpClient connect，不用 Get-NetTCPConnection。
+
 
 
 
