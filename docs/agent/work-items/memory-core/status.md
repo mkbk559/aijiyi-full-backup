@@ -676,3 +676,15 @@
   `dist/aiji-0.8.3*`、`baseline.json`、全部 `*_smoke.py`。
 - **体检结论**：`aiji/` 包 **0 个死模块**（43 个模块都有 import 方）；垃圾全是文件系统残留，不是代码。
 - 测试：`python -m unittest discover -s tests` → **478 条 OK**（归档 sha256 `076d8a00…`）。
+
+## 2026-11-02 语音引擎"升级便利化"调研（只调研，未动代码）
+
+- 产出：`docs/agent/research/voice-engine-upgrade-2026-11-02.md`（候选档案 + 可抄的 5 个模式 + A/B/C 三选项）。
+- **关键发现**：`aiji/voice_service.py:583-606` 的 `_openai()` 已是完整 OpenAI TTS 客户端，
+  任何暴露 `POST /v1/audio/speech` 的引擎（Chatterbox / Kokoro-FastAPI 等）**零代码接入**；
+  `gptsovits`(:9880) / `cosyvoice`(:50000) 两个 provider 的默认端口正好等于上游默认端口——接口层早就够用，
+  缺的只是**安装/升级层**（现在没有 install 脚本、没有版本锁、`_provider_ready` 只看 endpoint 非空 = 假就绪）。
+- 可抄范本：GPT-SoVITS `install.ps1 --Device/--Source`（设备+镜像一条命令）、
+  Chatterbox-TTS-Server 的 Windows 便携模式（`start.bat`，相对路径拷走即用）、Kokoro-FastAPI 的 `/dev/unload`。
+- **未验证**：5 个候选一个都没在本机装过；显存/RTF 全是上游自述；IndexTTS 是否真无 OpenAI 端点只核了 README。
+- 等用户选 A（只做外壳）/ B（+ 接 CosyVoice2 或 GPT-SoVITS）/ C（换轻量 OpenAI 兼容引擎）再动手。
