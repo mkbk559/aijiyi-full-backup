@@ -1,0 +1,1391 @@
+"""本地 HTTP 服务：任意 agent / 任意平台用 JSON 接。
+
+    身份一律三个字段：platform / platform_user_id / scope（scope 缺省 default）。
+    媒体只传引用：{"kind":"image","ref":"msg-7781","url":"https://…"}，不要传文件字节。
+
+    POST /turns    {"platform":"wechat","platform_user_id":"u1","session":"s1","role":"user","content":"…"}
+    POST /remember {"platform":"wechat","platform_user_id":"u1","text":"…"}
+    POST /ingest   {"platform":"wechat","platform_user_id":"u1","kind":"image","ref":"msg-1","url":"…"}
+    POST /media    {"platform":"wechat","platform_user_id":"u1","kind":"image","ref":"msg-1","url":"…"}
+    POST /recall   {"platform":"wechat","platform_user_id":"u1","query":"我住哪"}
+    POST /inject   {"platform":"wechat","platform_user_id":"u1","query":"我住哪"}  -> 软引导文本块
+    POST /feedback {"platform":"wechat","platform_user_id":"u1","injection_id":3,"used_ids":[12]}
+    GET  /media?platform=&platform_user_id=&session=   -> 引用 + 识别结果
+    GET  /style?platform=&platform_user_id=
+    GET  /health | /stats
+    GET  /                 -> 零依赖本地控制台
+    GET  /v1/models        -> OpenAI 兼容模型发现
+    POST /v1/chat/completions -> OpenAI 兼容对话（记忆注入/闸门/SSE）
+    POST /flush    {"timeout":10}
+"""
+
+from __future__ import annotations
+
+import hmac
+import json
+import mimetypes
+import os
+import re
+import subprocess
+import tempfile
+import threading
+import time
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlparse
+
+from . import __version__, admin
+from . import persona as persona_mod
+from .head import Head
+from .memory import Memory
+from .pool import PoolExhausted
+from .store import Ident
+
+_QUERY = re.compile(r"[?&]([^=]+)=([^&]*)")
+_PROTECTED_EXACT = frozenset((
+    "/models", "/chat/completions", "/turns", "/remember", "/media", "/ingest",
+    "/recall", "/inject", "/feedback", "/flush", "/style", "/accounts", "/stats",
+    "/being", "/being/note", "/being/event",
+))
+
+
+_IDENT_GROUP = re.compile(
+    r"^(?:(?P<platform>[A-Za-z0-9_-]+)[_:/])?"
+    r"group[_:/](?P<group>[^_:/]+)[_:/]user[_:/](?P<user>.+)$",
+    re.IGNORECASE,
+)
+_IDENT_PLATFORM_USER = re.compile(
+    r"^(?P<platform>[A-Za-z0-9_-]+)[_:/](?P<user>[^_:/]+)$",
+    re.IGNORECASE,
+)
+# qq_user_12345 / telegram_user_777：平台 + 用户，不能被通用正则拆成 qq_user/12345。
+_IDENT_PLATFORM_USER_PREFIX = re.compile(
+    r"^(?P<platform>[A-Za-z0-9_-]+)[_:/]user[_:/](?P<user>.+)$",
+    re.IGNORECASE,
+)
+
+
+def parse_identity_hint(raw: str) -> dict[str, str]:
+    """把前端塞进 OpenAI `user` 字段的“身份串”解析成 platform/user/scope。
+
+    支持（大小写不敏感）：
+      qq_group_67890_user_12345
+      qq:group:67890:user:12345
+      group_67890_user_12345      （无 platform → 默认 qq）
+      qq_12345 / qq:12345
+      12345                       （裸 id → platform 缺省，由调用方补）
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return {}
+    match = _IDENT_GROUP.match(text)
+    if match:
+        return {
+            "platform": (match.group("platform") or "qq").lower(),
+            "platform_user_id": match.group("user"),
+            "scope": f"group:{match.group('group')}",
+        }
+    match = _IDENT_PLATFORM_USER_PREFIX.match(text)
+    if match:
+        return {
+            "platform": match.group("platform").lower(),
+            "platform_user_id": match.group("user"),
+        }
+    match = _IDENT_PLATFORM_USER.match(text)
+    if match:
+        return {
+            "platform": match.group("platform").lower(),
+            "platform_user_id": match.group("user"),
+        }
+    return {"platform_user_id": text}
+
+
+def _workspace_enabled() -> bool:
+    """控制台工作区/终端默认关闭（安全 + 与 IDE 重复）；显式设 1 才开。"""
+    return os.environ.get("AIJI_ENABLE_WORKSPACE", "0").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def _sampling_params(body: dict[str, Any]) -> dict[str, Any]:
+    """OpenAI 兼容采样参数：只收合法数值并夹到安全区间，非法值忽略。"""
+    out: dict[str, Any] = {}
+    for key, lo, hi in (("temperature", 0.0, 2.0), ("top_p", 0.0, 1.0)):
+        value = body.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            out[key] = round(max(lo, min(hi, float(value))), 4)
+    value = body.get("max_tokens")
+    if isinstance(value, int) and not isinstance(value, bool):
+        out["max_tokens"] = max(1, min(8192, value))
+    return out
+
+
+def _query_int(
+    qs: dict[str, str],
+    key: str,
+    default: int,
+    *,
+    low: int | None = None,
+    high: int | None = None,
+) -> int:
+    try:
+        value = int(qs.get(key, default))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{key} must be an integer") from exc
+    if low is not None:
+        value = max(low, value)
+    if high is not None:
+        value = min(high, value)
+    return value
+
+
+def _decode_console(data: bytes) -> str:
+    """控制台命令输出解码：优先 UTF-8，中文 Windows 的 cmd 输出回退 GB18030。"""
+    if not data:
+        return ""
+    for encoding in ("utf-8", "gb18030"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", "replace")
+
+
+class _Handler(BaseHTTPRequestHandler):
+    server_version = f"aiji/{__version__}"
+    protocol_version = "HTTP/1.1"
+    memory: Memory  # 由 make_server() 注入
+    voice: Any
+    songs: Any
+    social: Any
+    stickers: Any
+    sticker_loop: Any = None
+    # 桌宠状态是 JSON 文件；多个请求/桌宠进程并发时用进程内锁串行化读改写的这一段。
+    _pet_lock = threading.Lock()
+
+    # ---- 工具 ----
+
+    def _body(self) -> dict[str, Any]:
+        n = int(self.headers.get("Content-Length") or 0)
+        if n <= 0:
+            return {}
+        try:
+            data = json.loads(self.rfile.read(n))
+        except ValueError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _ident(self, body: dict[str, Any]) -> Ident:
+        meta = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
+        aiji = body.get("aiji") if isinstance(body.get("aiji"), dict) else {}
+        hint = parse_identity_hint(str(body.get("user") or ""))
+        platform = (
+            self.headers.get("X-Aiji-Platform")
+            or body.get("platform") or meta.get("platform") or aiji.get("platform")
+            or hint.get("platform") or "local"
+        )
+        user = (
+            self.headers.get("X-Aiji-User")
+            or body.get("platform_user_id") or meta.get("platform_user_id")
+            or meta.get("user") or aiji.get("platform_user_id")
+            or hint.get("platform_user_id") or "default"
+        )
+        scope = (
+            self.headers.get("X-Aiji-Scope")
+            or body.get("scope") or meta.get("scope") or aiji.get("scope")
+            or hint.get("scope") or "default"
+        )
+        return Ident(platform, user, scope)
+
+    # ---- 桌宠 / 工作区 ----
+
+    def _pet_store(self):
+        """每次请求重新读盘：Tk 桌宠可能同时在写同一份 pet_state.json。"""
+        from .pet.growth import PetStore
+        return PetStore(Path(self.memory.settings.db_path).parent / "pet_state.json")
+
+    def _fs_root(self) -> Path:
+        root = self.memory.action_executor.root
+        return Path(root).resolve() if root else Path.cwd().resolve()
+
+    def _fs_target(self, rel: str) -> Path:
+        """把控制台传来的相对路径限制在工作区根目录内（防 ../ 越权）。"""
+        root = self._fs_root()
+        clean = str(rel or "").replace("\\", "/").strip("/")
+        target = (root / clean).resolve() if clean else root
+        if target != root and root not in target.parents:
+            raise PermissionError("path_outside_root")
+        return target
+
+    def _fs_rel(self, target: Path) -> str:
+        try:
+            rel = target.relative_to(self._fs_root())
+        except ValueError:
+            return ""
+        return "" if str(rel) == "." else rel.as_posix()
+
+    def _authorized(self, path: str) -> bool:
+        protected = path.startswith(("/v1/", "/api/")) or path in _PROTECTED_EXACT
+        if not protected:
+            return True
+        expected = os.environ.get("AIJI_API_KEY") or getattr(
+            self.memory.settings, "api_key", "")
+        if not expected:
+            return True
+        auth = self.headers.get("Authorization") or ""
+        token = auth[7:].strip() if auth.startswith("Bearer ") else (
+            self.headers.get("X-Aiji-Api-Key") or "")
+        return bool(token) and hmac.compare_digest(str(expected), str(token))
+
+    def _unauthorized(self) -> None:
+        # The rejected request body may still be unread. Close the HTTP/1.1
+        # connection so the client can reliably consume the 401 response.
+        self.close_connection = True
+        self.send_response(401)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("WWW-Authenticate", "Bearer")
+        self.send_header("Connection", "close")
+        data = json.dumps({
+            "error": {"message": "invalid api key", "type": "authentication_error",
+                      "code": "invalid_api_key"},
+        }, ensure_ascii=False).encode("utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send(self, code: int, payload: dict[str, Any]) -> None:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_html(self, html: str) -> None:
+        data = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_bytes(self, data: bytes, content_type: str, *, cache: int = 0) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control",
+                         f"public, max-age={cache}" if cache else "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_asset(self, path: Path, content_type: str) -> None:
+        self._send_bytes(path.read_bytes(), content_type, cache=86400)
+
+    @staticmethod
+    def _audio_error(exc: Exception) -> tuple[int, dict[str, Any]]:
+        code = str(getattr(exc, "code", "") or "audio_error")
+        message = str(getattr(exc, "message", "") or exc)
+        status = 404 if code in (
+            "profile_not_found", "job_not_found", "output_missing",
+        ) else 503 if code in (
+            "not_configured", "provider_unavailable", "ffmpeg_missing",
+            "tool_missing", "voice_converter_not_configured",
+        ) else 400
+        return status, {"error": {"code": code, "message": message}}
+
+    @staticmethod
+    def _social_error(exc: Exception) -> tuple[int, dict[str, Any]]:
+        code = str(getattr(exc, "code", "") or "social_error")
+        message = str(getattr(exc, "message", "") or exc)
+        status = int(getattr(exc, "status", 400) or 400)
+        return status, {"error": {"code": code, "message": message}}
+
+    @staticmethod
+    def _sticker_error(exc: Exception) -> tuple[int, dict[str, Any]]:
+        code = str(getattr(exc, "code", "") or "sticker_error")
+        message = str(getattr(exc, "message", "") or exc)
+        status = int(getattr(exc, "status", 400) or 400)
+        return status, {"error": {"code": code, "message": message}}
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        return
+
+    # ---- 路由 ----
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        path, qs = parsed.path, {k: v[0] for k, v in parse_qs(parsed.query).items()}
+        if not self._authorized(path):
+            return self._unauthorized()
+        for key in ("limit", "turns", "token_budget"):
+            if key not in qs:
+                continue
+            try:
+                int(qs[key])
+            except (TypeError, ValueError):
+                return self._send(400, {"error": f"{key} must be an integer"})
+        if path in ("/", "/console"):
+            html = (Path(__file__).resolve().parent / "web" / "console.html").read_text("utf-8")
+            self._send_html(html)
+        elif path == "/assets/dafeiyu_256.png":
+            asset = Path(__file__).resolve().parent / "pet" / "assets" / "dafeiyu_256.png"
+            self._send_asset(asset, "image/png")
+        elif path == "/assets/whale_spritesheet.webp":
+            asset = Path(__file__).resolve().parent / "pet" / "assets" / "whale_spritesheet.webp"
+            self._send_asset(asset, "image/webp")
+        elif path == "/assets/whale_pet.json":
+            asset = Path(__file__).resolve().parent / "pet" / "assets" / "whale_pet.json"
+            self._send_asset(asset, "application/json; charset=utf-8")
+        elif path == "/assets/echarts.min.js":
+            asset = Path(__file__).resolve().parent / "web" / "vendor" / "echarts.min.js"
+            self._send_asset(asset, "application/javascript; charset=utf-8")
+        elif path == "/health":
+            s = self.memory.stats()
+            life_loop = getattr(self.memory, "life_loop", None)
+            mcp_loop = getattr(self.memory, "mcp_research_loop", None)
+            mcp_status = None
+            if mcp_loop is not None:
+                raw_mcp = mcp_loop.snapshot()
+                latest = (raw_mcp.get("latest") or {}).get("latest") or {}
+                mcp_status = {
+                    "running": raw_mcp.get("running"),
+                    "working": raw_mcp.get("working"),
+                    "runs": raw_mcp.get("runs"),
+                    "errors": raw_mcp.get("errors"),
+                    "last_run_at": raw_mcp.get("last_run_at"),
+                    "last_error": raw_mcp.get("last_error"),
+                    "interval_s": raw_mcp.get("interval_s"),
+                    "initial_delay_s": raw_mcp.get("initial_delay_s"),
+                    "latest": {
+                        key: latest.get(key)
+                        for key in (
+                            "created_at", "discovered", "fetched_readmes",
+                            "eligible", "summary",
+                        )
+                    } if latest else None,
+                }
+            self._send(200, {
+                "ok": True,
+                "version": __version__,
+                "queue_depth": s["writer"]["queue_depth"],
+                "pending": s["writer"]["pending"],
+                "facts": s["store"]["facts"],
+                "platforms": s["store"]["platforms"],
+                "pool": [{"name": p["name"], "cooldown_s": p["cooldown_s"]} for p in s["pool"]],
+                "budget_ms": s["budget_ms"],
+                "life_loop": life_loop.snapshot() if life_loop else None,
+                "sticker_update": (
+                    self.sticker_loop.snapshot()
+                    if self.sticker_loop is not None else None
+                ),
+                "mcp_research": mcp_status,
+            })
+        elif path in ("/v1/models", "/models"):
+            self._send(200, {
+                "object": "list",
+                "data": [{
+                    "id": "aiji",
+                    "object": "model",
+                    "created": int(time.time()),
+                    "owned_by": "aiji",
+                }],
+            })
+        elif path == "/stats":
+            self._send(200, self.memory.stats())
+        elif path == "/v1/voices":
+            self._send(200, self.voice.snapshot())
+        elif path == "/v1/songs":
+            self._send(200, self.songs.snapshot())
+        elif path == "/api/social":
+            self._send(200, self.social.snapshot())
+        elif path == "/api/stickers":
+            payload = {"service": self.stickers.snapshot()}
+            if self.sticker_loop is not None:
+                payload["loop"] = self.sticker_loop.snapshot()
+            self._send(200, payload)
+        elif path.startswith("/v1/songs/") and path.endswith("/audio"):
+            job_id = path[len("/v1/songs/"):-len("/audio")].strip("/")
+            try:
+                audio = self.songs.audio_path(job_id)
+                self._send_bytes(
+                    audio.read_bytes(),
+                    mimetypes.guess_type(audio.name)[0] or "audio/mpeg",
+                )
+            except Exception as exc:  # noqa: BLE001
+                code, payload = self._audio_error(exc)
+                self._send(code, payload)
+        elif path.startswith("/v1/songs/"):
+            job_id = path[len("/v1/songs/"):].strip("/")
+            try:
+                self._send(200, self.songs.get(job_id).public())
+            except Exception as exc:  # noqa: BLE001
+                code, payload = self._audio_error(exc)
+                self._send(code, payload)
+        elif path == "/api/memories":
+            self._send(200, admin.memory_library(
+                self.memory.db, Ident.coerce(qs), query=qs.get("q", ""),
+                limit=_query_int(qs, "limit", 200, low=1, high=1000),
+            ))
+        elif path == "/api/memory-graph":
+            self._send(200, admin.memory_graph(
+                self.memory.db, Ident.coerce(qs),
+                limit=_query_int(qs, "limit", 400, low=1, high=1000),
+            ))
+        elif path == "/api/self":
+            self._send(200, self.memory.self_portrait(Ident.coerce(qs)))
+        elif path == "/api/scheduler":
+            ident = Ident.coerce(qs) if qs.get("platform") or qs.get("platform_user_id") else None
+            self._send(200, admin.scheduler_snapshot(self.memory.db, ident))
+        elif path == "/api/models":
+            self._send(200, admin.models_snapshot(self.memory.pool.stats()))
+        elif path == "/api/capabilities":
+            self._send(200, admin.capabilities_snapshot(self.memory))
+        elif path == "/api/mcp":
+            registry = getattr(self.memory, "mcp_registry", None)
+            research = getattr(self.memory, "mcp_research_loop", None)
+            if registry is None or research is None:
+                return self._send(503, {"error": "mcp_unavailable"})
+            self._send(200, {
+                "registry": registry.snapshot(),
+                "research": research.snapshot(),
+            })
+        elif path == "/api/recent-turns":
+            self._send(200, admin.recent_turns_snapshot(
+                self.memory.db, Ident.coerce(qs), qs.get("session"),
+                _query_int(qs, "limit", 40, low=1, high=500),
+            ))
+        elif path == "/api/injections":
+            self._send(200, admin.injection_snapshot(self.memory.db, Ident.coerce(qs)))
+        elif path == "/api/proactive":
+            self._send(200, admin.proactive_snapshot(self.memory.db))
+        elif path == "/api/life":
+            ident = Ident.coerce(qs)
+            self._send(200, {
+                "snapshot": self.memory.life_snapshot(ident),
+                "context": self.memory.life_context(
+                    ident,
+                    scenario=qs.get("scenario", "chat"),
+                    intent=qs.get("intent", ""),
+                    turns=_query_int(qs, "turns", 0, low=0),
+                    token_budget=_query_int(
+                        qs, "token_budget", 6000, low=800, high=32000
+                    ),
+                ),
+            })
+        elif path == "/api/actions/pending":
+            self._send(200, {
+                "items": self.memory.action_approvals.pending(),
+                "stats": dict(self.memory.action_approvals.stats),
+            })
+        elif path == "/api/actions/stats":
+            self._send(200, {
+                "stats": dict(self.memory.action_approvals.stats),
+                "root": str(self.memory.action_executor.root),
+            })
+        elif path == "/api/integrations/onebot":
+            self._send(200, {
+                **self.memory.onebot.snapshot(),
+                "api": self.memory.settings.onebot_api,
+                "webui": self.memory.settings.onebot_webui,
+                "webhook": "/v1/gateway/onebot",
+            })
+        elif path == "/media":
+            ident = Ident.coerce(qs)
+            self._send(200, {
+                "items": self.memory.media(
+                    ident, qs.get("session"), _query_int(qs, "limit", 20, low=1, high=500)
+                )
+            })
+        elif path == "/style":
+            ident = Ident.coerce(qs)
+            self._send(200, {"style": self.memory.style(ident),
+                             "summary": self.memory.summary(ident, qs.get("session"))})
+        elif path == "/being":
+            life_loop = getattr(self.memory, "life_loop", None)
+            self._send(200, {
+                "snapshot": self.memory.being_snapshot(),
+                "events": self.memory.being_events(limit=20),
+                "notes": self.memory.being_notes(limit=20, private_only=True),
+                "loop": life_loop.snapshot() if life_loop else None,
+            })
+        elif path == "/api/being/checkup":
+            from .being_checkup import BeingCheckup
+            self._send(200, BeingCheckup(self.memory).run())
+        elif path in ("/accounts", "/api/accounts"):
+            self._send(200, {"items": self.memory.accounts()})
+        elif path == "/api/pet":
+            with self._pet_lock:
+                now = time.time() * 1000
+                store = self._pet_store()
+                snapshot = store.snapshot(now)
+            snapshot["now_ms"] = now
+            self._send(200, snapshot)
+        elif path == "/api/fs":
+            if not _workspace_enabled():
+                return self._send(403, {"error": "workspace_disabled"})
+            try:
+                target = self._fs_target(qs.get("path", ""))
+            except PermissionError:
+                return self._send(403, {"error": "path_outside_root"})
+            if not target.exists():
+                return self._send(404, {"error": "not_found"})
+            if not target.is_dir():
+                return self._send(400, {"error": "not_a_directory"})
+            entries = []
+            for child in target.iterdir():
+                try:
+                    st = child.stat()
+                except OSError:
+                    continue
+                entries.append({
+                    "name": child.name,
+                    "kind": "dir" if child.is_dir() else "file",
+                    "size": int(st.st_size),
+                    "mtime": float(st.st_mtime),
+                })
+            entries.sort(key=lambda e: (e["kind"] != "dir", e["name"].lower()))
+            root = self._fs_root()
+            self._send(200, {
+                "root": str(root),
+                "path": self._fs_rel(target),
+                "parent": self._fs_rel(target.parent) if target != root else "",
+                "entries": entries[:500],
+                "total": len(entries),
+            })
+        elif path == "/api/fs/read":
+            if not _workspace_enabled():
+                return self._send(403, {"error": "workspace_disabled"})
+            try:
+                target = self._fs_target(qs.get("path", ""))
+            except PermissionError:
+                return self._send(403, {"error": "path_outside_root"})
+            if not target.is_file():
+                return self._send(404, {"error": "not_found"})
+            size = target.stat().st_size
+            limit = 2 * 1024 * 1024
+            with target.open("rb") as fh:
+                raw = fh.read(limit + 1)
+            truncated = len(raw) > limit
+            data = raw[:limit]
+            binary = b"\x00" in data[:4096]
+            self._send(200, {
+                "path": self._fs_rel(target),
+                "size": size,
+                "binary": binary,
+                "truncated": truncated,
+                "text": "" if binary else data.decode("utf-8", "replace"),
+            })
+        elif path == "/api/fs/raw":
+            if not _workspace_enabled():
+                return self._send(403, {"error": "workspace_disabled"})
+            try:
+                target = self._fs_target(qs.get("path", ""))
+            except PermissionError:
+                return self._send(403, {"error": "path_outside_root"})
+            if not target.is_file():
+                return self._send(404, {"error": "not_found"})
+            ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            self._send_bytes(target.read_bytes(), ctype)
+        else:
+            self._send(404, {"error": "not_found"})
+
+    def do_POST(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path
+        if not self._authorized(path):
+            return self._unauthorized()
+        body = self._body()
+        try:
+            if path in ("/v1/chat/completions", "/chat/completions"):
+                return self._chat_completion(body)
+            if path in ("/v1/embeddings", "/embeddings"):
+                from .vectors import hashing_embed
+                raw_input = body.get("input", "")
+                values = raw_input if isinstance(raw_input, list) else [raw_input]
+                if len(values) > 256:
+                    return self._send(400, {"error": "too_many_inputs"})
+                data = []
+                token_count = 0
+                for index, value in enumerate(values):
+                    text = str(value or "")[:8000]
+                    token_count += max(1, len(text) // 2)
+                    data.append({
+                        "object": "embedding",
+                        "index": index,
+                        "embedding": hashing_embed(text),
+                    })
+                return self._send(200, {
+                    "object": "list",
+                    "data": data,
+                    "model": str(body.get("model") or "aiji-hash-256"),
+                    "usage": {
+                        "prompt_tokens": token_count,
+                        "total_tokens": token_count,
+                    },
+                })
+            if path == "/v1/audio/speech":
+                text = str(body.get("input") or body.get("text") or "")
+                profile_id = str(body.get("voice") or body.get("profile") or "")
+                if profile_id in ("aiji", "default"):
+                    profile_id = ""
+                try:
+                    with tempfile.TemporaryDirectory(prefix="aiji-speech-") as tmp:
+                        result = self.voice.synthesize(
+                            text,
+                            Path(tmp) / "speech.wav",
+                            profile_id=profile_id,
+                            rate=body.get("rate"),
+                            pitch=body.get("pitch"),
+                            volume=body.get("volume"),
+                            instruct=str(body.get("instruct") or ""),
+                        )
+                        self._send_bytes(
+                            result.path.read_bytes(),
+                            "audio/wav",
+                        )
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._audio_error(exc)
+                    return self._send(code, payload)
+            if path == "/v1/voices/use":
+                profile_id = str(body.get("profile") or body.get("id") or "")
+                try:
+                    self.voice.set_active(profile_id)
+                    return self._send(200, self.voice.snapshot())
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._audio_error(exc)
+                    return self._send(code, payload)
+            if path == "/v1/songs":
+                source = (
+                    body.get("source") or body.get("url")
+                    or body.get("song_id") or body.get("query") or ""
+                )
+                try:
+                    job = self.songs.submit(
+                        str(source),
+                        profile_id=str(body.get("profile") or ""),
+                        pitch=int(body.get("pitch") or 0),
+                        max_seconds=int(body.get("max_seconds") or 60),
+                    )
+                    return self._send(202, job.public())
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._audio_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/social/qzone/publish":
+                try:
+                    result = self.social.publish(
+                        str(body.get("content") or ""),
+                        images=[
+                            str(item) for item in (body.get("images") or [])
+                        ],
+                        visibility=str(body.get("visibility") or "public"),
+                        target_uins=[
+                            str(item) for item in (body.get("target_uins") or [])
+                        ],
+                    )
+                    return self._send(200, result)
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._social_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/social/qzone/comment":
+                try:
+                    result = self.social.comment(
+                        str(body.get("tid") or ""),
+                        str(body.get("content") or ""),
+                        target_uin=str(body.get("target_uin") or ""),
+                        images=[
+                            str(item) for item in (body.get("images") or [])
+                        ],
+                    )
+                    return self._send(200, result)
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._social_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/social/qzone/auto-comment":
+                try:
+                    result = self.social.auto_comment(
+                        str(body.get("target_uin") or ""),
+                        str(body.get("content") or ""),
+                        post_index=int(body.get("post_index") or 0),
+                        images=[
+                            str(item) for item in (body.get("images") or [])
+                        ],
+                    )
+                    return self._send(200, result)
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._social_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/social/avatar":
+                try:
+                    result = self.social.set_avatar(
+                        str(body.get("file") or body.get("path") or ""))
+                    return self._send(200, result)
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._social_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/social/signature":
+                try:
+                    result = self.social.set_signature(
+                        str(body.get("signature") or body.get("text") or ""))
+                    return self._send(200, result)
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._social_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/social/share/music":
+                try:
+                    result = self.social.share_music(
+                        str(body.get("query") or body.get("song_id") or ""),
+                        caption=str(body.get("caption") or ""),
+                        visibility=str(body.get("visibility") or "public"),
+                    )
+                    return self._send(200, result)
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._social_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/social/share/bilibili":
+                try:
+                    result = self.social.share_bilibili(
+                        str(body.get("url") or body.get("bvid") or ""),
+                        title=str(body.get("title") or ""),
+                        caption=str(body.get("caption") or ""),
+                        visibility=str(body.get("visibility") or "public"),
+                    )
+                    return self._send(200, result)
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._social_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/stickers/update":
+                try:
+                    return self._send(200, self.stickers.update())
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._sticker_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/stickers/import":
+                try:
+                    result = self.stickers.import_image(
+                        str(body.get("url") or ""),
+                        mood=str(body.get("mood") or ""),
+                        description=str(body.get("description") or ""),
+                        source=str(body.get("source") or ""),
+                    )
+                    return self._send(200, result)
+                except Exception as exc:  # noqa: BLE001
+                    code, payload = self._sticker_error(exc)
+                    return self._send(code, payload)
+            if path == "/api/being/checkup/live":
+                from .being_checkup import BeingCheckup
+                result = BeingCheckup(self.memory).live_probe(self._ident(body))
+                return self._send(200, result)
+            if path == "/api/mcp/research":
+                research = getattr(self.memory, "mcp_research_loop", None)
+                if research is None:
+                    return self._send(503, {"error": "mcp_unavailable"})
+                queued = research.trigger()
+                return self._send(
+                    202 if queued else 409,
+                    {"queued": bool(queued), "research": research.snapshot()},
+                )
+            if path == "/v1/gateway/messages":
+                return self._gateway_message(body)
+            if path == "/v1/gateway/onebot":
+                return self._onebot_event(body)
+            if path in ("/api/actions/approve", "/api/actions/reject"):
+                approval_id = str(body.get("id") or "")
+                approved = path.endswith("/approve")
+                ok = self.memory.action_approvals.resolve(approval_id, approved)
+                if ok:
+                    self.memory.presence.publish({
+                        "state": "acting" if approved else "thinking",
+                        "mood": "专注" if approved else "警觉",
+                        "preview": "已批准执行" if approved else "已拒绝执行",
+                    })
+                return self._send(200 if ok else 404, {
+                    "approved": bool(ok and approved),
+                    "resolved": ok,
+                })
+            if path in ("/api/pet/pet", "/api/pet/feed"):
+                with self._pet_lock:
+                    now = time.time() * 1000
+                    store = self._pet_store()
+                    picker = getattr(self, "pet_picker", None)
+                    if path.endswith("/pet"):
+                        delta, line, ok = store.pet(now, picker)
+                    else:
+                        delta, line, ok = store.feed(now, picker)
+                    snapshot = store.snapshot(now)
+                return self._send(200, {
+                    "ok": ok, "delta": delta, "line": line,
+                    "snapshot": snapshot, "now_ms": now,
+                })
+            if path == "/api/pet/rename":
+                with self._pet_lock:
+                    store = self._pet_store()
+                    name = store.rename(str(body.get("name") or ""))
+                    now = time.time() * 1000
+                    snapshot = store.snapshot(now)
+                return self._send(200, {"name": name, "snapshot": snapshot})
+            if path == "/api/fs/write":
+                if not _workspace_enabled():
+                    return self._send(403, {"error": "workspace_disabled"})
+                rel = str(body.get("path") or "")
+                text = body.get("text")
+                if not rel or not isinstance(text, str):
+                    return self._send(400, {"error": "path_and_text_required"})
+                try:
+                    target = self._fs_target(rel)
+                except PermissionError:
+                    return self._send(403, {"error": "path_outside_root"})
+                data = text.encode("utf-8")
+                if len(data) > 2 * 1024 * 1024:
+                    return self._send(413, {"error": "too_large"})
+                if target.exists() and target.is_dir():
+                    return self._send(400, {"error": "is_directory"})
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+                return self._send(200, {
+                    "ok": True, "path": self._fs_rel(target), "size": len(data),
+                })
+            if path == "/api/shell":
+                return self._run_shell(body)
+            if path == "/turns":
+                content = str(body.get("content") or "")
+                if not content:
+                    return self._send(400, {"error": "content_required"})
+                depth = self.memory.turn(
+                    self._ident(body), str(body.get("session") or "default"),
+                    str(body.get("role") or "user"), content, extra=body.get("extra"),
+                )
+                return self._send(202, {"queued": True, "queue_depth": depth})
+            if path == "/remember":
+                text = str(body.get("text") or "")
+                if not text:
+                    return self._send(400, {"error": "text_required"})
+                depth = self.memory.remember(
+                    text, self._ident(body), session=str(body.get("session") or "default"),
+                    extra=body.get("extra"),
+                )
+                return self._send(202, {"queued": True, "queue_depth": depth})
+            if path == "/media":
+                if not body.get("ref"):
+                    return self._send(400, {"error": "ref_required"})
+                mid = self.memory.add_media(
+                    self._ident(body), kind=str(body.get("kind") or "file"), ref=str(body["ref"]),
+                    url=body.get("url"), session=body.get("session"), mime=body.get("mime"),
+                    size_bytes=body.get("size_bytes"), expires_at=body.get("expires_at"),
+                    extra=body.get("extra"),
+                )
+                return self._send(201, {"id": mid, "stored": "reference_only"})
+            if path == "/ingest":
+                kind = str(body.get("kind") or "text")
+                if kind != "text" and not (body.get("ref") or body.get("url")):
+                    return self._send(400, {"error": "ref_or_url_required"})
+                depth = self.memory.ingest(
+                    self._ident(body), kind=kind, ref=str(body.get("ref") or ""),
+                    text=body.get("text"), url=body.get("url"), mime=body.get("mime"),
+                    size_bytes=body.get("size_bytes"),
+                    session=str(body.get("session") or "default"), extra=body.get("extra"),
+                )
+                return self._send(202, {"queued": True, "queue_depth": depth, "kind": kind})
+            if path == "/recall":
+                res = self.memory.recall(
+                    str(body.get("query") or ""), self._ident(body),
+                    session=body.get("session"), top_k=body.get("top_k"),
+                    budget_ms=body.get("budget_ms"),
+                )
+                return self._send(200, res.to_dict())
+            if path == "/inject":
+                inj = self.memory.inject(
+                    str(body.get("query") or ""), self._ident(body), session=body.get("session"),
+                    max_chars=body.get("max_chars"), max_items=body.get("max_items"),
+                    log=bool(body.get("log", True)),
+                )
+                return self._send(200, inj.to_dict())
+            if path == "/feedback":
+                n = self.memory.feedback(
+                    self._ident(body), body.get("injection_id"),
+                    [int(i) for i in (body.get("used_ids") or [])],
+                    helpful=bool(body.get("helpful", True)), note=str(body.get("note") or ""),
+                )
+                return self._send(200, {"updated": n})
+            if path == "/flush":
+                ok = self.memory.flush(float(body.get("timeout") or 10))
+                return self._send(200, {"flushed": ok, "stats": self.memory.writer.stats_dict()})
+            if path == "/being/note":
+                text = str(body.get("text") or "").strip()
+                if not text:
+                    return self._send(400, {"error": "text_required"})
+                note_id = self.memory.being_note(
+                    text, visibility=str(body.get("visibility") or "private"))
+                return self._send(201, {"id": note_id, "visibility": "private"})
+            if path == "/being/event":
+                summary = str(body.get("summary") or "").strip()
+                if not summary:
+                    return self._send(400, {"error": "summary_required"})
+                event_id = self.memory.being_record_event(
+                    str(body.get("kind") or "life"),
+                    summary,
+                    valence_delta=float(body.get("valence_delta") or 0),
+                    energy_delta=float(body.get("energy_delta") or 0),
+                )
+                return self._send(201, {"id": event_id})
+        except Exception as exc:  # noqa: BLE001 - 服务不因单请求崩
+            return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
+        self._send(404, {"error": "not_found"})
+
+    def _run_shell(self, body: dict[str, Any]) -> None:
+        """工作区终端：单条命令、cwd 限制在工作区根内、默认 15s 超时。
+
+        默认关闭（`AIJI_ENABLE_WORKSPACE=1` 才开；`AIJI_CONSOLE_SHELL=0` 仍可再关）。
+        """
+        if not _workspace_enabled():
+            return self._send(403, {"error": "workspace_disabled"})
+        if os.environ.get("AIJI_CONSOLE_SHELL", "1").strip().lower() in ("0", "false", "off", "no"):
+            return self._send(403, {"error": "shell_disabled"})
+        if os.environ.get("AIJI_UNSAFE_SHELL", "0").strip().lower() not in (
+            "1", "true", "on", "yes",
+        ):
+            return self._send(403, {"error": "unsafe_shell_disabled"})
+        cmd = str(body.get("cmd") or "").strip()
+        if not cmd:
+            return self._send(400, {"error": "cmd_required"})
+        try:
+            cwd = self._fs_target(str(body.get("cwd") or ""))
+        except PermissionError:
+            return self._send(403, {"error": "path_outside_root"})
+        if not cwd.is_dir():
+            cwd = self._fs_root()
+        try:
+            timeout = max(1.0, min(30.0, float(body.get("timeout") or 15.0)))
+        except (TypeError, ValueError):
+            timeout = 15.0
+        started = time.perf_counter()
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        timed_out = False
+        try:
+            proc = subprocess.run(
+                cmd, shell=True, cwd=str(cwd), capture_output=True,
+                timeout=timeout, creationflags=flags,
+            )
+            stdout = _decode_console(proc.stdout or b"")
+            stderr = _decode_console(proc.stderr or b"")
+            code = int(proc.returncode)
+        except subprocess.TimeoutExpired as exc:
+            stdout = _decode_console(exc.stdout if isinstance(exc.stdout, bytes) else b"")
+            stderr = "timeout"
+            code, timed_out = -1, True
+        except Exception as exc:  # noqa: BLE001 - 命令失败要回给控制台而不是打崩服务
+            stdout, stderr, code = "", f"{type(exc).__name__}: {exc}", -1
+        took = (time.perf_counter() - started) * 1000
+        self._send(200, {
+            "code": code,
+            "stdout": stdout[-200_000:],
+            "stderr": stderr[-40_000:],
+            "took_ms": round(took, 1),
+            "cwd": self._fs_rel(cwd),
+            "timed_out": timed_out,
+        })
+
+    def _onebot_event(self, body: dict[str, Any]) -> None:
+        if not self.memory.onebot.configured:
+            return self._send(503, {
+                "status": "not_configured",
+                "hint": "set AIJI_ONEBOT_API to the NapCat HTTP API base URL",
+            })
+        result = self.memory.onebot.submit(body)
+        code = 202 if result.get("status") == "accepted" else 200
+        self._send(code, result)
+
+    def _gateway_message(self, body: dict[str, Any]) -> None:
+        """统一 IM 网关入口：平台适配器只需 POST 归一化消息。"""
+        content = str(body.get("content") or body.get("text") or "").strip()
+        if not content:
+            return self._send(400, {"error": "content_required"})
+        ident = self._ident(body)
+        session = str(body.get("session") or "default")
+        try:
+            reply = Head(self.memory).reply(
+                [{"role": "user", "content": content}],
+                ident,
+                session=session,
+                debounce=bool(body.get("debounce", True)),
+                system_suffix=str(body.get("system_suffix") or ""),
+            )
+        except ValueError as exc:
+            return self._send(400, {"error": str(exc)})
+        self._send(200, {
+            "text": reply.text,
+            "platform": ident.platform,
+            "platform_user_id": ident.platform_user_id,
+            "scope": ident.scope,
+            "session": session,
+            "route": reply.route,
+            "injection_id": reply.injection_id,
+            "used_ids": reply.used_ids or [],
+            "degraded": reply.degraded,
+            "finish_reason": reply.finish_reason,
+            "took_ms": round(reply.took_ms, 1),
+            "tools": reply.tool_traces or [],
+            "life": reply.life,
+        })
+
+    def _chat_completion(self, body: dict[str, Any]) -> None:
+        """OpenAI 兼容入口：下游客户端无需知道记忆/人格/积分网关的存在。"""
+        metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
+        hint = parse_identity_hint(str(body.get("user") or ""))
+        session = (self.headers.get("X-Aiji-Session") or body.get("session")
+                   or metadata.get("session_id") or metadata.get("session")
+                   or self.headers.get("X-AstrBot-Conversation-Id")
+                   or hint.get("scope") or "default")
+        sampling = _sampling_params(body)
+        aiji_opts = body.get("aiji") if isinstance(body.get("aiji"), dict) else {}
+        if isinstance(metadata.get("aiji"), dict):
+            aiji_opts = {**metadata["aiji"], **aiji_opts}
+        enable_tools = bool(aiji_opts.get("tools", True))
+        remember_turn = bool(aiji_opts.get("remember", True))
+        proactive = bool(aiji_opts.get("proactive", False))
+        persona_name = str(aiji_opts.get("persona") or "").strip() or None
+        sender_name = str(aiji_opts.get("sender_name") or "").strip()
+        turn_extra = {"sender_name": sender_name} if sender_name else None
+        ident = self._ident(body)
+        messages = body.get("messages")
+        history_turns = 0
+        if aiji_opts.get("history") and isinstance(messages, list):
+            # 薄客户端（AstrBot/IDE/自定义 bot）只传本轮一句话时，从 turn 表补最近对话。
+            # 客户端自己带了 assistant 历史就不再补，避免重复。
+            has_assistant = any(
+                isinstance(item, dict) and item.get("role") == "assistant"
+                for item in messages
+            )
+            if not has_assistant:
+                try:
+                    limit = max(0, min(200, int(aiji_opts.get("history_limit", 80))))
+                except (TypeError, ValueError):
+                    limit = 80
+                try:
+                    chars_budget = max(
+                        1000, min(50000, int(aiji_opts.get("history_chars", 12000)))
+                    )
+                except (TypeError, ValueError):
+                    chars_budget = 12000
+                if limit:
+                    try:
+                        scope_text = str(ident.scope or "default")
+                        if scope_text.startswith("group:"):
+                            rows = self.memory.recent_scope_turns(
+                                ident.platform, scope_text, session, limit=limit)
+                        else:
+                            rows = self.memory.recent_turns(
+                                ident, session, limit=limit)
+                    except Exception:  # noqa: BLE001 - 历史读失败不阻塞本轮
+                        rows = []
+                    # 从最新往回装，超字符预算就停；再翻回时间顺序。
+                    picked: list[dict[str, str]] = []
+                    used = 0
+                    bad_assistant = (
+                        "有什么可以帮", "想聊点什么", "想让我做", "抱歉",
+                        "我只是一条", "出不了鱼缸", "作为一条鱼", "我可以帮",
+                        "今天想聊", "你好，",
+                    )
+                    for row in reversed(rows):
+                        role = str(row.get("role") or "")
+                        text = str(row.get("content") or "")
+                        if role not in ("user", "assistant") or not text.strip():
+                            continue
+                        if (
+                            role == "user"
+                            and str(ident.scope or "").startswith("group:")
+                        ):
+                            try:
+                                extra = json.loads(row.get("extra") or "{}")
+                            except (TypeError, ValueError):
+                                extra = {}
+                            speaker = str(extra.get("sender_name") or "").strip()
+                            speaker_id = str(row.get("platform_user_id") or "").strip()
+                            who = speaker or speaker_id or "群友"
+                            if speaker_id and speaker_id != speaker:
+                                who = f"{who}({speaker_id})"
+                            text = f"[{who}] {text}"
+                        # 历史里的旧客服腔会污染风格：不喂给模型。
+                        if role == "assistant" and any(
+                            marker in text for marker in bad_assistant
+                        ):
+                            continue
+                        if used + len(text) > chars_budget:
+                            break
+                        picked.append({"role": role, "content": text})
+                        used += len(text)
+                    picked.reverse()
+                    history: list[dict[str, str]] = []
+                    try:
+                        summary = self.memory.summary(ident, session)
+                    except Exception:  # noqa: BLE001
+                        summary = None
+                    summary_text = str((summary or {}).get("text") or "").strip()
+                    if summary_text:
+                        history.append({
+                            "role": "system",
+                            "content": "更早的对话摘要（原文已被压缩）：\n" + summary_text[:4000],
+                        })
+                    history.extend(picked)
+                    style_name = persona_name or getattr(
+                        self.memory.settings, "persona", "default")
+                    reminder = persona_mod.reminder(style_name)
+                    if reminder:
+                        history.append({"role": "system", "content": reminder})
+                    if history:
+                        insert_at = 0
+                        while (insert_at < len(messages)
+                               and isinstance(messages[insert_at], dict)
+                               and messages[insert_at].get("role") == "system"):
+                            insert_at += 1
+                        messages = list(messages[:insert_at]) + history + list(messages[insert_at:])
+                        history_turns = len(picked)
+        try:
+            reply = Head(self.memory).reply(
+                messages,
+                ident,
+                session=session,
+                debounce=bool(body.get("debounce", True)),
+                enable_tools=enable_tools,
+                persona=persona_name,
+                extra=turn_extra,
+                remember=remember_turn,
+                proactive=proactive,
+                **sampling,
+            )
+        except ValueError as exc:
+            return self._send(400, {
+                "error": {"message": str(exc), "type": "invalid_request_error",
+                          "param": "messages", "code": str(exc)},
+            })
+        except PoolExhausted as exc:
+            return self._send(503, {
+                "error": {"message": f"upstream gateway unavailable: {exc}",
+                          "type": "service_unavailable", "code": "model_unavailable"},
+            })
+
+        if body.get("stream"):
+            return self._stream_chat(reply, body)
+
+        prompt_chars = sum(len(str(m.get("content", "")))
+                           for m in (messages or []) if isinstance(m, dict))
+        prompt_tokens = max(1, prompt_chars // 2)
+        completion_tokens = max(1, len(reply.text) // 2)
+        payload = {
+            "id": f"chatcmpl-{uuid.uuid4().hex}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": str(body.get("model") or "aiji"),
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": reply.text},
+                "finish_reason": reply.finish_reason,
+            }],
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            },
+            "aiji": {
+                "injection_id": reply.injection_id,
+                "used_ids": reply.used_ids or [],
+                "route": reply.route,
+                "model_latency_ms": round(reply.model_latency_ms, 1),
+                "human_delay_ms": round(reply.human_delay_ms, 1),
+                "took_ms": round(reply.took_ms, 1),
+                "filter_reason": reply.reason,
+                "degraded": reply.degraded,
+                "tools": reply.tool_traces or [],
+                "life": reply.life,
+                "sampling": sampling,
+                "history_turns": history_turns,
+            },
+        }
+        self._send(200, payload)
+
+    def _stream_chat(self, reply: Any, body: dict[str, Any]) -> None:
+        """OpenAI SSE；上游当前是非流式时，至少保持下游协议完整。"""
+        completion_id = f"chatcmpl-{uuid.uuid4().hex}"
+        created = int(time.time())
+        model = str(body.get("model") or "aiji")
+        sampling = _sampling_params(body)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+
+        def emit(payload: dict[str, Any]) -> None:
+            line = "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+            self.wfile.write(line.encode("utf-8"))
+            self.wfile.flush()
+
+        base = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+        }
+        emit({**base, "choices": [{
+            "index": 0, "delta": {"role": "assistant", "content": ""},
+            "finish_reason": None,
+        }]})
+        emit({**base, "choices": [{
+            "index": 0, "delta": {"content": reply.text},
+            "finish_reason": None,
+        }]})
+        emit({**base, "choices": [{
+            "index": 0, "delta": {}, "finish_reason": reply.finish_reason,
+        }], "aiji": {
+            "injection_id": reply.injection_id,
+            "used_ids": reply.used_ids or [],
+            "route": reply.route,
+            "model_latency_ms": round(reply.model_latency_ms, 1),
+            "human_delay_ms": round(reply.human_delay_ms, 1),
+            "took_ms": round(reply.took_ms, 1),
+            "filter_reason": reply.reason,
+            "degraded": reply.degraded,
+            "tools": reply.tool_traces or [],
+            "life": reply.life,
+            "sampling": sampling,
+        }})
+        self.wfile.write(b"data: [DONE]\n\n")
+        self.wfile.flush()
+
+
+class AijiHTTPServer(ThreadingHTTPServer):
+    life_loop: Any = None
+    mcp_research_loop: Any = None
+    sticker_loop: Any = None
+
+    def server_close(self) -> None:
+        loop = self.life_loop
+        if loop is not None:
+            loop.stop()
+        mcp_loop = self.mcp_research_loop
+        if mcp_loop is not None:
+            mcp_loop.stop()
+        sticker_loop = self.sticker_loop
+        if sticker_loop is not None:
+            sticker_loop.stop()
+        super().server_close()
+
+
+def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> ThreadingHTTPServer:
+    from .life_loop import LifeLoop
+    from .mcp_client import MCPConfigError, MCPRegistry
+    from .mcp_research import MCPResearchLoop, MCPResearcher
+    from .pet.growth import RemarkPicker
+    from .song_service import SongService
+    from .social_service import SocialService
+    from .sticker_service import (
+        DEFAULT_STICKER_FEED,
+        StickerService,
+        StickerUpdateLoop,
+    )
+    from .voice_service import VoiceRegistry
+
+    data_root = Path(memory.settings.db_path).resolve().parent
+    voices = VoiceRegistry(
+        Path(os.environ.get("AIJI_VOICE_DIR", data_root / "voices")))
+    songs = SongService(voices, data_root=data_root)
+    sticker_default = Path("D:/AstrBot/data/sticker_packs/aiji")
+    sticker_dir = Path(memory.settings.sticker_dir or sticker_default)
+    stickers = StickerService(
+        sticker_dir,
+        feed_url=(
+            memory.settings.sticker_feed_url or DEFAULT_STICKER_FEED
+        ),
+        max_bytes=int(memory.settings.sticker_max_bytes),
+    )
+    memory.stickers = stickers
+    social = SocialService(
+        memory.onebot_client.call,
+        media_root=Path(
+            memory.settings.social_media_dir
+            or data_root / "social" / "media"
+        ),
+        sticker_dir=sticker_dir,
+        song_lookup=songs.lookup,
+        sticker_status=stickers.snapshot,
+        enabled=bool(memory.settings.onebot_api),
+    )
+    memory.social = social
+
+    handler = type("BoundHandler", (_Handler,), {
+        "memory": memory,
+        "voice": voices,
+        "songs": songs,
+        "social": social,
+        "stickers": stickers,
+        # 每个 server 一份台词轮转器，摸头/喂食台词不会每次都是第一句。
+        "pet_picker": RemarkPicker(),
+    })
+    srv = AijiHTTPServer((host, port), handler)
+    srv.daemon_threads = True
+    if os.environ.get("AIJI_LIFE_LOOP", "1").strip().lower() not in (
+        "0", "false", "off", "no",
+    ):
+        poll_seconds = max(
+            5.0, float(os.environ.get("AIJI_LIFE_LOOP_POLL", "60")))
+        memory.life_loop = LifeLoop(
+            memory.being, poll_seconds=poll_seconds).start()
+        srv.life_loop = memory.life_loop
+    if memory.settings.sticker_update:
+        sticker_loop = StickerUpdateLoop(
+            stickers,
+            initial_delay_s=memory.settings.sticker_update_initial_s,
+            interval_s=memory.settings.sticker_update_interval_s,
+        ).start()
+        handler.sticker_loop = sticker_loop
+        srv.sticker_loop = sticker_loop
+        memory.sticker_loop = sticker_loop
+    mcp_config = Path(os.environ.get(
+        "AIJI_MCP_CONFIG",
+        Path(__file__).resolve().parents[1] / "config" / "mcp_servers.json",
+    ))
+    try:
+        mcp_registry = MCPRegistry(mcp_config)
+        mcp_researcher = MCPResearcher(
+            output_dir=data_root / "mcp" / "discovery",
+            registry=mcp_registry,
+            observer=lambda summary: memory.being_record_event(
+                "mcp_research",
+                summary,
+                valence_delta=0.8,
+                energy_delta=-1.2,
+            ),
+        )
+        mcp_loop = MCPResearchLoop(
+            mcp_researcher,
+            initial_delay_s=float(os.environ.get(
+                "AIJI_MCP_RESEARCH_INITIAL", "60")),
+            interval_s=float(os.environ.get(
+                "AIJI_MCP_RESEARCH_INTERVAL", "3600")),
+        )
+        memory.mcp_registry = mcp_registry
+        memory.mcp_researcher = mcp_researcher
+        memory.mcp_research_loop = mcp_loop
+        srv.mcp_registry = mcp_registry
+        srv.mcp_research_loop = mcp_loop
+        if os.environ.get("AIJI_MCP_RESEARCH_LOOP", "1").strip().lower() not in (
+            "0", "false", "off", "no",
+        ):
+            mcp_loop.start()
+    except (MCPConfigError, OSError, ValueError):
+        memory.mcp_registry = None
+        memory.mcp_research_loop = None
+    return srv
+
+
+def serve(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> None:  # pragma: no cover
+    srv = make_server(memory, host, port)
+    print(f"aiji listening on http://{host}:{srv.server_address[1]}")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.shutdown()

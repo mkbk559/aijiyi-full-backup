@@ -1,0 +1,12 @@
+{
+  "id": "cosyvoice-dafeiyu",
+  "name": "CosyVoice 大肥鱼",
+  "provider": "cosyvoice",
+  "endpoint": "http://127.0.0.1:50000",
+  "mode": "zero_shot",
+  "reference_audio": "cosyvoice-dafeiyu/reference.wav",
+  "prompt_text": "把参考音频里准确说出的那句话填在这里",
+  "prompt_lang": "zh",
+  "text_lang": "zh",
+  "timeout_s": 180
+}

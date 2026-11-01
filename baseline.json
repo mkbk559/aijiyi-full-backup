@@ -1,0 +1,425 @@
+{
+  "generated_by": "tools/make_baseline.py",
+  "params": {
+    "BUSY_TIMEOUT_MS": {
+      "value": 5000,
+      "source": "先验：SQLite busy_timeout（excluded #23：1s 在初始化竞态下不够）"
+    },
+    "CONF_FLOOR": {
+      "value": 0.15,
+      "source": "待实测：纠错地板（方案 1.11 #4）。初数据：0.9 置信 4 连纠错触底（NEG_FACTOR=0.7）——真实负载下是否过狠待验证"
+    },
+    "DISPATCH_INTERVAL": {
+      "value": 1.0,
+      "source": "先验：发送线程扫描周期（秒）"
+    },
+    "EPISODIC_HALF_LIFE_DAYS": {
+      "value": 14.0,
+      "source": "先验：情景记忆快衰减（\"上次被群友嘲笑\"类，鲜活但易忘）"
+    },
+    "EVENTLOG_KEEP_DAYS": {
+      "value": 7.0,
+      "source": "来自方案 1.11 #5：event_log 保留天数（短期缓冲恢复用）"
+    },
+    "FEEDBACK_FLOOR": {
+      "value": 0.15,
+      "source": "同 CONF_FLOOR（apply_feedback 负向路径地板）"
+    },
+    "HEARTSTATE_KEEP_BUCKETS": {
+      "value": 2,
+      "source": "来自方案 1.11 #5：day-scoped 状态桶保留天数"
+    },
+    "HEART_BACKOFF_CAP": {
+      "value": 60.0,
+      "source": "先验：指数退避封顶秒数（方案 1.11 #9）"
+    },
+    "HEART_INSTANCE_TTL": {
+      "value": 90.0,
+      "source": "先验：实例心跳过期秒数（solid_queue 进程注册表语义：心跳过期实例名下 processing 行被批量退回 pending；90 = 3×典型 pump 间隔 30s；崩溃恢复从 ≤LEASE_SECONDS(120s) 压到 ≤TTL+SCAN）"
+    },
+    "HEART_LEASE_SECONDS": {
+      "value": 120,
+      "source": "先验：processing 租约互斥超时（方案 1.11 #8；单事件处理实测 <1s，120s≈120× 余量）"
+    },
+    "HEART_MAX_ATTEMPTS": {
+      "value": 5,
+      "source": "先验：重试上限，超限进死信（方案 1.11 #9 死信语义）"
+    },
+    "HEART_SCAN_BATCH": {
+      "value": 16,
+      "source": "先验：单次 pump 领取上限（批处理事务减少锁竞争）"
+    },
+    "JANITOR_LEASE_TTL": {
+      "value": 600.0,
+      "source": "先验：单实例租约 TTL（janitor 全程实测 <1s，TTL≈600× 余量；持锁崩溃停摆上限=600s，见 test_lease_single_instance）"
+    },
+    "LINK_CAP": {
+      "value": 6,
+      "source": "实测（2026-10-29 linkcap_audit）：cap=3 在簇密语料丢 9% 阈值上边（含 0.66 语义近邻）；cap=6 全保留，边数仅 +10%，且召回侧 RECALL_LINK_BUDGET=6 已封顶遍历——多边只是图材料不进 prompt（方案风险 16 的\"十万级\"指不封顶，6 仍硬封顶）"
+    },
+    "MAX_REPLY_CHARS": {
+      "value": 500,
+      "source": "来自方案 1.5：回复长度出口硬校验"
+    },
+    "NEG_FACTOR": {
+      "value": 0.7,
+      "source": "待实测：cited 纠错下调乘数（方案 1.7）。0.6 时 4 次到底且无法回升（锁死红信号，2026-10-29 复盘）；0.7 从 0.9 到底需 6-7 次，且配合正向回升路径"
+    },
+    "NEG_FACTOR_FALLBACK": {
+      "value": 0.35,
+      "source": "来自方案 1.7 轮1补：无 cited 降级定位时幅度减半"
+    },
+    "PLATFORM_BLOCK_DELAY": {
+      "value": 30.0,
+      "source": "先验：平台限流时该平台行推迟秒数（等 rate_info.reset_at 或退避）"
+    },
+    "POS_CAP": {
+      "value": 0.95,
+      "source": "先验：回升封顶（不到 1.0，留模型不确定度）"
+    },
+    "POS_FACTOR": {
+      "value": 1.25,
+      "source": "先验：正向确认回升乘数（不对称升降：一次纠错 ×0.7 需约 3 次确认拉回，防\"一次夸就满血\"）"
+    },
+    "PROACTIVE_BACKOFF_MAX_N": {
+      "value": 6,
+      "source": "来自方案 1.6：退避档位封顶（3600×2^5≈32h）"
+    },
+    "PROACTIVE_COOLDOWN": {
+      "value": 3600.0,
+      "source": "先验：退避下限（方案 1.6），×2^n 指数"
+    },
+    "PROACTIVE_QUOTA_24H": {
+      "value": 3,
+      "source": "先验：滚动 24h 主动上限（方案 1.6 额度语义）"
+    },
+    "PROACTIVE_SILENCE": {
+      "value": 1800.0,
+      "source": "先验：scope 静默多久才允许主动（方案 1.6）"
+    },
+    "RATE_RESET_CAP": {
+      "value": 3600.0,
+      "source": "先验：reset_at 异常值防御封顶"
+    },
+    "RECALL_CHAT_POOL": {
+      "value": 10,
+      "source": "先验：闲聊模式下轮盘抽样池大小（锚点之外）"
+    },
+    "RECALL_CHAT_TAKE": {
+      "value": 3,
+      "source": "先验：锚点之外抽 k 条注入（防复读机）"
+    },
+    "RECALL_LINK_BUDGET": {
+      "value": 6,
+      "source": "先验：联想扩展命中预算（1 跳 + 2 跳合计上限）"
+    },
+    "RECALL_LINK_HOPS": {
+      "value": 2,
+      "source": "来自方案（差序联想）：图遍历最多 2 跳（防上下文爆炸）"
+    }
+  },
+  "injection_semantics": "injection 表行数 = AIJiYi 注入留痕数（每次 m.inject() 给主模型落一条软引导块，store.log_injection）。它不是 prompt 注入攻击计数；攻击计数 = payload 命中 extract._INJECT_CUES 的入站事件数（模拟断言『注入对抗』两条）。两者不得混用。",
+  "scenarios": {
+    "S1_flood_40r_seed7": {
+      "green": "11/11",
+      "assertions": [
+        {
+          "name": "出站消息非空",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "B站/抖音 观看不直接回复（采集走 ingest）",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "无重复刷屏（同平台同文本 ≤4，节流窗口外允许）",
+          "ok": true,
+          "detail": "worst=(('douyin', '收到！'), 1)"
+        },
+        {
+          "name": "injection 留痕 > 0",
+          "ok": true,
+          "detail": "n=21"
+        },
+        {
+          "name": "纠错地板：confidence ≥ 0.15",
+          "ok": true,
+          "detail": "min=None"
+        },
+        {
+          "name": "刷屏压力：douyin 同文本 ≤4",
+          "ok": true,
+          "detail": "n=1"
+        },
+        {
+          "name": "口径：injection 留痕 >0 且含 feedback 回报",
+          "ok": true,
+          "detail": "rows=21 with_fb=21"
+        },
+        {
+          "name": "软删读路径一致：召回零命中已删行",
+          "ok": true,
+          "detail": "leaked=[]"
+        },
+        {
+          "name": "调度零积压（outbox 无 pending/processing 残留）",
+          "ok": true,
+          "detail": "backlog=0 stats={'enqueued': 40, 'processed': 40, 'failed': 0, 'dead': 0, 'sent': 40}"
+        },
+        {
+          "name": "调度零死信",
+          "ok": true,
+          "detail": "dead=0"
+        },
+        {
+          "name": "janitor 已跑且租约即时释放",
+          "ok": true,
+          "detail": "janitor={'skipped': False, 'runs': 3}"
+        }
+      ],
+      "metrics": {
+        "injection_rows": 21,
+        "with_feedback": 21,
+        "facts_active": 0,
+        "outbox_stats": {
+          "enqueued": 40,
+          "processed": 40,
+          "failed": 0,
+          "dead": 0,
+          "sent": 40
+        },
+        "sent_n": 1
+      }
+    },
+    "S2_identity_40r_seed7": {
+      "green": "14/14",
+      "assertions": [
+        {
+          "name": "出站消息非空",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "QQ 有响应",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "B站/抖音 观看不直接回复（采集走 ingest）",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "记忆闭环：答得出用户名字",
+          "ok": true,
+          "detail": "sent=[{'user': '小明', 'platform': 'qq', 'text': '收到！', 'turn': 1}, {'user': '小明', 'platform': 'qq', 'text': '我还不清楚你叫什么，告诉我呗', 'turn': 4}, {'user': '小明', 'platform': 'qq', 'text': '啊这，是我记岔了，谢谢指正！', 'turn': 7}, {'user': '小明', 'platform': 'qq', 'text': '你还没跟我说过你住哪', 'turn': 14}]"
+        },
+        {
+          "name": "无重复刷屏（同平台同文本 ≤4，节流窗口外允许）",
+          "ok": true,
+          "detail": "worst=(('qq', '收到！'), 1)"
+        },
+        {
+          "name": "injection 留痕 > 0",
+          "ok": true,
+          "detail": "n=48"
+        },
+        {
+          "name": "fact 沉淀 > 0",
+          "ok": true,
+          "detail": "n=7"
+        },
+        {
+          "name": "身份隔离：小刚的事实不串到小明",
+          "ok": true,
+          "detail": "gang=1 leak=0"
+        },
+        {
+          "name": "纠错地板：confidence ≥ 0.15",
+          "ok": true,
+          "detail": "min=0.35"
+        },
+        {
+          "name": "口径：injection 留痕 >0 且含 feedback 回报",
+          "ok": true,
+          "detail": "rows=48 with_fb=48"
+        },
+        {
+          "name": "软删读路径一致：召回零命中已删行",
+          "ok": true,
+          "detail": "leaked=[]"
+        },
+        {
+          "name": "调度零积压（outbox 无 pending/processing 残留）",
+          "ok": true,
+          "detail": "backlog=0 stats={'enqueued': 58, 'processed': 58, 'failed': 0, 'dead': 0, 'sent': 58}"
+        },
+        {
+          "name": "调度零死信",
+          "ok": true,
+          "detail": "dead=0"
+        },
+        {
+          "name": "janitor 已跑且租约即时释放",
+          "ok": true,
+          "detail": "janitor={'skipped': False, 'runs': 3, 'purged_index': 33}"
+        }
+      ],
+      "metrics": {
+        "injection_rows": 48,
+        "with_feedback": 48,
+        "facts_active": 7,
+        "outbox_stats": {
+          "enqueued": 58,
+          "processed": 58,
+          "failed": 0,
+          "dead": 0,
+          "sent": 58
+        },
+        "sent_n": 4
+      }
+    },
+    "S3_correction_60r_seed7": {
+      "green": "17/17",
+      "assertions": [
+        {
+          "name": "出站消息非空",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "QQ 有响应",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "B站/抖音 观看不直接回复（采集走 ingest）",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "无重复刷屏（同平台同文本 ≤4，节流窗口外允许）",
+          "ok": true,
+          "detail": "worst=(('qq', '你还没跟我说过你住哪'), 1)"
+        },
+        {
+          "name": "injection 留痕 > 0",
+          "ok": true,
+          "detail": "n=7"
+        },
+        {
+          "name": "fact 沉淀 > 0",
+          "ok": true,
+          "detail": "n=2"
+        },
+        {
+          "name": "S3 全闭环：active 居住地是新值（苏州）",
+          "ok": true,
+          "detail": "city_all=[('杭州', 0.1925, 'superseded'), ('苏州', 0.55, 'active')]"
+        },
+        {
+          "name": "S3 旧值被 supersede（留痕可回滚）",
+          "ok": true,
+          "detail": "superseded=[('杭州', 0.1925)]"
+        },
+        {
+          "name": "S3 作用域窄：同用户其他 fact 不误伤",
+          "ok": true,
+          "detail": "rows=[('居住地', '杭州', 0.1925, 'superseded'), ('居住地', '苏州', 0.55, 'active'), ('备注', '了吧', 0.55, 'active')]"
+        },
+        {
+          "name": "S3 斜率：施压段到底（trace 见地板附近 ≤0.25）",
+          "ok": true,
+          "detail": "trace=[0.1925, 0.1925, 0.1925, 0.1925, 0.1925, 0.1925]"
+        },
+        {
+          "name": "S3 可回升：恢复段后 active 置信 >0.35（不为地板恒定）",
+          "ok": true,
+          "detail": "max_after_recovery=0.55（恒 0.15 = 锁死红）"
+        },
+        {
+          "name": "纠错地板：confidence ≥ 0.15",
+          "ok": true,
+          "detail": "min=0.55"
+        },
+        {
+          "name": "口径：injection 留痕 >0 且含 feedback 回报",
+          "ok": true,
+          "detail": "rows=7 with_fb=7"
+        },
+        {
+          "name": "软删读路径一致：召回零命中已删行",
+          "ok": true,
+          "detail": "leaked=[]"
+        },
+        {
+          "name": "调度零积压（outbox 无 pending/processing 残留）",
+          "ok": true,
+          "detail": "backlog=0 stats={'enqueued': 18, 'processed': 18, 'failed': 0, 'dead': 0, 'sent': 18}"
+        },
+        {
+          "name": "调度零死信",
+          "ok": true,
+          "detail": "dead=0"
+        },
+        {
+          "name": "janitor 已跑且租约即时释放",
+          "ok": true,
+          "detail": "janitor={'skipped': False, 'runs': 5, 'purged_index': 5}"
+        }
+      ],
+      "metrics": {
+        "injection_rows": 7,
+        "with_feedback": 7,
+        "facts_active": 2,
+        "outbox_stats": {
+          "enqueued": 18,
+          "processed": 18,
+          "failed": 0,
+          "dead": 0,
+          "sent": 18
+        },
+        "sent_n": 3
+      }
+    },
+    "full_8seed_60r": {
+      "green": "21/21 × 8 seeds",
+      "evidence": "evidence/2026-10-29/132319-cited-scope-fix-regression-3d73eb"
+    }
+  },
+  "slope_data": {
+    "unit_test_0.9_10corrections": [
+      0.54,
+      0.324,
+      0.1944,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ],
+    "note": "0.9×0.6^n 触 0.15 地板后恒定（test_slope_10_rounds）；杠精场景 0.55 起步 3-4 步触底"
+  },
+  "evidence_archive": {
+    "dispatch_proactive_landing": {
+      "dir": "evidence/2026-10-29/125716-dispatch-proactive-landing-6711ed",
+      "stdout_sha256": "414632e49f4c13e7990becd4efdfc9cc8cc132ee5f37a6cd3b582f9060597837"
+    },
+    "janitor_correction_replay": {
+      "dir": "evidence/2026-10-29/130451-janitor-correction-replay-765983",
+      "stdout_sha256": "69e3c64fbbb2548c72fe5c306df99a5776e2c9ce14287c529fb420faa42a02a2"
+    },
+    "S1_S2_S3_evidence": {
+      "dir": "evidence/2026-10-29/132029-S1-S2-S3-evidence-127014",
+      "stdout_sha256": "81fd4ddd7ead396233259426a41834ad3f102a9595927e41c744679fae086591"
+    },
+    "cited_scope_fix_regression": {
+      "dir": "evidence/2026-10-29/132319-cited-scope-fix-regression-3d73eb",
+      "stdout_sha256": "80adf07be8af7bb599af3eb8d82136d74fd8c2f0946d189e7562108bcb6c792b"
+    }
+  }
+}

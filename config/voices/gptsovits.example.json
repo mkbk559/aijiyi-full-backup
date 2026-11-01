@@ -1,0 +1,14 @@
+{
+  "id": "gptsovits-dafeiyu",
+  "name": "GPT-SoVITS 大肥鱼",
+  "provider": "gptsovits",
+  "endpoint": "http://127.0.0.1:9880",
+  "reference_audio": "gptsovits-dafeiyu/reference.wav",
+  "prompt_text": "把参考音频里准确说出的那句话填在这里",
+  "prompt_lang": "zh",
+  "text_lang": "zh",
+  "timeout_s": 180,
+  "extra": {
+    "api_style": "v2"
+  }
+}

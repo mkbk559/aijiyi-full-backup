@@ -1,0 +1,52 @@
+{
+  "servers": {
+    "duckduckgo": {
+      "command": "uvx",
+      "args": [
+        "duckduckgo-mcp-server",
+        "--parse-mode",
+        "markdown"
+      ],
+      "enabled": true,
+      "read_only": true,
+      "allowed_tools": [
+        "search",
+        "fetch_content",
+        "expand_link"
+      ],
+      "timeout_s": 90,
+      "max_output_chars": 24000,
+      "note": "Public web search and page extraction; private URLs disabled."
+    },
+    "fetch": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-fetch"
+      ],
+      "enabled": true,
+      "read_only": true,
+      "allowed_tools": [
+        "fetch"
+      ],
+      "timeout_s": 90,
+      "max_output_chars": 24000,
+      "note": "Official reference fetch MCP; robots.txt and private-IP protections stay enabled."
+    },
+    "github": {
+      "command": "github-mcp-server",
+      "args": [
+        "stdio"
+      ],
+      "enabled": false,
+      "read_only": true,
+      "allowed_tools": [
+        "search_repositories",
+        "get_file_contents",
+        "list_commits"
+      ],
+      "timeout_s": 90,
+      "max_output_chars": 24000,
+      "note": "Optional official GitHub MCP. Install the binary and provide GITHUB_PERSONAL_ACCESS_TOKEN, then enable manually."
+    }
+  }
+}

@@ -1,0 +1,24 @@
+[project]
+name = "aiji"
+version = "0.8.3"
+description = "分层记忆系统：SQLite 事实/画像 + 会话缓冲 + 可选向量索引；异步写、100ms 硬超时快召回"
+requires-python = ">=3.12"
+dependencies = ["websockets>=12"]
+
+[project.scripts]
+aiji = "aiji.cli:main"
+
+[project.optional-dependencies]
+im = ["octop-gateway>=1.0.3"]
+voice = ["edge-tts>=7"]
+mcp = ["mcp>=2.1"]
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+include = ["aiji*"]
+exclude = ["bench*", "config*", "data*", "tests*", "tools*"]
+
+[tool.setuptools.package-data]
+aiji = ["web/*.html", "web/vendor/*", "pet/assets/*"]

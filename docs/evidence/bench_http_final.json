@@ -1,0 +1,15 @@
+{
+  "note": "bench/bench_http.py --facts 5000 --clients 4 --rounds 10（HTTP 端到端 /recall）",
+  "archived": "C:\\Users\\22166\\.dsh\\evidence\\2026-10-28\\231358-recall-budget-final-secondary-89536a\\stdout.txt",
+  "path": "http",
+  "clients": 4,
+  "n": 240,
+  "p50": 4.555,
+  "p95": 7.505,
+  "p99": 9.018,
+  "max": 9.86,
+  "mean": 4.316,
+  "budget_ms": 100,
+  "degraded": 0,
+  "ok": true
+}

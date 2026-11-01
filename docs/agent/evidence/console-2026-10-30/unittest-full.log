@@ -1,0 +1,68 @@
+.................................................................[heart] outbox#1 kind=comment ����ʧ��: Traceback (most recent call last):
+  File "D:\AIJiYi\aiji\heart.py", line 185, in pump
+    reply = self.handler(ident, OutboxEvent(
+        kind=kind, text=extra.get("text", ""), priority=priority,
+        extra=extra))
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <lambda>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+                                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <genexpr>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+RuntimeError: boom
+
+[heart] outbox#1 kind=comment ����ʧ��: Traceback (most recent call last):
+  File "D:\AIJiYi\aiji\heart.py", line 185, in pump
+    reply = self.handler(ident, OutboxEvent(
+        kind=kind, text=extra.get("text", ""), priority=priority,
+        extra=extra))
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <lambda>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+                                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <genexpr>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+RuntimeError: boom
+
+[heart] outbox#1 kind=comment ����ʧ��: Traceback (most recent call last):
+  File "D:\AIJiYi\aiji\heart.py", line 185, in pump
+    reply = self.handler(ident, OutboxEvent(
+        kind=kind, text=extra.get("text", ""), priority=priority,
+        extra=extra))
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <lambda>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+                                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <genexpr>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+RuntimeError: boom
+
+[heart] outbox#1 kind=comment ����ʧ��: Traceback (most recent call last):
+  File "D:\AIJiYi\aiji\heart.py", line 185, in pump
+    reply = self.handler(ident, OutboxEvent(
+        kind=kind, text=extra.get("text", ""), priority=priority,
+        extra=extra))
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <lambda>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+                                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <genexpr>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+RuntimeError: boom
+
+[heart] outbox#1 kind=comment ����ʧ��: Traceback (most recent call last):
+  File "D:\AIJiYi\aiji\heart.py", line 185, in pump
+    reply = self.handler(ident, OutboxEvent(
+        kind=kind, text=extra.get("text", ""), priority=priority,
+        extra=extra))
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <lambda>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+                                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AIJiYi\tests\test_heart.py", line 79, in <genexpr>
+    h = Heart(db, handler=lambda i, e: (_ for _ in ()).throw(RuntimeError("boom")))
+RuntimeError: boom
+
+.......[heart] �ӹ� 1 ��������ʵ�� ['inst-A']
+.................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 281 tests in 45.159s
+
+OK
+    [recovery] floor=0.15 �� [0.1875, 0.2344, 0.293, 0.3662]
+    [slope] 10 ��: [0.63, 0.441, 0.3087, 0.2161, 0.1513, 0.15, 0.15, 0.15, 0.15, 0.15]
