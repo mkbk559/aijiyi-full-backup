@@ -700,4 +700,20 @@
 - **本机网络实测**：huggingface.co 直连 0.96 MB/s、hf-mirror 0.45、modelscope **SSL EOF**、
   download.pytorch.org **0.06 MB/s（不可用）**、mirrors.pku.edu.cn 0.59 MB/s、
   `git clone` 需 `-c http.sslBackend=openssl`（schannel 报 SEC_E_NO_CREDENTIALS）。
-- **未验证**：六个候选一个都没装；kNN-VC/DDSP-SVC/so-vits 的 LICENSE 未核对；唱歌相似度无量化对比。
+## 2026-11-02 转向 RVC（Seed-VC 已删、素材已体检、RVC 已装）
+
+- **删除**：`voice-engine/seed-vc` 8,005 MB + `voice-engine/gpt-sovits` 317.5 MB → `voice-engine` 9,050.6 → **1,045.6 MB**。
+  唯一残留：`voice-engine/seed-vc/tmp/aiji-conv-uc_c48es`（空目录，DSH 沙箱 ACL 拒绝删除；`Directory.Delete`
+  也拒，未跑 ACL 修复脚本）。Seed-VC 怎么接的记在 `docs/agent/research/seed-vc-integration-archive.md`。
+- **素材体检**（`tools/voice_dataset_check.py` + `tools/voice_bgm_check.py`，报告
+  `docs/agent/research/voice-dataset-readiness-2026-11-02.md`）：
+  - 92 段切片 9.5 min，可用 **9.35 min**（差 RVC 门槛 0.65 min），SNR 中位 32.0 dB；
+  - **伴奏/人声能量比中位 +1.5 dB**（91/92 段 > −10 dB）→ 原素材伴奏很响，分离是必须的；
+  - `separated/source_normalized_(Vocals).wav` **16.0 min**、无削波、SNR 57.9 dB → **有效语音 10.1 min，够**。
+- **RVC 已装**（`tools/engine_install_rvc.ps1`）：clone + uv venv(Py3.12) + 121 依赖 +
+  **torch 2.7.1+cu128（`cuda_avail True`, RTX 3050）** + 权重 3,076 MB（hubert_base/rmvpe/pretrained_v2/pymss_weights）。
+  该版本只有 `webui.py` + `realtime_gui.py`，**没有 CLI 脚本**，要走 `infer/`(15 py)/`train/`(11 py) 包直接调。
+- **踩到的坑**：① 脚本里 `torchaudio=` 写成单等号 → stage-1 静默失败，依赖回落成 CPU torch 2.15.0；
+  ② `huggingface_hub` 2.4 移除 `huggingface_hub.commands`，改用 `Scripts\hf.exe`；
+  ③ HF xet CDN `us.aws.cdn.hf.co` TLS EOF → 设 `HF_HUB_DISABLE_XET=1` 走普通 CDN。
+- 下一步：把 16.0 min 整段人声重切成 3–10 s 训练切片 → 训大肥鱼模型（4 GB 卡低显存档）。

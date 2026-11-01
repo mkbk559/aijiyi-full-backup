@@ -78,6 +78,22 @@ python bench/demo_loop.py                                       # 端到端：�
   - 注意：`Get-NetTCPConnection -LocalPort 9880` 在本沙箱会对该端口假阴性，**用 netstat/TcpClient 判活**。
   - **仍需人工**：重启 8787 控制台才会加载新客户端代码；`dist/` 的 0.8.3 wheel 落后于
     `voice_service.py`(02:13)，打包前要重跑 `uv build`。
+- 2026-11-02 **Seed-VC 已弃用（改走 RVC），但迁移只做了一半**（承接上条，实况核对 04:00）：
+  - **事实**：3:57 另一个会话按"用户决定全部走 RVC"，删掉 `voice-engine/seed-vc`
+    （8,005 MB / 35,176 文件，含它自己的 venv 与 checkpoints），3:59 提交归档
+    `docs/agent/research/seed-vc-integration-archive.md`。**不是清理脚本，也不是本会话**。
+  - **当前断点**：`data/voices/dafeiyu/profile.json` 的 `postprocess` **仍指向
+    `http://127.0.0.1:9880/convert`**；全盘没有任何 `*rvc*` 文件/模型 → 定制音色当前
+    **必然回退 edge**（`_ready()` 端口不通）。RVC 侧只有"该怎么接"的结论
+    （`voice_service.py` 支持 `postprocess.command` + `{input}`/`{output}` 占位符），没有实现。
+  - **本会话已适配**（避免每次开机报错）：
+    - `tools/ensure_voice_engine.ps1` 重写为**按 profile 自适应**：`command` → 只查可执行文件；
+      `url` → 端口判活 + 找启动脚本；两者都没有 → 打印"会回退 edge"并 **exit 0**（不再 `starter missing`）。
+    - `启动语音引擎.bat` 文案同步（"检查/启动"，不再写死 Seed-VC 日志路径）。
+    - **削波修复搬到客户端**：`VoiceRegistry._limit_peak()`，PCM16 峰值 >0.98 时缩到 0.95，
+      CLI/HTTP 两种转换器都受益（实测 32767 → 31128 = 0.950），不再依赖易失的引擎实现。
+  - **待办（RVC 侧）**：装 RVC 运行时 + 写 `rvc_convert.bat {input} {output}` +
+    把 profile 的 `postprocess` 从 `url` 改成 `command`；改完 `ensure_voice_engine.ps1` 会自动识别。
 - 2026-11-02 **记忆代谢按方案全量落地（schema v11，全绿）**：把上面那份调研/借用方案
   （`docs/agent/design/borrow-plan-2026-11-02.md` §4）**全部实现**，实施状态与实测见该文件 **§9**。
   - 代码：`db.py`（v11 迁移）、`store.py`（`bump_usage/retrievability/should_freeze/thaw_fact/

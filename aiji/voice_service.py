@@ -201,6 +201,40 @@ class VoiceRegistry:
             source="builtin",
         )
 
+    @staticmethod
+    def _limit_peak(path: Path, ceiling: float = 0.95) -> None:
+        """把 16-bit wav 的峰值压到 ceiling 以下（只在超过 0.98 时动手）。
+
+        换声器（Seed-VC/RVC）的 float 输出常超过 ±1.0，直接写 PCM16 会削波：
+        历史 seed-vc 产物 peak=1.000、2-10% 采样贴顶。放在客户端做，
+        不依赖具体引擎是否实现，CLI/HTTP 两种接法都受益。
+        """
+        try:
+            import array
+            import wave
+
+            with wave.open(str(path), "rb") as reader:
+                params = reader.getparams()
+                if params.sampwidth != 2 or params.nchannels < 1:
+                    return
+                raw = reader.readframes(params.nframes)
+            samples = array.array("h")
+            samples.frombytes(raw)
+            if not samples:
+                return
+            peak = max(max(samples), -min(samples))
+            if peak <= int(0.98 * 32767):
+                return
+            scale = (ceiling * 32767.0) / float(peak)
+            scaled = array.array("h", (int(value * scale) for value in samples))
+            with wave.open(str(path), "wb") as writer:
+                writer.setparams(params)
+                writer.writeframes(scaled.tobytes())
+        except (OSError, EOFError, wave.Error, ValueError):
+            # 不是标准 PCM wav / 文件被占用：保持原样，绝不让后处理拖垮合成
+            return
+
+
     def profiles(self) -> list[VoiceProfile]:
         items = [self._builtin]
         for manifest in sorted(self.root.glob("*/profile.json")):
@@ -390,6 +424,7 @@ class VoiceRegistry:
                 except VoiceError:
                     # Keep the provider voice when the optional converter is down.
                     pass
+            self._limit_peak(converted)
             shutil.copy2(converted, target)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
