@@ -27,6 +27,23 @@ from aiji.throat.net_guard import UrlGuardError, validate_public_http_url
 from aiji.heart.voice_service import VoiceError, VoiceRegistry
 
 
+def _default_separator() -> str:
+    """人声分离可执行文件的位置。
+
+    2026-11-03：这里原来写死 `voice-engine/.venv/Scripts/audio-separator.exe`。
+    那个 venv 是 CPU torch 的（为换声互通搭的），已被清掉；分离改用独立的
+    `voice-engine/sep-venv`（只装 audio-separator，874 MB），换声则走
+    `voice-engine/rvc/.venv`（CUDA）。两个环境分开，互不牵制。
+    """
+    for candidate in (
+        Path("voice-engine") / "sep-venv" / "Scripts" / "audio-separator.exe",
+        Path("voice-engine") / ".venv" / "Scripts" / "audio-separator.exe",
+    ):
+        if candidate.exists():
+            return str(candidate)
+    return str(Path("voice-engine") / "sep-venv" / "Scripts" / "audio-separator.exe")
+
+
 class SongError(RuntimeError):
     def __init__(self, code: str, message: str = "") -> None:
         super().__init__(message or code)
@@ -84,9 +101,7 @@ class SongService:
         ):
             directory.mkdir(parents=True, exist_ok=True)
         self.separator = separator or os.environ.get(
-            "AIJI_AUDIO_SEPARATOR",
-            str(Path("voice-engine") / ".venv" / "Scripts" / "audio-separator.exe"),
-        )
+            "AIJI_AUDIO_SEPARATOR", _default_separator())
         self.model_dir = Path(model_dir or os.environ.get(
             "AIJI_SEPARATOR_MODEL_DIR", "voice-engine/models")).resolve()
         self.model_filename = model_filename or os.environ.get(

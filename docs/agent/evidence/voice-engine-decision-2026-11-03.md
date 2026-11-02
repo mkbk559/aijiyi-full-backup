@@ -17,8 +17,15 @@
 > **结论更正：不用换引擎，RVC 在这台机器上已经是实时的（RTF 0.08~0.26）。**
 > 之前"延迟太高"的真因是**跑错了环境**（CPU torch）+ 常驻服务没起。
 > 已修：`tools/rvc_convert.py` 的 `_pick_python()` 与 `tools/rvc_daemon.ps1` 都优先选
-> `voice-engine/rvc/.venv` 并默认 `--device cuda`；`VOICE_MAX_CONVERT_SECONDS` 从 15 s 放开到 60 s
-> （GPU 下 60 s 素材≈3 s，这个上限只在退回 CPU 时才真会咬人）。
+> `voice-engine/rvc/.venv` 并默认 `--device cuda`。
+>
+> **第二轮真机重测后补充（见 `voice-real-retest-2026-11-03.md`）**：
+> - 半精度必须开（30 s 素材 fp32 60 s → fp16 24 s），已在 `rvc_server.py` 生效。
+> - **30 s 是断崖**（13 s 0.68 s，30 s 23.8 s，显存打满 4 GB），所以
+>   `VOICE_MAX_CONVERT_SECONDS` 最终定为 **15.0**——中间那次"放开到 60 s"是只看小素材的错误外推。
+> - 我删 `voice-engine/.venv` 曾把点歌链路的人声分离打断（`song_service` 里写死了那个路径），
+>   已改为独立 `voice-engine/sep-venv` 并在代码里做探测。
+
 > §三 里 1/3/4/5 条改动仍有效；§二 的"要换单段克隆 TTS"降级为**可选**（只有当你想让语音条也用
 > 大肥鱼音色、且能接受再下一套模型时才考虑），不再是延迟上的必需。
 

@@ -69,6 +69,20 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **语音链路真机重测（第二轮）**，见 `docs/agent/evidence/voice-real-retest-2026-11-03.md`。
+  全部在 `voice-engine/rvc/.venv` + RTX 3050 4 GB 上重跑：
+  fp16 5 s 444 ms / 13 s 682 ms / **30 s 23 799 ms（断崖，显存 3 954/4 096）**；
+  fp32 同样素材 588 / 993 / **59 983 ms** → **半精度必须开**，已在 `rvc_server.py` 里 cuda 默认开，
+  `/health` 回报 `is_half`。真机整链：5 s 语音 ≈ 2.7 s（首次 10.7 s 含预热）、13 s ≈ 5.6 s、
+  30.8 s **被 15 s 护栏跳过**（`last_skipped` 留证据）→ `VOICE_MAX_CONVERT_SECONDS` 改回 **15.0**。
+  HTTP 真验收：`POST /v1/audio/speech` → 200 / audio/wav / 4.9 s / 470 444 B。
+  换声段拆解：服务端推理 826 ms，客户端额外 546 ms（进程 + HTTP），共 1 371 ms。
+  **这轮修掉我上一步制造的 3 个问题**：①删掉 separator venv 打坏了点歌 → 新建
+  `voice-engine/sep-venv`(874 MB) + `_default_separator()`；②往 `rvc/.venv` 装 audio-separator
+  弄坏了 numpy 元数据（`transformers` 版本检查报 `found=None`）→ 重装 numpy 1.26.4；
+  ③`rvc_daemon.ps1 -Stop` 停不住服务 → pid 文件 + 强制兜底，改 `Win32_Process Create` 起进程
+  （原来 `Start-Process` 会让捕获输出的调用方挂到超时）。
+
 - 2026-11-03 **更正：RVC 不慢，是我跑错了环境。** 这台机器有 **RTX 3050 Laptop (4 GB)**，
   真正的 RVC 运行时是 `voice-engine/rvc/.venv`（Python 3.12 + torch 2.7.1+**cu128**，`torchfcpe` 也在），
   `data/voices/dafeiyu/profile.json` 一直指向它；我之前拿 `voice-engine/.venv`（torch **cpu**，我自己装的）

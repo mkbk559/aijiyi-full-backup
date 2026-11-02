@@ -79,10 +79,13 @@ def _hint_for(exc: BaseException) -> str:
 class Engine:
     """把 RVC 的 VC 对象包成"载一次、反复用"。单线程推理（torch CPU 上并发只会更慢）。"""
 
-    def __init__(self, model: Path, index: Path | None, device: str = "cpu"):
+    def __init__(self, model: Path, index: Path | None, device: str = "cpu",
+                 half: bool | None = None):
         self.model = Path(model)
         self.index = str(index) if index else None
         self.device = device
+        self.half = half
+        self.is_half = False
         self.loaded_ms = 0.0
         self.lock = threading.Lock()
         self.calls = 0
@@ -105,6 +108,13 @@ class Engine:
             config.device = self.device
         except Exception:
             pass
+        # 4 GB 显存上 fp32 会把卡跑满（实测 30.8 s 素材 VRAM 3946/4096 MiB、
+        # 换声 65.7 s）。CUDA 下默认开半精度，显存和耗时都减半左右。
+        if self.half is None:
+            config.is_half = self.device.startswith("cuda")
+        else:
+            config.is_half = bool(self.half)
+        self.is_half = bool(getattr(config, "is_half", False))
         from infer.vc.modules import VC  # noqa: E402
 
         vc = VC(config)
@@ -162,7 +172,7 @@ def make_handler(engine: Engine, stop: threading.Event):
                 self._send(200, {"ok": True, "model": engine.model.name,
                                  "device": engine.device,
                                  "loaded_ms": round(engine.loaded_ms, 1),
-                                 "calls": engine.calls})
+                                 "calls": engine.calls, "is_half": engine.is_half})
                 return
             self._send(404, {"ok": False, "error": "not found"})
 
@@ -210,6 +220,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--index", default=str(DEFAULT_INDEX))
     ap.add_argument("--device", default=os.environ.get("AIJI_RVC_DEVICE") or "cpu")
     ap.add_argument("--log", default="", help="把 stdout/stderr 写进这个文件（守护脚本用）")
+    ap.add_argument("--half", default=None, choices=["1", "0"],
+                    help="半精度：cuda 下默认 1（4 GB 卡必须），cpu 下无意义")
     args = ap.parse_args(argv)
 
     if args.log:
@@ -222,7 +234,9 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr = handle
         print(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} boot ---")
 
-    engine = Engine(Path(args.model), Path(args.index) if args.index else None, args.device)
+    half = None if args.half is None else (args.half == "1")
+    engine = Engine(Path(args.model), Path(args.index) if args.index else None,
+                    args.device, half)
     print(json.dumps({"ok": True, "listening": f"http://{args.host}:{args.port}",
                       "model": engine.model.name,
                       "loaded_ms": round(engine.loaded_ms, 1)}, ensure_ascii=False), flush=True)

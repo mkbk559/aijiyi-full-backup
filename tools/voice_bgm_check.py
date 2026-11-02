@@ -9,7 +9,7 @@
 - -20 ~ -10 dB：有可听伴奏，但人声占主导
 - > -10 dB：伴奏很响，分离后仍可能残留/受损
 
-用法： voice-engine\.venv\Scripts\python.exe tools\voice_bgm_check.py
+用法： voice-engine\sep-venv\Scripts\python.exe tools\voice_bgm_check.py
 产物： .tmp/voice-check/bgm.json（并入 report.json 的 bgm 字段）
 """
 from __future__ import annotations

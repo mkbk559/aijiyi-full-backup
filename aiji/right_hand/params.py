@@ -59,10 +59,13 @@ EPISODIC_HALF_LIFE_DAYS = 14.0 # 先验：情景记忆快衰减（"上次被群�
 RECALL_DECAY_MODE = "stability" # 2026-11-03：新近度口径。stability=FSRS-5 幂律曲线(用事实自己存的 stability，随引用增长) / half_life=旧的指数衰减(不看用没用过)
 
 # 换声（RVC）时长护栏：语音条超过这个秒数就不换声，直接用 TTS 原声。
-# 2026-11-03 实测：GPU 环境（voice-engine/rvc/.venv, torch cu128）6 s 素材 503 ms（RTF 0.08）、
-# 1.5 s 素材 384 ms；CPU 环境（voice-engine/.venv）同样素材 9 519 / 2 892 ms（RTF 1.6~2.1）。
-# 所以这个上限只在"退回 CPU 跑"时才真的会触发；GPU 下 60 s 素材约 3 s，没必要拦。
-VOICE_MAX_CONVERT_SECONDS = 60.0
+# 2026-11-03 真机实测（tools/archcheck/{rvc_gpu_bench,rvc_half_bench}.json，RTX 3050 4 GB，半精度）：
+#   5 s 素材 444 ms（RTF 0.089，显存 1202 MiB）
+#   13 s 素材 682 ms（RTF 0.052，显存 2262 MiB）
+#   30 s 素材 23 799 ms（RTF 0.79，显存 3954/4096 MiB）← 断崖：一次性推理把 4 GB 打满
+# （fp32 更惨：30 s 要 59 983 ms）。所以拐点在 15 s 上下，超过就别在语音条上换声。
+# 点歌/翻唱走 mode="song"，不受此限（离线任务，30 s 素材 24 s 可以等）。
+VOICE_MAX_CONVERT_SECONDS = 15.0
                                # 默认 fsrs：bench/bench_memory_quality.py 的 6 条排序不变量在两种口径下都过（见证据文档）
 
 # ---- 反思 Worker：aiji/reflect.py（性格涌现，2026-10-29 新增）----

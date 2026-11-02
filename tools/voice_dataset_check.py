@@ -3,7 +3,7 @@
 RVC 官方要求（README）：「推荐至少收集 **10 分钟**低底噪语音数据」。
 本脚本给出：分离后可用总时长、每段 SNR 估计、削波、静音占比，以及"还差多少分钟"。
 
-用法（用 voice-engine/.venv 的 python，里面装了 audio-separator + numpy）：
+用法（用 voice-engine/sep-venv 的 python，里面装了 audio-separator + numpy）：
     python tools/voice_dataset_check.py                       # 分离 + 量测 + 报告
     python tools/voice_dataset_check.py --no-separate         # 只量已有产物
     python tools/voice_dataset_check.py --reuse               # 已分离过的跳过

@@ -71,16 +71,47 @@ function Get-Health {
     }
 }
 
+$pidFile = Join-Path $logDir 'rvc-server.pid'
+
 if ($Stop) {
     $h = Get-Health
-    if (-not $h) { Write-Host "RVC 服务没在跑（$base）"; exit 0 }
-    try {
-        Invoke-Local -Uri "$base/shutdown" -Method 'POST' -Body '{}' | Out-Null
-        Write-Host "已请求关闭：$base"
-    } catch {
-        Write-Host "关闭请求失败：$_"
-        exit 1
+    $killed = $false
+    if ($h) {
+        try {
+            Invoke-Local -Uri "$base/shutdown" -Method 'POST' -Body '{}' | Out-Null
+            Write-Host "已请求关闭：$base"
+        } catch {
+            Write-Host "关闭请求失败：$_"
+        }
+        # /shutdown 只是让服务自己退出；等它真退出，别留一个还占着显存/端口的幽灵
+        for ($i = 0; $i -lt 15; $i++) {
+            Start-Sleep -Milliseconds 500
+            if (-not (Get-Health)) { break }
+        }
     }
+    if (Get-Health) {
+        # 还活着就按 pid 硬停（pid 文件由启动分支写）
+        $victim = $null
+        if (Test-Path $pidFile) {
+            $victim = (Get-Content $pidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+        }
+        if (-not $victim) {
+            $victim = (Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+                Where-Object { $_.CommandLine -like "*rvc_server.py*--port $Port*" } |
+                Select-Object -First 1 -ExpandProperty ProcessId)
+        }
+        if ($victim) {
+            try {
+                Stop-Process -Id ([int]$victim) -Force -ErrorAction Stop
+                $killed = $true
+                Write-Host "已强制结束 pid=$victim（/shutdown 没停住）"
+            } catch {
+                Write-Host "强制结束失败：$_"
+            }
+        }
+    }
+    if (Test-Path $pidFile) { Remove-Item $pidFile -Force -ErrorAction SilentlyContinue }
+    if (-not $h -and -not $killed) { Write-Host "RVC 服务没在跑（$base）" }
     exit 0
 }
 
@@ -101,12 +132,21 @@ if (Test-Path $logFile) {
     Move-Item -Force $logFile "$logDir\rvc-server-$stamp.log"
 }
 
-# 起服务：**不要**用 -RedirectStandardOutput。Windows 上那会把子进程绑到父进程的句柄，
-# 被管道捕获的调用方会一直挂着（实测十几分钟不返回）。
-# 改成让服务自己写日志（tools/rvc_server.py --log），父进程只管 launch 完就走。
-Start-Process -FilePath $python `
-    -ArgumentList @($server, '--port', "$Port", '--log', $logFile, '--device', $device) `
-    -WorkingDirectory $root -WindowStyle Hidden | Out-Null
+# 起服务：必须**完全脱离**调用方的句柄，否则任何"捕获输出"的调用方（python subprocess、
+# 管道里的 shell）都会一直挂到超时——Start-Process 起出来的孙进程仍握着父进程的 stdout 管道。
+# Win32_Process.Create 由 WMI 代起进程，不继承任何句柄，这是 Windows 上最干净的脱离方式。
+$cmdLine = '"{0}" "{1}" --port {2} --log "{3}" --device {4}' -f `
+    $python, $server, $Port, $logFile, $device
+$created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+    CommandLine = $cmdLine; CurrentDirectory = $root
+}
+if ($created.ReturnValue -ne 0) {
+    Write-Error "起服务失败（Win32_Process.Create 返回 $($created.ReturnValue)）：$cmdLine"
+    exit 1
+}
+Write-Host "已拉起进程 pid=$($created.ProcessId)"
+# 记下 pid：/shutdown 有时停不住（比如推理线程卡在 CUDA 上），-Stop 要靠它兜底
+Set-Content -Path $pidFile -Value $created.ProcessId -Encoding ascii
 
 $deadline = (Get-Date).AddSeconds($WaitSeconds)
 while ((Get-Date) -lt $deadline) {
