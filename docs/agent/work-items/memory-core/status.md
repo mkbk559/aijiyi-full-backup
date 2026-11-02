@@ -717,3 +717,25 @@
   ② `huggingface_hub` 2.4 移除 `huggingface_hub.commands`，改用 `Scripts\hf.exe`；
   ③ HF xet CDN `us.aws.cdn.hf.co` TLS EOF → 设 `HF_HUB_DISABLE_XET=1` 走普通 CDN。
 - 下一步：把 16.0 min 整段人声重切成 3–10 s 训练切片 → 训大肥鱼模型（4 GB 卡低显存档）。
+
+## 2026-11-02 RVC 训练完成并接进 AIJiYi（已闭环）
+
+- **数据**：`separated/source_normalized_(Vocals).wav`（16 min）用 RVC 自带 `train/dataset/slicer2.py`
+  切 → `data/voices/dafeiyu/dataset_v3/clips/` **155 段 / 140.5 MB**（最短 3500 ms、静音上限 500 ms）。
+- **训练**：`-sr 48k -f0 1 -bs 2 -te 120 -se 10 -pg assets/pretrained_v2/f0G48k.pth`，
+  **2 小时 58 分跑完**；末轮 `loss_disc=3.400 loss_gen=4.479 loss_fm=12.459 loss_mel=20.898 loss_kl=1.567`。
+  产物：`voice-engine/rvc/assets/weights/dafeiyu.pth`（**54.9 MB**）+ 索引
+  `assets/indices/dafeiyu_added_IVF948_Flat_nprobe_1_dafeiyu_v2.index`（111.5 MB）。
+- **接线**：`data/voices/dafeiyu/profile.json` 的 `postprocess` 改成 `command`
+  （`voice-engine/rvc/.venv/Scripts/python.exe tools/rvc_convert.py {input} {output} --index-rate 0.75`），
+  **不需要 HTTP 包装服务**。`tools/rvc_convert.py` 负责切 cwd / 进 sys.path / 设 `PYTORCH_CUDA_ALLOC_CONF`。
+- **验证**（原始输出在 `~/.dsh/evidence/2026-11-02/`）：
+  - 合成：edge 输出 **24 kHz / 4.22 s**（sha `44d214da1706`）→ RVC 输出 **48 kHz / 4.26 s**（sha `5fad9a16bd53`），
+    字节不同 = 转换真的发生；`last_fallback=None`。
+  - 唱歌：`convert_audio(mode="song")` → 48 kHz 正常。
+  - `python -m unittest discover -s tests` → **478 tests OK**（269 s）。
+  - 试听：`data/voices/dafeiyu/preview/{rvc_dafeiyu,edge_plain}.wav`。
+- **已知代价**：每次推理重新加载模型，单句 ~18–22 s（`tools/rvc_convert.py` 留了 `shortcut:`）。
+- **RVC 训练踩坑**：Windows 必须 `num_workers=0` + `prefetch_factor=None`；本分支 `v2/40k.json` 不存在
+  （40k 只走 v1，v2 只有 32k/48k）；`filelist.txt` 要自己生成；cublas `WinError 1455` 是 4 个残留
+  preprocess worker 占内存导致；`-pg/-pd` 必须写 `assets/pretrained_v2/...`。
