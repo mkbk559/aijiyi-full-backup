@@ -35,7 +35,7 @@
 
 ```bash
 cd D:\AIJiYi
-python -m unittest discover -s tests -t .                       # 2026-11-02：478 tests, OK (skipped=1)
+python -m unittest discover -s tests -t .                       # 2026-11-03：452 tests, OK（全绿，含 3 条 hypothesis 属性测试）
 python -m unittest tests.test_console_workspace                 # 期望：Ran 4 tests, OK（桌宠/工作区/终端/资源）
 python bench/bench_recall.py --facts 5000 --platforms 4         # 期望：ok=true，p99 < 100ms
 python bench/bench_http.py   --facts 5000 --clients 4 --rounds 10
@@ -68,6 +68,17 @@ python bench/demo_loop.py                                       # 端到端：�
 | 真机外网冒烟**未通过**（SSL 出网被拦） | `...\230953-smoke-live-pool-9d7b9d\stdout.txt` |
 
 ## 决策日志
+
+- 2026-11-03 **全量单测 452/452 全绿（此前一直红着的 77 例其实不是代码问题）**：
+  那 77 例是 `.tmp/` 目录**陈旧 ACL**导致 `chmod 0o700` / `mkdir` 被拒；`python tools/cleanup_junk.py --apply`
+  删掉整个 `.tmp/` 重建后同一套用例全绿。判据脚本已入库 `tools/archcheck/`（README 内有通过标准），
+  结果落 `tools/archcheck/results/`。另加 `tests/test_property_isolation.py`（hypothesis，3 条：
+  `Ident.where()` 占位符=参数、SQL 形状恒定不拼串、两个身份端到端互不可见）。
+- 2026-11-03 **仓库瘦身 218 MB**：`tools/cleanup_junk.py --apply` 删 502 项（`.tmp` 测试工作目录、`build`/`dist` 旧包、
+  空目录 `aiji-life-loop-*`/`tmp*`、视觉截图、根目录草稿、所有 `__pycache__`），另删桌宠遗留 `蓝发女仆_Tpose.png`（零引用）。
+  根目录收敛到 8 个文件 + 12 个目录。**保留**：`data/`、`voice-engine/`、`.venv/`、`.tmp/research`、`.tmp/pdf`。
+- 2026-11-03 **可借鉴开源清单**：`docs/agent/research/borrow-candidates-2026-11-03.md`（8 项，按收益/代价排序：
+  评测骨架 inspect_ai → hypothesis → tenacity 重试 → FSRS-5 衰减 → sqlite-vec → mem0 冲突决策 → litellm 路由状态机 → Generative Agents importance）。
 
 - 2026-11-03 **`aiji/` 按九个人体系统重排完成（55 个模块 → 9 个子包，449 例逐条结果与改造前完全一致）**：
   - 新增 `aiji/skeleton/paths.py` 作为 ROOT/DATA/CONFIG/TOOLS/BENCH/WEB_DIR 的唯一来源；8 处 `Path(__file__).resolve().parents[N]` 全部改走它（再分层不会炸）。
