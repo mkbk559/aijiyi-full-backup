@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import ast
 import json
-from pathlib import Path
 from aiji.skeleton.paths import DATA
 
 SUNBA = """## 人格底色：孙吧抽象话（只取语气，不取网暴）

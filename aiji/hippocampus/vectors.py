@@ -15,7 +15,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import re
 import threading
 from typing import Protocol, Sequence
 

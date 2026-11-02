@@ -8,7 +8,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from aiji.left_hand.actions.approval import ApprovalManager
 from aiji.left_hand.actions.policy import ActionPolicy, PolicyViolation

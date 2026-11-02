@@ -14,7 +14,6 @@ import time
 from typing import Any, Callable
 
 from aiji.right_hand import params
-from aiji.hippocampus.db import DB
 from aiji.heart.heart import Heart
 from aiji.hippocampus.store import Ident
 

@@ -148,7 +148,6 @@ def _load_wav_float32(data: bytes) -> tuple["object", int]:
 def transcribe_wav_bytes(data: bytes) -> tuple[str, float]:
     """wav 字节 → (转写文本, 置信度估计)。优先 FunASR paraformer-zh
     （中文准确率实测优于 whisper tiny），无 funasr 时回退 faster-whisper。"""
-    import numpy as np
     audio, sr = _load_wav_float32(data)
     audio, _ = _resample16k(audio, sr)
 
