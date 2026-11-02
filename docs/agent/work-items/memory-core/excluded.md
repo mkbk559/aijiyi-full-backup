@@ -500,6 +500,24 @@
       或由用户手工起；**别在这里反复试 WMI/schtasks/Start-Process 脱离**。
     → 判活一律用 `netstat -ano | findstr :PORT` 或 TcpClient connect，不用 Get-NetTCPConnection。
 
+## 2026-11-02（RVC 换音色）
+
+70. **不成立：`python train/preprocess.py` 直接跑**。`sys.path[0]` 变成 `train/`，`import train` 解析成
+    `train/train.py` → 循环导入。**必须** `python -m train.preprocess`（其余 train 子命令同理）。
+71. **不成立：训练默认 `num_workers=4`**。Windows 上 DataLoader worker 立刻 `exited unexpectedly`；
+    改 `num_workers=0` 后又报 `prefetch_factor option could only be specified in multiprocessing`，
+    得同时设 `prefetch_factor=None`。
+72. **不成立：v2 的 40k 配置存在**。本分支 `configs/` 只有 v1/{32,40,48}k 与 v2/{32,48}k
+    （`webui.py:1282` 写死"40k 走 v1"）。pretrained_v2 虽有 f0G40k.pth 也用不上：训 v2 必须 48k。
+73. **不成立：huggingface_hub 装最新就行**。`hf download` 把 hub 升到 2.4.0 后，transformers 4.49 立刻报
+    `huggingface-hub>=0.26.0,<1.0 is required`。下权重用 `hf`，但提取 hubert 特征前必须降回 0.36.2。
+74. **不成立：`git clone` 默认后端可用**。本机 schannel 报 `SEC_E_NO_CREDENTIALS`，
+    必须 `git -c http.sslBackend=openssl clone`。
+75. **不成立：Seed-VC 的 temp 目录能删干净**。`voice-engine/seed-vc/tmp/aiji-conv-uc_c48es` 带 deny ACE，
+    `rmdir` / `[IO.Directory]::Delete` 都被拒（未跑 ACL 修复脚本），留作已知残留。
+76. **不成立：`docs/agent/**` 用 PowerShell 写**。`Add-Content`/`Copy-Item` 到这个目录会被 ACL 拒
+    （`Access is denied`），只能用编辑工具写；创建新子目录也会被拒。
+
 
 
 
