@@ -11,7 +11,7 @@ from pathlib import Path
 from aiji import Memory
 from aiji.right_hand.config import Settings
 from aiji.hippocampus.db import DB
-from aiji.endocrine.life import ContextBudget, DeclarativeEngine, EndocrineEngine, LifeCard, load_life_card, OfflineCompensation, PersonalityKernel, ProceduralEngine, save_life_card, SynapticDiffusion, infer_event
+from aiji.endocrine.life import ContextBudget, EndocrineEngine, LifeCard, load_life_card, OfflineCompensation, PersonalityKernel, save_life_card, infer_event
 from aiji.hippocampus.store import Ident
 from aiji.brain.head import Head
 
@@ -59,42 +59,6 @@ class TestEndocrine(unittest.TestCase):
         engine.perturb("neutral", 1.0)
         self.assertEqual(
             (engine.sero, engine.dopa, engine.cort, engine.oxy), before)
-
-
-class TestDeclarative(unittest.TestCase):
-    def test_piecewise_short_term_decay(self):
-        engine = DeclarativeEngine()
-        young = engine.decay_weight(1.0, 1.0)
-        old = engine.decay_weight(1.0, 4.0)
-        self.assertLess(young, 1.0)
-        self.assertLess(old, young)
-
-    def test_promotion_and_sink(self):
-        engine = DeclarativeEngine()
-        self.assertEqual(engine.promotion_region(0.34, 0), "SHORT")
-        self.assertEqual(engine.promotion_region(0.50, 1), "MID")
-        self.assertEqual(engine.promotion_region(0.80, 2), "LONG")
-        self.assertEqual(engine.sink_region("LONG", 0.01, 400), "ARCHIVE")
-        self.assertEqual(engine.sink_region("ARCHIVE", 0.001, 100), "DEEP")
-        self.assertEqual(engine.sink_region("DEEP", 0.0001, 100), "TRACE")
-
-
-class TestProcedural(unittest.TestCase):
-    def test_sm2_updates_ef_and_reinforces(self):
-        engine = ProceduralEngine()
-        ef = engine.update_ef(1.5, 5)
-        self.assertAlmostEqual(ef, 1.6)
-        self.assertAlmostEqual(engine.update_ef(2.5, 5), 2.5)
-        l0 = engine.decay(0.8, interval_hours=10, dt_hours=24)
-        self.assertLess(l0, 0.8)
-        l1 = engine.reinforce(l0, q=5, interval_hours=10)
-        self.assertGreater(l1, l0)
-        self.assertLessEqual(l1, 1.0)
-        self.assertGreater(engine.recall_score(0.8, 0.8, 2.0), 0)
-
-
-class TestOffline(unittest.TestCase):
-    def test_offline_time_is_compressed_and_capped(self):
         engine = OfflineCompensation()
         self.assertEqual(engine.compress_days(3), 3)
         self.assertEqual(engine.compress_days(7), 7)
@@ -113,20 +77,6 @@ class TestBudget(unittest.TestCase):
         self.assertAlmostEqual(sum(plan["weights"].values()), 1.0, places=8)
         self.assertTrue(all(v >= 150 for v in plan["budgets"].values()))
         self.assertEqual(sum(plan["budgets"].values()) >= 6000, True)
-
-
-class TestSynaptic(unittest.TestCase):
-    def test_three_hop_diffusion_and_threshold(self):
-        graph = {"A": {"B": 1.0}, "B": {"C": 1.0}, "C": {"D": 1.0}, "D": {}}
-        result = SynapticDiffusion(graph).diffuse(
-            {"A": 1.0}, max_hops=3, layer_decay=0.75, min_potential=0.05,
-        )
-        self.assertAlmostEqual(result["A"], 1.0)
-        self.assertAlmostEqual(result["B"], 0.75)
-        self.assertAlmostEqual(result["C"], 0.5625)
-        self.assertAlmostEqual(result["D"], 0.421875)
-
-
 class TestLifeCard(unittest.TestCase):
     def test_roundtrip_and_tick(self):
         card = LifeCard()

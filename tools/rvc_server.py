@@ -37,6 +37,40 @@ DEFAULT_MODEL = RVC / "assets" / "weights" / "dafeiyu.pth"
 DEFAULT_INDEX = RVC / "assets" / "indices" / "dafeiyu_added_IVF948_Flat_nprobe_1_dafeiyu_v2.index"
 
 
+def _short_error(exc: BaseException) -> str:
+    """一行原因：`异常类型: 最后一行消息`，不带 traceback。"""
+    msg = str(exc).strip().splitlines()
+    return f"{type(exc).__name__}: {msg[-1][:200] if msg else ''}".strip()
+
+
+def _short_error_text(text: str) -> str:
+    """RVC 常把整段 traceback 当 `status` 返回：只留最后一行（真正的异常）。"""
+    lines = [ln.strip() for ln in str(text).strip().splitlines() if ln.strip()]
+    if not lines:
+        return "unknown error"
+    last = lines[-1]
+    return last if len(lines) == 1 else f"… {last[:200]}"
+
+
+def _hint_for_text(text: str) -> str:
+    low = text.lower()
+    if "torchfcpe" in low:
+        return ("该 F0 方法要 torchfcpe：uv pip install --python "
+                "voice-engine\\.venv\\Scripts\\python.exe torchfcpe；"
+                "不改也行，用默认的 rmvpe（CPU 上两者总耗时差不多）")
+    if "hubert" in low and ("no such file" in low or "not found" in low):
+        return "缺 hubert 权重：检查 voice-engine/rvc/assets/hubert 是否存在"
+    if "rmvpe" in low and ("no such file" in low or "not found" in low):
+        return "缺 rmvpe 权重：检查 voice-engine/rvc/assets/rmvpe 是否存在"
+    if "index" in low and ("no such file" in low or "not found" in low):
+        return "特征索引路径不对：检查 --index 参数"
+    return ""
+
+
+def _hint_for(exc: BaseException) -> str:
+    return _hint_for_text(f"{type(exc).__name__}: {exc}")
+
+
 class Engine:
     """把 RVC 的 VC 对象包成"载一次、反复用"。单线程推理（torch CPU 上并发只会更慢）。"""
 
@@ -80,12 +114,23 @@ class Engine:
 
         t0 = time.perf_counter()
         with self.lock:
-            status, result = self.vc.vc_single(
-                int(speaker_id), str(src), int(pitch), str(f0_method),
-                self.index, float(index_rate), 0, float(rms_mix_rate), float(protect),
-            )
+            try:
+                status, result = self.vc.vc_single(
+                    int(speaker_id), str(src), int(pitch), str(f0_method),
+                    self.index, float(index_rate), 0, float(rms_mix_rate), float(protect),
+                )
+            except Exception as exc:  # noqa: BLE001
+                # 别把整段 traceback 塞回调用方（客户端只会当成"换声坏了"）。
+                # 只给一行原因 + 一句能照做的提示。
+                return {"ok": False, "error": _short_error(exc),
+                        "hint": _hint_for(exc), "f0_method": str(f0_method)}
             if not result or result[0] is None or result[1] is None:
-                return {"ok": False, "error": str(status)}
+                text = str(status)
+                hint = _hint_for_text(text)
+                return {"ok": False, "error": _short_error_text(text), "hint": hint,
+                        "f0_method": str(f0_method),
+                        # 参数类问题（比如这个 F0 方法要额外依赖）按 400 报，别当成服务端崩了
+                        "status_code": 400 if "torchfcpe" in text.lower() else 500}
             write_audio(Path(dst), result[1], result[0], "wav")
             self.calls += 1
         return {"ok": True, "ms": round((time.perf_counter() - t0) * 1000.0, 1),
@@ -145,7 +190,7 @@ def make_handler(engine: Engine, stop: threading.Event):
                     rms_mix_rate=float(body.get("rms_mix_rate") or 1.0),
                     speaker_id=int(body.get("speaker_id") or 0),
                 )
-                self._send(200 if out.get("ok") else 500, out)
+                self._send(int(out.get("status_code") or (200 if out.get("ok") else 500)), out)
             except Exception as exc:  # noqa: BLE001
                 self._send(400, {"ok": False, "error": f"{type(exc).__name__}: {exc}"})
 
@@ -159,7 +204,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model", default=str(DEFAULT_MODEL))
     ap.add_argument("--index", default=str(DEFAULT_INDEX))
     ap.add_argument("--device", default=os.environ.get("AIJI_RVC_DEVICE") or "cpu")
+    ap.add_argument("--log", default="", help="把 stdout/stderr 写进这个文件（守护脚本用）")
     args = ap.parse_args(argv)
+
+    if args.log:
+        # 自己写日志，而不是让启动方做重定向：Windows 上 Start-Process 带重定向时
+        # 子进程会握住父进程的句柄，调用方（尤其被管道捕获的 shell）会一直等下去。
+        log_path = Path(args.log)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(log_path, "a", encoding="utf-8", buffering=1)
+        sys.stdout = handle
+        sys.stderr = handle
+        print(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} boot ---")
 
     engine = Engine(Path(args.model), Path(args.index) if args.index else None, args.device)
     print(json.dumps({"ok": True, "listening": f"http://{args.host}:{args.port}",

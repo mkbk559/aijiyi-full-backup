@@ -1,4 +1,7 @@
-"""造一个用于 RVC 基准的样本 wav（1.5 s，带基频的锯齿近似，够 F0 提取用）。"""
+"""造用于 RVC 基准的样本 wav（带基频的谐波叠加，够 F0 提取用）。
+
+用法：python tools/archcheck/make_bench_wav.py [out.wav] [seconds]
+"""
 from __future__ import annotations
 
 import math
@@ -10,7 +13,7 @@ from pathlib import Path
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else ".tmp/rvc_bench_in.wav")
 OUT.parent.mkdir(parents=True, exist_ok=True)
 SR = 40000
-SECONDS = 1.5
+SECONDS = float(sys.argv[2]) if len(sys.argv) > 2 else 1.5
 F0 = 220.0
 
 frames = bytearray()

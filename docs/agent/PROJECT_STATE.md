@@ -69,6 +69,17 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **语音引擎决策：不换 SVC，改"按场景分开"**。
+  实测（`docs/agent/evidence/voice-engine-decision-2026-11-03.md`）：RVC 常驻后 1.5 s 素材 **2 892 ms**、
+  6 s 素材 **9 519 ms**（RTF 1.60）；换 F0 方法只差 4%（rmvpe 3 264 vs pm 3 129 ms）→ **瓶颈是模型推理，不是 F0**；
+  纯 TTS：Edge **2 420 ms**、SAPI **704 ms**（同一句 24 字）。结论：CPU 上任何 SVC 都是 RTF≥1，
+  换引擎买不到延迟；要"大肥鱼音色的语音条"应换**单段零样本克隆 TTS**（GPT-SoVITS/CosyVoice，
+  代码已支持 `provider`，模型未装故未实测），而不是 TTS+RVC 两段式。
+  落地：`VOICE_MAX_CONVERT_SECONDS=15`（语音条超预算跳过换声、记 `last_skipped`；点歌不受限）；
+  `rvc_server --log` 自写日志 + F0 缺依赖改 400+提示；新增 `tools/rvc_daemon.ps1`（探活/起服/停服/轮转，未注册计划任务）。
+  另外删掉三个从未被调用的引擎（`DeclarativeEngine`/`ProceduralEngine`/`SynapticDiffusion`），
+  架构图 `lifecard` 节点改成"生命卡四引擎 · 四个都在链路上"。全量 **492/492 全绿**。
+
 - 2026-11-03 **缺口⑥「RVC 常驻化」：做完并实测，顺手纠了两处假话**。
   ☠️ 前提被推翻：`voice-engine/.venv` **缺 7 个 RVC 依赖**（`ffmpeg-python`/`av`/`faiss-cpu`/
   `praat-parselmouth`/`pyworld`/`torchaudio`/`transformers`），补装前 `import infer` 直接 ModuleNotFoundError——

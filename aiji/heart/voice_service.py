@@ -24,6 +24,7 @@ import uuid
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+from aiji.right_hand import params
 from aiji.skeleton.paths import ROOT
 
 
@@ -193,6 +194,9 @@ class VoiceRegistry:
         self._active_path = self.root / "active_voice.txt"
         # 最近一次合成是否因为"声线不可用"降级（诊断用，进 /v1/voices）
         self.last_fallback: dict[str, Any] | None = None
+        # 最近一次换声是否因为**时长超预算**被跳过（RVC 在 CPU 上 RTF≈1.6~2.1，见
+        # docs/agent/evidence/gap-closure-2026-11-03/EVIDENCE-rvc-resident.md）
+        self.last_skipped: dict[str, Any] | None = None
         self._builtin = VoiceProfile(
             id="edge-default",
             name="微软晓晓",
@@ -287,6 +291,7 @@ class VoiceRegistry:
             "profiles": items,
             "ffmpeg": bool(shutil.which(self.ffmpeg) or Path(self.ffmpeg).is_file()),
             "last_fallback": self.last_fallback,
+            "last_skipped": self.last_skipped,
         }
 
     def _workdir(self) -> Path:
@@ -375,6 +380,7 @@ class VoiceRegistry:
         target = Path(output).expanduser().resolve()
         target.parent.mkdir(parents=True, exist_ok=True)
         started = time.perf_counter()
+        self.last_skipped = None  # 每次合成都重新判断预算，别让上一次的跳过挂在这里
         tmp = self._workdir()
         try:
             raw = tmp / "provider-audio"
@@ -740,6 +746,42 @@ class VoiceRegistry:
                 (result.stderr or "ffmpeg failed").strip()[-500:],
             )
 
+    @staticmethod
+    def _audio_seconds(path: Path) -> float | None:
+        """读 16-bit/任意位宽 wav 的时长（秒）；读不出来返回 None（宁可不跳过）。"""
+        try:
+            import wave
+
+            with wave.open(str(path), "rb") as reader:
+                rate = reader.getframerate() or 0
+                if rate <= 0:
+                    return None
+                return reader.getnframes() / float(rate)
+        except Exception:
+            return None
+
+    def _over_budget(self, source: Path, profile: VoiceProfile, mode: str) -> float | None:
+        """语音条模式的时长护栏：超预算就跳过换声，返回真实秒数（没超返回 None）。
+
+        RVC 在 CPU 上实测 RTF≈1.6~2.1（1.5 s 素材 2.9 s、6 s 素材 9.5 s），
+        语音条动辄十几秒 → 一次换声能把工作线程占十几秒。点歌/翻唱（mode="song"）不受限：
+        那是离线任务，本来就该等。
+        """
+        if mode != "speech":
+            return None
+        limit = profile.postprocess.get("max_seconds")
+        try:
+            cap = float(limit) if limit not in (None, "", 0) else float(
+                params.VOICE_MAX_CONVERT_SECONDS)
+        except (TypeError, ValueError):
+            cap = float(params.VOICE_MAX_CONVERT_SECONDS)
+        if cap <= 0:
+            return None
+        seconds = self._audio_seconds(source)
+        if seconds is None or seconds <= cap:
+            return None
+        return seconds
+
     def _postprocess(
         self,
         source: Path,
@@ -748,6 +790,17 @@ class VoiceRegistry:
         *,
         mode: str = "speech",
     ) -> Path:
+        over = self._over_budget(source, profile, mode)
+        if over is not None:
+            self.last_skipped = {
+                "profile": profile.id,
+                "seconds": round(over, 2),
+                "limit": float(profile.postprocess.get("max_seconds")
+                               or params.VOICE_MAX_CONVERT_SECONDS),
+                "mode": mode,
+                "at": time.time(),
+            }
+            return source
         endpoint = str(profile.postprocess.get("url") or "").strip()
         if endpoint:
             return self._postprocess_http(
