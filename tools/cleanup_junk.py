@@ -42,6 +42,12 @@ def collect() -> list[Path]:
         p = ROOT / name
         if p.exists():
             out.append(p)
+    # 根目录一次性草稿（都是 untracked，`git ls-files` 验过）
+    for name in ("modules.txt", "db.txt", "smoke_layout.js", "dump_modules.py",
+                 "db_inventory.py", "extract_js.py"):
+        p = ROOT / name
+        if p.exists():
+            out.append(p)
     cov = ROOT / ".coverage"
     if cov.exists():
         out.append(cov)
