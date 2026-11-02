@@ -607,3 +607,22 @@
 插件 `main.py:2670` 早就读 `aiji.injection_id`/`used_ids` 并 POST `/feedback`，服务端也接好了。
 缺的只是端到端证明（`tests/test_feedback_loop.py`，3 条真 HTTP 用例）。另一个坑：正向反馈且事实从未
 被下调过时**不写 `fact_log`**，只有 `hit_count+1`——拿 fact_log 数量判断"生效没"会误判。
+
+## 93. 「RVC 不能实时，因为要每次重载 20s」——半错（2026-11-03）
+
+两个错：
+1. **20s 偏高**：一次性进程实测 14 064 ms（1.5 s 素材、CPU、rmvpe）。
+2. **真正的拦路虎不是性能而是依赖缺失**：`voice-engine/.venv` 缺 7 个包
+   （ffmpeg-python / av / faiss-cpu / praat-parselmouth / pyworld / torchaudio / transformers），
+   `import infer` 直接 ModuleNotFoundError，RVC 在本机**根本跑不起来**。
+   图里"专用 .venv 已就绪"要改成"补装后才能跑"。
+
+常驻服务落地后：热调用 2 892 ms（×4.86），见 `tools/archcheck/results/rvc_bench.json`。
+别再重复"要重载所以慢"这个判断——慢的主因是冷启动 8~12 s 的载入，而那已经被服务消掉了。
+
+## 94. 「图里 `PersonalityKernel.apply_delta` 只被测试调用」——错（2026-11-03）
+
+`LifeCard.apply_event()` 里每次都 `self.personality.apply_delta(...)`，而 `apply_event` 由
+`memory.life_event` 调用（在线路径）。原来的说法可能是"只看类名 grep 外部调用点"得出的假阴性——
+写 `tools/archcheck/wiring_audit.py` 时我自己也先踩了一遍：只匹配 `Name(` 会漏掉 helper
+（`save_life_card`）和 `self.<字段>.method(`，必须三条判据一起看。

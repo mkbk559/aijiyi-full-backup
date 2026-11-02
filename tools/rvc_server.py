@@ -1,0 +1,181 @@
+"""常驻 RVC 换声服务（2026-11-03）。
+
+解决的问题（原文写死在 `tools/rvc_convert.py` 的 shortcut 里）：
+每次换声都走一次 `infer/cli.py`，模型要重新加载，实测 **~20 s/次**
+（载入 0.6 s + F0 4~6 s + 合成 3.5 s + 进程与 import 开销）。
+本服务把 `VC` 对象留在内存里，模型只载一次，之后每次只做 F0 + 合成。
+
+必须用 RVC 自己的 venv 跑（torch 在 `voice-engine/.venv`，主 venv 没有）：
+
+    voice-engine\\.venv\\Scripts\\python.exe tools\\rvc_server.py --port 18601
+
+接口（HTTP + JSON，只绑 127.0.0.1）：
+    GET  /health          -> {"ok":true,"model":"dafeiyu.pth","device":"cpu","loaded_ms":...}
+    POST /convert         -> {"in":"a.wav","out":"b.wav","pitch":0,"index_rate":0.75,
+                              "f0_method":"rmvpe","protect":0.33,"rms_mix_rate":1.0}
+                             返回 {"ok":true,"ms":812.4,"out":"b.wav","sr":40000}
+    POST /shutdown        -> {"ok":true}
+
+调用方：`tools/rvc_convert.py`（发现服务在跑就走服务，否则退回一次性 CLI，行为不变）。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+RVC = ROOT / "voice-engine" / "rvc"
+DEFAULT_MODEL = RVC / "assets" / "weights" / "dafeiyu.pth"
+DEFAULT_INDEX = RVC / "assets" / "indices" / "dafeiyu_added_IVF948_Flat_nprobe_1_dafeiyu_v2.index"
+
+
+class Engine:
+    """把 RVC 的 VC 对象包成"载一次、反复用"。单线程推理（torch CPU 上并发只会更慢）。"""
+
+    def __init__(self, model: Path, index: Path | None, device: str = "cpu"):
+        self.model = Path(model)
+        self.index = str(index) if index else None
+        self.device = device
+        self.loaded_ms = 0.0
+        self.lock = threading.Lock()
+        self.calls = 0
+        self.vc = None
+        self._boot()
+
+    def _boot(self) -> None:
+        t0 = time.perf_counter()
+        # RVC 要求 cwd 在 voice-engine/rvc（靠相对路径找 hubert/rmvpe 资源），
+        # 所以先记下"调用方视角"的 cwd，之后收到的相对路径按它解析。
+        self.base = Path.cwd()
+        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+        sys.path.insert(0, str(RVC))
+        os.chdir(RVC)
+        os.environ["weight_root"] = str(self.model.parent)
+        from infer.cli import create_config  # noqa: E402
+
+        config = create_config()
+        try:
+            config.device = self.device
+        except Exception:
+            pass
+        from infer.vc.modules import VC  # noqa: E402
+
+        vc = VC(config)
+        vc.get_vc(self.model.name)
+        self.vc = vc
+        self.loaded_ms = (time.perf_counter() - t0) * 1000.0
+
+    def convert(self, src: str, dst: str, *, pitch: int = 0, index_rate: float = 0.75,
+                f0_method: str = "rmvpe", protect: float = 0.33,
+                rms_mix_rate: float = 1.0, speaker_id: int = 0) -> dict[str, Any]:
+        from infer.cli import write_audio  # noqa: E402
+
+        t0 = time.perf_counter()
+        with self.lock:
+            status, result = self.vc.vc_single(
+                int(speaker_id), str(src), int(pitch), str(f0_method),
+                self.index, float(index_rate), 0, float(rms_mix_rate), float(protect),
+            )
+            if not result or result[0] is None or result[1] is None:
+                return {"ok": False, "error": str(status)}
+            write_audio(Path(dst), result[1], result[0], "wav")
+            self.calls += 1
+        return {"ok": True, "ms": round((time.perf_counter() - t0) * 1000.0, 1),
+                "out": str(dst), "sr": int(result[0]), "status": str(status)}
+
+
+def make_handler(engine: Engine, stop: threading.Event):
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):  # 静音
+            return
+
+        def _send(self, code: int, payload: dict) -> None:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):  # noqa: N802
+            if self.path.startswith("/health"):
+                self._send(200, {"ok": True, "model": engine.model.name,
+                                 "device": engine.device,
+                                 "loaded_ms": round(engine.loaded_ms, 1),
+                                 "calls": engine.calls})
+                return
+            self._send(404, {"ok": False, "error": "not found"})
+
+        def do_POST(self):  # noqa: N802
+            n = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(n) if n else b"{}"
+            if self.path.startswith("/shutdown"):
+                self._send(200, {"ok": True})
+                stop.set()
+                return
+            if not self.path.startswith("/convert"):
+                self._send(404, {"ok": False, "error": "not found"})
+                return
+            try:
+                body = json.loads(raw or b"{}")
+                src = str(body.get("in") or "")
+                dst = str(body.get("out") or "")
+                if not src or not dst:
+                    raise ValueError("in/out required")
+                src = str(Path(src) if Path(src).is_absolute() else engine.base / src)
+                dst = str(Path(dst) if Path(dst).is_absolute() else engine.base / dst)
+                if not Path(src).exists():
+                    raise FileNotFoundError(src)
+                out = engine.convert(
+                    src, dst,
+                    pitch=int(body.get("pitch") or 0),
+                    index_rate=float(body.get("index_rate") or 0.75),
+                    f0_method=str(body.get("f0_method") or "rmvpe"),
+                    protect=float(body.get("protect") or 0.33),
+                    rms_mix_rate=float(body.get("rms_mix_rate") or 1.0),
+                    speaker_id=int(body.get("speaker_id") or 0),
+                )
+                self._send(200 if out.get("ok") else 500, out)
+            except Exception as exc:  # noqa: BLE001
+                self._send(400, {"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+
+    return Handler
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("AIJI_RVC_PORT") or 18601))
+    ap.add_argument("--model", default=str(DEFAULT_MODEL))
+    ap.add_argument("--index", default=str(DEFAULT_INDEX))
+    ap.add_argument("--device", default=os.environ.get("AIJI_RVC_DEVICE") or "cpu")
+    args = ap.parse_args(argv)
+
+    engine = Engine(Path(args.model), Path(args.index) if args.index else None, args.device)
+    print(json.dumps({"ok": True, "listening": f"http://{args.host}:{args.port}",
+                      "model": engine.model.name,
+                      "loaded_ms": round(engine.loaded_ms, 1)}, ensure_ascii=False), flush=True)
+    stop = threading.Event()
+    srv = ThreadingHTTPServer((args.host, args.port), make_handler(engine, stop))
+    srv.daemon_threads = True
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        stop.wait()
+    except KeyboardInterrupt:
+        pass
+    srv.shutdown()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

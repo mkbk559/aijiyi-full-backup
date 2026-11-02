@@ -69,6 +69,18 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **缺口⑥「RVC 常驻化」：做完并实测，顺手纠了两处假话**。
+  ☠️ 前提被推翻：`voice-engine/.venv` **缺 7 个 RVC 依赖**（`ffmpeg-python`/`av`/`faiss-cpu`/
+  `praat-parselmouth`/`pyworld`/`torchaudio`/`transformers`），补装前 `import infer` 直接 ModuleNotFoundError——
+  图里"专用 .venv 已就绪"是假的；且"每次 20s"实测只有 **14 064 ms**。
+  ✅ 新增 `tools/rvc_server.py`（VC 对象留内存，HTTP /health /convert /shutdown，只绑 127.0.0.1，单线程锁）；
+  `tools/rvc_convert.py` 加 `--via auto|server|inproc`（默认 auto：有服务走服务、没有回退一次性进程；
+  `--via server` 服务不在就报错、不静默回退）。
+  📈 1.5s 素材、CPU：老路径 14 064 ms → 服务第 2/3 次 2 768/2 842 ms，**热中位数 2 892 ms（×4.86）**，
+  已进 5 s 目标；三次输出同为 142 124 字节。修过一个真 bug：服务端 `chdir` 后相对路径解析错（改发绝对路径 + 启动 cwd 兜底）。
+  边界：**没有守护/自愈**、只测 CPU、只测 1.5s、profile 里加 `--via auto` 才吃到加速。
+  证据：`docs/agent/evidence/gap-closure-2026-11-03/EVIDENCE-rvc-resident.md`；全量 **491/491 全绿**。
+
 - 2026-11-03 **缺口⑤「生命卡引擎接线 / 能量经济学」：能量经济是真的，七引擎里 2 个是死代码**。
   新增 `tools/archcheck/wiring_audit.py`（AST 三条判据：LifeCard 字段组合 / LifeCard 方法内真调用 / 外部调用点，
   含模块级 helper，避免只匹配类名的假阴性）。实测：`LifeCard`、`EndocrineEngine` 在链路上；
