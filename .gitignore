@@ -17,3 +17,7 @@ build/
 *.db
 *.db-wal
 *.db-shm
+# RVC 引擎运行时（3 GB 权重 + venv + 训练产物，不进仓库）
+voice-engine/rvc/
+voice-engine/*/assets/
+voice-engine/*/logs/
