@@ -21,3 +21,6 @@ build/
 voice-engine/rvc/
 voice-engine/*/assets/
 voice-engine/*/logs/
+
+# RVC 常驻服务日志（tools/rvc_daemon.ps1 写这里）
+logs/
