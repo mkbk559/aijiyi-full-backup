@@ -19,10 +19,16 @@
 - 身份主键 **`(platform, platform_user_id)`**；`scope` 是命名空间；平台特有字段进 `extra`(JSON 文本)
 - 媒体只存**可重新获取的引用** + 识别结果（`media` 表无任何 BLOB 列）
 - 入口：`aiji/__init__.py`（门面 `Memory`）、`aiji/senses/cli.py`、`aiji/throat/server.py`
-- 核心模块：`db.py`（schema v11 + 迁移）、`store.py`（身份/事实/画像/风格/媒体/摘要/注入日志/检索/冲突消解/关联/淘汰）、
-  `recognize.py`（识别层）、`extract.py`（反思：事实/知识/关系/风格/摘要 + 启发式兜底）、
-  `recall.py`（硬预算召回）、`inject.py`（软引导注入）、`writer.py`（异步写）、`pool.py`（模型池）、
-  `vectors.py`（可选向量）
+- **包结构 = 九个人体系统**（2026-11-03 起，见 `docs/architecture.html`）：
+  `senses/` 入口（cli）、`throat/` 咽喉（server/net_guard/bridge）、`brain/` 大脑（head/pool/gate/humanize/persona/selfhood/quota/role_boundary/debounce）、
+  `hippocampus/` 海马体（memory/recognize/real_engines/media_audio/extract/reflect/recall/inject/store/vectors/writer/janitor/db）、
+  `endocrine/` 内分泌（being/life/life_loop/being_checkup/proactive/presence/desktop_sense）、
+  `heart/` 心脏（heart/dispatch/social/song/sticker/voice）、`left_hand/` 左手（actions/mcp_client/mcp_research）、
+  `right_hand/` 右手（admin/operations/service_control/params/config/web）、`skeleton/` 骨架（paths：ROOT/DATA/CONFIG/TOOLS/BENCH/WEB_DIR）
+- 核心模块：`hippocampus/db.py`（schema v11 + 迁移）、`hippocampus/store.py`（身份/事实/画像/风格/媒体/摘要/注入日志/检索/冲突消解/关联/淘汰）、
+  `hippocampus/recognize.py`（识别层）、`hippocampus/extract.py`（反思：事实/知识/关系/风格/摘要 + 启发式兜底）、
+  `hippocampus/recall.py`（硬预算召回）、`hippocampus/inject.py`（软引导注入）、`hippocampus/writer.py`（异步写）、
+  `brain/pool.py`（模型池）、`hippocampus/vectors.py`（可选向量）
 - 对外说明：`README.md`；示例配置：`config/aiji.example.json`
 
 ## 怎么验证它是好的
@@ -62,6 +68,14 @@ python bench/demo_loop.py                                       # 端到端：�
 | 真机外网冒烟**未通过**（SSL 出网被拦） | `...\230953-smoke-live-pool-9d7b9d\stdout.txt` |
 
 ## 决策日志
+
+- 2026-11-03 **`aiji/` 按九个人体系统重排完成（55 个模块 → 9 个子包，449 例逐条结果与改造前完全一致）**：
+  - 新增 `aiji/skeleton/paths.py` 作为 ROOT/DATA/CONFIG/TOOLS/BENCH/WEB_DIR 的唯一来源；8 处 `Path(__file__).resolve().parents[N]` 全部改走它（再分层不会炸）。
+  - 迁移脚本 `tools/reorg_body.py`（AST 重写 import + `git mv` + 路径表达式修正），架构图同步脚本 `tools/arch_sync.py`。
+  - 证据：`docs/agent/evidence/body-reorg-2026-11-03/EVIDENCE.md`；提交 `ceb7752`（改前）→ `90eeaf7`（改后）。
+  - **踩过三个坑**（复现时必须先看）：① 包 `__init__.py` 的路径映射要剥掉 `.__init__`，否则 `from .actions import X` 只改成绝对路径却没换包；
+    ② 字符串里的 mock 目标被重复加前缀（`aiji.aiji.hippocampus...`）；③ 函数体内的 import 重写必须保留缩进，否则整片语法错。
+  - **仍未做**：心脏层接管发送、生命卡引擎接线/能量经济学、RVC 常驻化、回复长度硬上限、插件回传 used_ids、DSH 借鉴 3 项（见 goal）。
 
 - 2026-11-03 **`docs/architecture.html`（人体架构图）体检：能用；1 处排版溢出、3 处数字过期、2 处符号挂错**：
   - **机器断言 23/24 通过**（DOM 桩里跑内联脚本真代码）：9 层 / 68 节点 / 88 边齐全，节点 id 唯一、两两零重叠、全在 1900×2400 画布内、路径无 NaN、无自环；点选只留邻居、搜索只亮命中、分层开关整层 off、主链路 18 节点全亮其余全暗、`#hash` 深链、抽屉渲染与关闭回总览都正常；`node --check` exit 0，单 script 块、无外链。唯一 fail 是我自己的文字宽度粗估，见下。
