@@ -21,4 +21,4 @@ include = ["aiji*"]
 exclude = ["bench*", "config*", "data*", "tests*", "tools*"]
 
 [tool.setuptools.package-data]
-aiji = ["web/*.html", "web/vendor/*", "pet/assets/*"]
+aiji = ["web/*.html"]

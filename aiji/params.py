@@ -60,11 +60,6 @@ REFLECT_EVERY_TURNS = 30       # 先验：攒够 30 条新对话才反思一次�
 REFLECT_MIN_INTERVAL = 1800.0  # 先验：两次反思最小间隔 30min（防刷屏时连续反思把算力吃光）
 REFLECT_MAX_TURNS = 60         # 先验：单次反思最多回看 60 条（控 prompt 体积）
 
-# ---- 桌宠：aiji/pet/app.py ----
-PET_W  = 220                   # 先验：鱼身窗口宽（够放一条胖鱼 + 气泡）
-PET_H  = 200                   # 先验：窗口高
-PET_TOP_K = 6                  # 先验：桌宠注入给模型的记忆条数（聊天够用，别塞满）
-
 # ---- QQ 接入：aiji/bridge/onebot.py（低风险路径）----
 QQ_RATE_PER_MIN = 4            # 现场实测：平台硬上限 5 条/分钟；保留 1 条给表情/人工动作
 QQ_COOLDOWN_S = 2.0            # 先验：同一条消息最短间隔，防连发触发频控

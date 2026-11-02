@@ -37,8 +37,8 @@ def _windows() -> None:
 
 
 def _screenshot(include_ocr: bool) -> str:
-    from ..pet import desk
-    seen = desk.look(do_ocr=include_ocr)
+    from .. import desktop_sense
+    seen = desktop_sense.look(do_ocr=include_ocr)
     return json.dumps(seen, ensure_ascii=False, default=str)[:20_000]
 
 

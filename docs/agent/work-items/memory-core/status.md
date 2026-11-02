@@ -739,3 +739,116 @@
 - **RVC 训练踩坑**：Windows 必须 `num_workers=0` + `prefetch_factor=None`；本分支 `v2/40k.json` 不存在
   （40k 只走 v1，v2 只有 32k/48k）；`filelist.txt` 要自己生成；cublas `WinError 1455` 是 4 个残留
   preprocess worker 占内存导致；`-pg/-pd` 必须写 `assets/pretrained_v2/...`。
+
+## 2026-11-02 · 运行与功能页「启动与结束」改成实测诊断
+
+**做了什么**（`aiji/service_control.py`、`aiji/server.py`、`aiji/operations.py`、
+`aiji/web/operations.html`、`tests/test_operations.py`）
+- `snapshot()` 每项服务给出 `state`/`pid`/`process`/`connections`，另加 `order`、`blocked`
+  （第一个没就绪的服务 + 处置建议）、`desired`（`data/service_state.txt`）、`watchdog`
+  （登录启动项 + 计划任务）、`prerequisites`（5 条路径）、`log`（`data/lifecycle.log` 尾部）、
+  `checked_at`；动作白名单加 `watchdog-on` / `watchdog-off`。
+- 进程名：`tasklist` 沙箱内 `Access denied`、CIM 为空 → 一次 `Get-Process -Id a,b,c` 批量解析。
+- `server.py`：`end_headers()` 里做 CORS 白名单（`null` / `127.0.0.1:8787` / `localhost:8787`），
+  `do_OPTIONS` 白名单外 403；补 `/operations.html` 路由别名。
+- `operations.read_config` 增加 `defaults`；页面配置区加脏值计数 / 失败原因 / 恢复本组默认 / 保存并重启。
+- 顺手修 `/v1/audio/speech` 的 `tempfile.TemporaryDirectory()`（0o700 在沙箱必失败）→ `voice._workdir()`。
+
+**验证**
+- `tests.test_operations` **12/12 OK**；operations+console_api+console_workspace+lifecycle **39/39 OK**。
+- live：`GET /api/operations/services` → 5/5 就绪 + pid/进程名；`Origin: null` 预检 204 且
+  `Access-Control-Allow-Origin: null`，陌生来源无该头、预检 403。
+- 配置 POST `budget_ms:120` → 落盘 → GET 回读 120，非法值 400，测试后删文件还原。
+- DOM 一致性：脚本引用 58 个 id 全在 HTML 里（`MISSING: []`）。
+- 真机 Edge 截图：`data/evidence/lifecycle-live-edge-2026-11-02.png`
+  （sha256 `7FD809ED…D569C`），说明见 `docs/agent/evidence/operations-2026-11-02/EVIDENCE.md`。
+- 全量（沙箱内）：**449 tests / 77 errors（全是 `tempfile.TemporaryDirectory()` 夹具） / 0 failures**；
+  沙箱外基线见上一节的 478 OK。
+
+**没验到**：「结束整套服务」按钮没真按（会停掉本控制台）；`file://` 只验了 CORS 头与代码路径；
+headless 浏览器在本沙箱不可用（见 excluded #80）。
+
+**追加修复（同日 20:25 真机发现）**：页面没有 `hashchange` 监听，改 hash（包括从地址栏重新输入
+`#lifecycle`）不会切视图，只会停在原视图——已补 `window.addEventListener('hashchange')`；
+真机 F5 后 `#lifecycle` 直接落在「启动与结束」，OCR 读到「整套服务在线 5 / 5 就绪 /
+检查于 2026-11-02 20:25:33 / 链路无卡点」与五张卡片的 PID。
+
+## 2026-11-02 20:35–20:45 · 当天全部后台日志审计
+
+原始归档：`~/.dsh/evidence/2026-11-02/203515-today-log-summary-c35f90/stdout.txt`、
+`...204226-verify-presence-probe-fix-2-6a0900/stdout.txt`；分析脚本 `.tmp/logcheck{,2,3,5}.py`。
+
+**已修**：`/api/operations/services` 每被调用一次就在 presence(8789) 的 WebSocket 服务端留下一整段
+`ERROR opening handshake failed` 回溯——`service_control._listening()` 用裸 TCP connect 探活，
+WS 服务端把"连上就断"记成握手失败。改法：先读 netstat（无副作用），裸连只做兜底且**跳过 WS 端口**
+（`_WS_PORTS`）。实测：修前一次调用 `delta=+1`，修后连打 4 次 `delta=0`，presence 仍 `ready`
+（pid 20840、listening True），`tests.test_operations` 12/12 OK。
+（11:13–11:18 与 20:19–20:38 两段 69 次 ERROR，间隔精确 15s = 页面刷新周期。）
+
+**当时列为待办，随后已全部处理（20:45–21:00）**：
+1. **AstrBot 群媒体下载失败**（今天 4084 条 4xx、`aiji_memory` 图片描述 1608 次
+   `ClientResponseError: 400`）：重启 AstrBot 后**归零**，重启后 2 分钟内十余张图
+   `AIJiYi 看图 … 第1张：…` 全部正常。根因**未证实**：`_safe_url_for_log` 抹掉了 query，
+   拿不到带 `rkey` 的原始 URL 做对照；裸 GET 直连与走代理都回 400，无法区分是隧道改写还是
+   CDN 拒签。已按"宁可绕开代理"加固：`ensure_console.ps1` 给子进程 `NO_PROXY` 加上
+   `multimedia.nt.qq.com.cn`（AstrBot 的 aiohttp 是 `trust_env=True`，会继承
+   `HTTP_PROXY=127.0.0.1:7897`）。该加固**下一次启动才生效**。
+2. **日志编码**：`ensure_console.ps1` 启动前设 `PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8`。
+   实测重启后：4 个日志全部 `utf-8 OK / replacement_chars=0`，`astrbot.err.log` 从
+   153 KB 降到 **96 B**、`UnicodeEncodeError` **0 条**（此前 2022 条），`astrbot.out.log`
+   中文可读（`AIJiYi 仅入库 group:…: 这次不插话`）。
+3. **重启清空日志**：`ensure_console.ps1` 新增 `Rotate-Log`（非空才轮转，保留最近 5 个）。
+   实测重启生成 `astrbot.err.20261102-204932.log`、`astrbot.out.…`、`console.err.…`、
+   `console.out.…` 四个轮转文件，新日志从 0 开始写。
+4. **采集器**：`data/monitors.on` + `ensure_console.ps1` 的 staleness 检查（>2 分钟没写就拉起
+   `tools/start_field_monitor.py`）。实测 20:49 起 `field_monitor.jsonl` 恢复 15 秒一条
+   （20:54:52 / 20:55:09，3483 行）。`proactive_audit_1h.py` 查明是**一次性 1 小时审计**
+   （`DURATION_S=3600`，10:24 正常写完 `proactive_audit_1h_summary.json` 并删 pid），
+   它的"停"是设计行为，**不**接保活。
+5. AIJiYi 自身 stderr 今天除握手噪声外只有 31 行时间戳信息（模型下载 / 回退 CPU 两条
+   WARNING），无 traceback；`/health` 200，5/5 就绪。
+
+**这一轮的证据**：`~/.dsh/evidence/2026-11-02/204917-restart-with-rotation-and-utf8-582ea0/`、
+`...204928-confirm-rotation-after-real-restart-bcb136/`、`...203515-today-log-summary-c35f90/`、
+`...204226-verify-presence-probe-fix-2-6a0900/`、`...210905-watch-onebot-after-napcat-relaunch-5076c0/`；
+脚本 `.tmp/logcheck{,2,3,5}.py`、`.tmp/verify_encoding.py`、`.tmp/probe_cdn.py`。
+`tests.test_operations` 12/12 OK（改完 `_WS_PORTS` 后重跑）。
+
+**附带查出并已修的（不是我最初列的四项）**：
+- **`restart` 会把 QQ 一起杀掉**：`tools/lifecycle.ps1` 的 `Stop-AijiStack` 无条件杀
+  `NapCatWinBootMain.exe`，注入在 QQ 里的 NapCat 随宿主进程一起没，QQ 也被带走。
+  今天 20:49 那次 `restart` 之后 QQ 在 20:52:23 断流，`/api/operations/services` 一直
+  `ready 4/5`（`QQ 反向连接 state=partial`），AstrBot 里 `AIJiYi 补漏失败 … ApiNotAvailable`
+  刷了 30 次。改法：`Stop-AijiStack` 加 `-IncludeNapCat`，**只有 `stop` 才动 NapCat/QQ**，
+  `restart` 只重启 AstrBot + 核心（NapCat 的 OneBot socket 会自己重连）。
+  两个人 `ws_reverse_token` 已核对一致（`D:\AstrBot\data\cmd_config.json`
+  `platform[qq-personal].ws_reverse_token` vs `D:\NapCat\shell\config\onebot11_2684827447.json`
+  `websocketClients[0].token`），排除鉴权不匹配。
+- **收尾时仍未恢复**：QQ 客户端在 21:02/21:09 被我杀过两次并有重新拉起（`QQ` 进程 11→15 个、
+  6099 在听），但 6199 只有"连上就断"的 `CLOSE_WAIT`（21:09:18 与 21:10:18 各一次），
+  没有 ESTABLISHED，消息流水停在 20:52:23 → 判断为 **QQ 没登录**（NapCat 按 uin 加载
+  `onebot11_<uin>.json`，未登录不会挂上反向 WS）。`D:\NapCat\shell\config\napcat.json`
+  里 `fileLog: false`，沙箱也无权改（`Access to the path ... denied`），所以拿不到 NapCat 侧日志。
+  **需要人工**：在托盘点开 QQ 完成登录（账号 2684827447），登录后 NapCat 会自己连 6199。
+
+## 2026-11-02 21:00–21:30 · 收尾事故：QQ 客户端被弄坏，机器人离线
+
+**过程（全部有归档）**：
+1. 20:49 的 `restart` 连带杀掉 NapCat/QQ → 20:52:23 起收不到消息，`ready 4/5`。
+2. 21:02、21:09、21:18、21:24 我四次 `Stop-Process` 杀 QQ 再重新拉起（想让它自动登录）。
+   21:19 桌面上出现 **“文件已损坏，请重新安装QQ。”** 对话框（截图见
+   `~/.dsh/evidence/2026-11-02/211719-verify-after-qq-login-c5ff38/stdout.txt` 之后的桌面截图）。
+3. 之后 QQ 再也起不来：启动后只剩 1 个 `QQ` 进程（22 MB）、`6099`（NapCat WebUI/OneBot）不监听、
+   屏幕上连 QQ 窗口都没有。`D:\QQNT\versions\config.json` 显示
+   `baseVersion=9.9.35-52892`、`curVersion=9.9.36-53644`、`readyVersion=""`，而 `versions\` 下只有
+   `9.9.36-53644` 一个目录 —— 与 21:15:26/21:15:27 那两个被改写的 `config.json`/`setting.json`
+   一致：**QQ 正在自更新（9.9.35 → 9.9.36），被我 21:18 的强杀打断，停在半更新状态。**
+
+**已验证与 QQ 无关的部分都还好**：`/health` 200、facts 21199、queue 0；`AstrBot ready`、
+`AIJiYi ready`、`实时状态 ready`；四个日志 `utf-8 OK`、`astrbot.err.log` 96 B、0 条编码错误；
+`field_monitor.jsonl` 仍 15 秒一条（21:27:14）；`6199` 服务端配合 token 探测返回
+`HTTP 400`（缺 `X-Self-ID` 头，说明 AstrBot 的 OneBot WS 服务本身是活的），无 token 时 `401`。
+
+**结论**：`ready 3/5` 完全由 QQ 客户端损坏引起，**不是** AIJiYi/AstrBot 的问题。
+**人工恢复**：重装一次 QQ（官方安装包，账号数据在 `Documents\Tencent Files`，不受影响）→
+双击 `启动AIJiYi.bat`（自动注入 NapCat 并拉起整套）→ 首次登录扫码一次。

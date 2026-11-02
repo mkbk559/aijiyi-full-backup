@@ -241,55 +241,8 @@ try:
     snap = hub.snapshot()
     probe.case("存在感：广播后可读快照", bool(snap), f"snapshot={str(snap)[:80]}")
 
-    # ================= 8. 桌宠：精灵图集 / 养成 / 桌面感知 =================
-    from aiji.pet import avatar, sprite
-    from aiji.pet.desk import window_titles
-    from aiji.pet.growth import PetStore
-
-    manifest = sprite.load_manifest()
-    tracks = manifest.get("tracks") if isinstance(manifest, dict) else None
-    probe.case("精灵图集：清单与 9 条轨迹",
-                isinstance(tracks, dict) and len(tracks) == 9, f"tracks={len(tracks or {})}")
-    frames = {}
-    for name in (tracks or {}):
-        row = sprite.ROW_OF_TRACK[name]
-        trimmed = sprite.trim_track(sprite.TRACKS[name], sprite.FRAMES[row])
-        frames[name] = len(trimmed["durations"])
-    probe.case("精灵图集：每条轨迹都有帧",
-                all(count > 0 for count in frames.values()), f"frames={frames}")
-    frame = sprite.cell("idle", 0, size=128)
-    probe.case("精灵图集：能取到 RGBA 帧", frame.mode == "RGBA" and frame.size[0] > 0,
-               f"mode={frame.mode} size={frame.size}")
-    rendered = avatar.frame("idle", 0, 160)
-    probe.case("形象层：可渲染一帧", rendered is not None and rendered.size[0] > 0,
-               f"size={getattr(rendered, 'size', None)}")
-
-    pet_dir = base / "pet"
-    pet_dir.mkdir(mode=0o777)
-    store_pet = PetStore(pet_dir / "pet_state.json")
-    now_ms = time.time() * 1000
-    snap0 = store_pet.snapshot(now_ms)
-    probe.case("养成：初始状态含亲密度/小鱼干", {"affinity", "treats"} & set(snap0) != set(),
-               f"keys={sorted(snap0)}")
-    delta1, line1, applied1 = store_pet.pet(now_ms)
-    delta2, line2, applied2 = store_pet.pet(now_ms + 1000)
-    probe.case("养成：摸头 +1 且有 10s 冷却", applied1 and not applied2,
-               f"delta={delta1} second={applied2} line={line2[:12]}")
-    delta3, line3, applied3 = store_pet.feed(now_ms + 100_000)
-    probe.case("养成：没粮时喂食被拒且不白扣",
-                applied3 is False, f"applied={applied3} line={line3[:16]}")
-    store_pet.rename("探测鱼")
-    probe.case("养成：改名生效", store_pet.snapshot(now_ms + 100_000)["name"] == "探测鱼")
-    titles = window_titles()
-    probe.case("桌面感知：能枚举前台窗口标题", isinstance(titles, list),
-               f"n={len(titles)} sample={titles[:2]}")
-
-    # ================= 9. 语音后端探测（真实依赖） =================
+    # ================= 8. 语音后端探测（真实依赖） =================
     from aiji import real_engines as re
-    from aiji.pet import voice as pv
-
-    has_sapi = bool(pv.sapi_voices())
-    probe.case("本机 TTS：SAPI 可用", has_sapi, f"sapi_voices={len(pv.sapi_voices() or [])}")
     probe.case("本机 ASR：FunASR/whisper 至少一个可用", re.HAS_FUNASR or re.HAS_ASR,
                f"funasr={re.HAS_FUNASR} whisper={re.HAS_ASR}")
 finally:

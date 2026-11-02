@@ -13,7 +13,7 @@
     GET  /media?platform=&platform_user_id=&session=   -> 引用 + 识别结果
     GET  /style?platform=&platform_user_id=
     GET  /health | /stats
-    GET  /                 -> 零依赖本地控制台
+    GET  /                 -> 零依赖运行与功能页面
     GET  /v1/models        -> OpenAI 兼容模型发现
     POST /v1/chat/completions -> OpenAI 兼容对话（记忆注入/闸门/SSE）
     POST /flush    {"timeout":10}
@@ -26,9 +26,9 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import subprocess
 import tempfile
-import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,6 +37,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__, admin
+from . import operations, service_control
 from . import persona as persona_mod
 from .head import Head
 from .memory import Memory
@@ -48,6 +49,11 @@ _PROTECTED_EXACT = frozenset((
     "/models", "/chat/completions", "/turns", "/remember", "/media", "/ingest",
     "/recall", "/inject", "/feedback", "/flush", "/style", "/accounts", "/stats",
     "/being", "/being/note", "/being/event",
+))
+# CORS allow-list for the operations page opened straight from disk (origin null)
+# or served by this process. Anything else is treated as a foreign origin.
+_LOCAL_ORIGINS = frozenset((
+    "null", "http://127.0.0.1:8787", "http://localhost:8787",
 ))
 
 
@@ -162,8 +168,6 @@ class _Handler(BaseHTTPRequestHandler):
     social: Any
     stickers: Any
     sticker_loop: Any = None
-    # 桌宠状态是 JSON 文件；多个请求/桌宠进程并发时用进程内锁串行化读改写的这一段。
-    _pet_lock = threading.Lock()
 
     # ---- 工具 ----
 
@@ -199,12 +203,7 @@ class _Handler(BaseHTTPRequestHandler):
         )
         return Ident(platform, user, scope)
 
-    # ---- 桌宠 / 工作区 ----
-
-    def _pet_store(self):
-        """每次请求重新读盘：Tk 桌宠可能同时在写同一份 pet_state.json。"""
-        from .pet.growth import PetStore
-        return PetStore(Path(self.memory.settings.db_path).parent / "pet_state.json")
+    # ---- 工作区 ----
 
     def _fs_root(self) -> Path:
         root = self.memory.action_executor.root
@@ -254,6 +253,28 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def end_headers(self) -> None:
+        # The operations page also runs from file:// (origin "null"), which makes
+        # every call cross-origin. Only the local page and local files are allowed.
+        origin = self.headers.get("Origin") if self.headers else None
+        if origin and str(origin) in _LOCAL_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", str(origin))
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "authorization,content-type,x-aiji-api-key,x-aiji-platform,"
+                "x-aiji-user,x-aiji-scope,x-aiji-session",
+            )
+            self.send_header("Access-Control-Max-Age", "600")
+        super().end_headers()
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        origin = str(self.headers.get("Origin") or "")
+        self.send_response(204 if origin in _LOCAL_ORIGINS else 403)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _send(self, code: int, payload: dict[str, Any]) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -326,21 +347,9 @@ class _Handler(BaseHTTPRequestHandler):
                 int(qs[key])
             except (TypeError, ValueError):
                 return self._send(400, {"error": f"{key} must be an integer"})
-        if path in ("/", "/console"):
-            html = (Path(__file__).resolve().parent / "web" / "console.html").read_text("utf-8")
+        if path in ("/", "/operations", "/operations.html"):
+            html = (Path(__file__).resolve().parent / "web" / "operations.html").read_text("utf-8")
             self._send_html(html)
-        elif path == "/assets/dafeiyu_256.png":
-            asset = Path(__file__).resolve().parent / "pet" / "assets" / "dafeiyu_256.png"
-            self._send_asset(asset, "image/png")
-        elif path == "/assets/whale_spritesheet.webp":
-            asset = Path(__file__).resolve().parent / "pet" / "assets" / "whale_spritesheet.webp"
-            self._send_asset(asset, "image/webp")
-        elif path == "/assets/whale_pet.json":
-            asset = Path(__file__).resolve().parent / "pet" / "assets" / "whale_pet.json"
-            self._send_asset(asset, "application/json; charset=utf-8")
-        elif path == "/assets/echarts.min.js":
-            asset = Path(__file__).resolve().parent / "web" / "vendor" / "echarts.min.js"
-            self._send_asset(asset, "application/javascript; charset=utf-8")
         elif path == "/health":
             s = self.memory.stats()
             life_loop = getattr(self.memory, "life_loop", None)
@@ -442,6 +451,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, admin.models_snapshot(self.memory.pool.stats()))
         elif path == "/api/capabilities":
             self._send(200, admin.capabilities_snapshot(self.memory))
+        elif path == "/api/operations/features":
+            self._send(200, {"items": operations.catalog()})
+        elif path == "/api/operations/config":
+            self._send(200, operations.read_config(operations.CONFIG_PATH))
+        elif path == "/api/operations/services":
+            self._send(200, service_control.snapshot())
         elif path == "/api/mcp":
             registry = getattr(self.memory, "mcp_registry", None)
             research = getattr(self.memory, "mcp_research_loop", None)
@@ -515,13 +530,6 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, BeingCheckup(self.memory).run())
         elif path in ("/accounts", "/api/accounts"):
             self._send(200, {"items": self.memory.accounts()})
-        elif path == "/api/pet":
-            with self._pet_lock:
-                now = time.time() * 1000
-                store = self._pet_store()
-                snapshot = store.snapshot(now)
-            snapshot["now_ms"] = now
-            self._send(200, snapshot)
         elif path == "/api/fs":
             if not _workspace_enabled():
                 return self._send(403, {"error": "workspace_disabled"})
@@ -597,6 +605,23 @@ class _Handler(BaseHTTPRequestHandler):
             return self._unauthorized()
         body = self._body()
         try:
+            if path in ("/api/operations/config", "/api/operations/services"):
+                if self.client_address[0] not in ("127.0.0.1", "::1"):
+                    return self._send(403, {"error": "local_only"})
+                if path.endswith("/config"):
+                    try:
+                        result = operations.save_config(
+                            operations.CONFIG_PATH, body.get("changes") or {})
+                    except (ValueError, OSError) as exc:
+                        return self._send(400, {"error": str(exc)})
+                    return self._send(200, result)
+                try:
+                    result = service_control.control(str(body.get("action") or ""))
+                except ValueError as exc:
+                    return self._send(400, {"error": str(exc)})
+                except (RuntimeError, OSError) as exc:
+                    return self._send(503, {"error": str(exc)})
+                return self._send(202, {"ok": True, **result})
             if path in ("/v1/chat/completions", "/chat/completions"):
                 return self._chat_completion(body)
             if path in ("/v1/embeddings", "/embeddings"):
@@ -630,10 +655,14 @@ class _Handler(BaseHTTPRequestHandler):
                 if profile_id in ("aiji", "default"):
                     profile_id = ""
                 try:
-                    with tempfile.TemporaryDirectory(prefix="aiji-speech-") as tmp:
+                    # tempfile.TemporaryDirectory() creates 0o700 dirs, which this
+                    # machine's sandbox cannot clean up; the voice service already
+                    # provides an explicit 0o777 work dir for exactly this reason.
+                    tmp = self.voice._workdir()
+                    try:
                         result = self.voice.synthesize(
                             text,
-                            Path(tmp) / "speech.wav",
+                            tmp / "speech.wav",
                             profile_id=profile_id,
                             rate=body.get("rate"),
                             pitch=body.get("pitch"),
@@ -644,6 +673,8 @@ class _Handler(BaseHTTPRequestHandler):
                             result.path.read_bytes(),
                             "audio/wav",
                         )
+                    finally:
+                        shutil.rmtree(tmp, ignore_errors=True)
                     return
                 except Exception as exc:  # noqa: BLE001
                     code, payload = self._audio_error(exc)
@@ -804,27 +835,6 @@ class _Handler(BaseHTTPRequestHandler):
                     "approved": bool(ok and approved),
                     "resolved": ok,
                 })
-            if path in ("/api/pet/pet", "/api/pet/feed"):
-                with self._pet_lock:
-                    now = time.time() * 1000
-                    store = self._pet_store()
-                    picker = getattr(self, "pet_picker", None)
-                    if path.endswith("/pet"):
-                        delta, line, ok = store.pet(now, picker)
-                    else:
-                        delta, line, ok = store.feed(now, picker)
-                    snapshot = store.snapshot(now)
-                return self._send(200, {
-                    "ok": ok, "delta": delta, "line": line,
-                    "snapshot": snapshot, "now_ms": now,
-                })
-            if path == "/api/pet/rename":
-                with self._pet_lock:
-                    store = self._pet_store()
-                    name = store.rename(str(body.get("name") or ""))
-                    now = time.time() * 1000
-                    snapshot = store.snapshot(now)
-                return self._send(200, {"name": name, "snapshot": snapshot})
             if path == "/api/fs/write":
                 if not _workspace_enabled():
                     return self._send(403, {"error": "workspace_disabled"})
@@ -1277,7 +1287,6 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
     from .life_loop import LifeLoop
     from .mcp_client import MCPConfigError, MCPRegistry
     from .mcp_research import MCPResearchLoop, MCPResearcher
-    from .pet.growth import RemarkPicker
     from .song_service import SongService
     from .social_service import SocialService
     from .sticker_service import (
@@ -1320,8 +1329,6 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
         "songs": songs,
         "social": social,
         "stickers": stickers,
-        # 每个 server 一份台词轮转器，摸头/喂食台词不会每次都是第一句。
-        "pet_picker": RemarkPicker(),
     })
     srv = AijiHTTPServer((host, port), handler)
     srv.daemon_threads = True

@@ -1,0 +1,987 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AIJiYi 人体架构</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070c15'/%3E%3Ccircle cx='32' cy='24' r='9' fill='%237dd3fc'/%3E%3Cpath d='M18 46 Q18 34 32 34 Q46 34 46 46 L46 50 L18 50 Z' fill='%23a78bfa'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#070c15; --bg2:#0b1220; --line:#1c2a41; --txt:#e6eefb; --sub:#8ea3bf;
+    --flow:#7dd3fc; --async:#fbbf24; --data:#94a3b8; --db:#7c8ea8; --ext:#f472b6;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:radial-gradient(1200px 700px at 18% -10%,#12203a 0%,transparent 60%),
+               radial-gradient(900px 600px at 100% 0%,#101a2e 0%,transparent 55%),var(--bg);
+    color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  /* ── 顶栏 ───────────────────────────────────────────── */
+  header{flex:0 0 auto;padding:12px 18px 10px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(11,18,32,.96),rgba(11,18,32,.72));backdrop-filter:blur(8px);z-index:5}
+  .row1{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand h1{margin:0;font-size:17px;letter-spacing:.3px;font-weight:650}
+  .brand .ver{font:11px/1 ui-monospace,SFMono-Regular,Consolas,monospace;color:#5b7a9e}
+  .stats{display:flex;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--sub)}
+  .stat{padding:2px 8px;border:1px solid var(--line);border-radius:999px;background:rgba(148,163,184,.06);white-space:nowrap}
+  .stat b{color:#cfe3ff;font-weight:600}
+  .spacer{flex:1 1 auto}
+  .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .btn{border:1px solid var(--line);background:rgba(148,163,184,.07);color:var(--txt);
+    padding:6px 11px;border-radius:8px;font-size:12px;cursor:pointer;transition:.15s}
+  .btn:hover{background:rgba(125,211,252,.14);border-color:#2a4a6b}
+  .btn.on{background:rgba(125,211,252,.2);border-color:#3b82f6;color:#eaf6ff}
+  input[type=search]{width:230px;padding:6px 10px;border-radius:8px;border:1px solid var(--line);
+    background:rgba(4,9,17,.75);color:var(--txt);font-size:12px;outline:none}
+  input[type=search]:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.16)}
+  .row2{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;align-items:center}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;
+    border:1px solid var(--line);cursor:pointer;user-select:none;color:#c3d3e8;background:rgba(148,163,184,.05)}
+  .chip i{width:7px;height:7px;border-radius:2px;display:inline-block}
+  .chip.off{opacity:.38;text-decoration:line-through}
+  .legend{display:flex;gap:12px;font-size:11px;color:var(--sub);margin-left:auto;align-items:center;flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .legend svg{overflow:visible}
+  /* ── 画布 ───────────────────────────────────────────── */
+  main{position:relative;flex:1 1 auto;overflow:hidden}
+  #stage{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+  #stage.dragging{cursor:grabbing}
+  /* 人体轮廓（装饰层） */
+  .body-out{fill:rgba(148,183,220,.05);stroke:rgba(148,183,220,.17);stroke-width:1.2}
+  .body-limb{fill:none;stroke:rgba(148,183,220,.12);stroke-linecap:round}
+  .body-face{fill:rgba(148,183,220,.2);stroke:none}
+  /* 器官光晕 */
+  .band-bg{fill:rgba(148,163,184,.045);stroke:rgba(148,163,184,.15);stroke-dasharray:3 6}
+  .band-arm{fill:none;stroke-linecap:round;stroke-dasharray:3 6}
+  .band-label{font-size:11.5px;letter-spacing:2.2px;text-transform:uppercase;fill:#7f96b4;font-weight:600}
+  /* 节点 */
+  .node{cursor:pointer}
+  .node .box{fill:#0d1524;stroke:#22334c;stroke-width:1.1;rx:11;transition:.14s}
+  .node .accent{stroke:none}
+  .node .t{font-size:13px;font-weight:640;fill:#e9f1fb;pointer-events:none}
+  .node .s{font-size:10px;fill:#8298b5;pointer-events:none}
+  .node:hover .box{stroke:#60a5fa;fill:#111d31}
+  .node.sel .box{stroke:#93c5fd;stroke-width:2;fill:#132138}
+  .node.hit .box{stroke:#fbbf24;stroke-width:1.8}
+  .node.dim{opacity:.13}
+  .node.off{opacity:.05;pointer-events:none}
+  .node.sel .box,.node.hit .box{filter:drop-shadow(0 0 7px rgba(96,165,250,.5))}
+  /* 边 */
+  .edge{fill:none;stroke-width:1.25;opacity:.5;transition:.14s}
+  .edge.k-flow{stroke:var(--flow)}
+  .edge.k-async{stroke:var(--async);stroke-dasharray:5 4;opacity:.42}
+  .edge.k-data{stroke:var(--data);stroke-dasharray:1.5 3.5;opacity:.4}
+  .edge.k-db{stroke:var(--db);stroke-dasharray:6 4;opacity:.34}
+  .edge.k-ext{stroke:var(--ext);stroke-dasharray:4 4;opacity:.34}
+  .edge.hl{opacity:.95;stroke-width:2.1}
+  .edge.dim{opacity:.05}
+  .lbl{font-size:9.5px;fill:#9db3cf;opacity:0;pointer-events:none;paint-order:stroke;stroke:#060b13;stroke-width:3px;stroke-linejoin:round;transition:.2s}
+  .lbl.on{opacity:.95}
+  /* ── 详情抽屉 ───────────────────────────────────────── */
+  .drawer{position:absolute;top:0;right:0;bottom:0;width:392px;max-width:46vw;overflow:auto;
+    background:linear-gradient(180deg,rgba(9,15,26,.97),rgba(8,13,22,.97));
+    border-left:1px solid var(--line);padding:16px 18px 40px;transform:translateX(100%);
+    transition:transform .22s ease;z-index:4}
+  .drawer.open{transform:none}
+  .drawer h2{margin:4px 0 2px;font-size:16px;line-height:1.35}
+  .drawer .bandtag{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;letter-spacing:.6px;
+    padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:#b6c8de}
+  .drawer .file{font:11px/1.5 ui-monospace,Consolas,monospace;color:#6f8fb3;word-break:break-all;margin:8px 0 10px}
+  .drawer p{color:#c7d7ea;font-size:12.5px;margin:8px 0}
+  .drawer h3{font-size:11px;letter-spacing:1.6px;color:#6d86a6;text-transform:uppercase;margin:16px 0 6px;font-weight:650}
+  .sym{display:inline-block;font:10.5px/1.5 ui-monospace,Consolas,monospace;color:#9fd2ff;
+    background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);padding:1px 7px;border-radius:6px;margin:0 5px 5px 0}
+  .nb{display:flex;flex-direction:column;gap:4px}
+  .nb button{text-align:left;background:rgba(148,163,184,.06);border:1px solid var(--line);color:#cfdcee;
+    padding:5px 9px;border-radius:7px;font-size:11.5px;cursor:pointer}
+  .nb button:hover{border-color:#3b82f6;background:rgba(59,130,246,.12)}
+  .hint{font-size:11.5px;color:#7b92ae;line-height:1.75}
+  .hint kbd{font:10.5px/1 ui-monospace,Consolas,monospace;border:1px solid #2a3b52;border-bottom-width:2px;
+    border-radius:5px;padding:1px 5px;background:#101a2b;color:#b7c9de}
+  .close{position:absolute;top:12px;right:14px;border:none;background:none;color:#7b92ae;font-size:18px;cursor:pointer}
+  .close:hover{color:#e6eefb}
+  .foot{position:absolute;left:14px;bottom:11px;font-size:10.5px;color:#59718f;pointer-events:none}
+  @media (max-width:860px){ .drawer{width:100%;max-width:none} input[type=search]{width:150px;font-size:16px} }
+</style>
+</head>
+<body>
+<header>
+  <div class="row1">
+    <div class="brand"><h1>AIJiYi 人体架构</h1><span class="ver">schema v11 · v0.8.3</span></div>
+    <div class="stats" id="stats"></div>
+    <div class="spacer"></div>
+    <div class="tools">
+      <input type="search" id="q" placeholder="搜索模块 / 文件 / 关键词  与 / 定位" aria-label="搜索">
+      <button class="btn" id="mainpath" title="只高亮「一次对话」的主链路">主链路</button>
+      <button class="btn" id="fit" title="适应窗口 (F)">适应</button>
+      <button class="btn" id="zin" title="放大 (+)">+</button>
+      <button class="btn" id="zout" title="缩小 (−)">−</button>
+    </div>
+  </div>
+  <div class="row2">
+    <div id="chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div class="legend">
+      <span><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#7dd3fc" stroke-width="1.6"/></svg>调用</span>
+      <span><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#fbbf24" stroke-width="1.6" stroke-dasharray="4 3"/></svg>异步/队列</span>
+      <span><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="1.5 3"/></svg>数据面</span>
+      <span><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#7c8ea8" stroke-width="1.6" stroke-dasharray="6 4"/></svg>落库（沿脊柱）</span>
+      <span><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#f472b6" stroke-width="1.6" stroke-dasharray="4 4"/></svg>外部</span>
+    </div>
+  </div>
+</header>
+<main>
+  <svg id="stage" xmlns="http://www.w3.org/2000/svg"><defs id="defs"></defs><g id="viewport"></g></svg>
+  <aside class="drawer" id="drawer"></aside>
+  <div class="foot">人体结构是系统隐喻 · 滚轮缩放 · 拖拽平移 · 点节点看说明 · 数据来自 aiji/ 代码与 data/aiji.db 只读实测</div>
+</main>
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════
+   1. 数据：9 个人体系统 + 68 个节点 + 边
+   节点均对应真实文件/真实进程，说明文字来自模块 docstring、
+   PROJECT_STATE.md 与 data/aiji.db 的只读统计（2026-11-02）。
+   布局把系统画成一具人体：大脑皮层、眼耳口、咽喉、心脏、
+   海马体、内分泌、双手、骨架与双脚——位置即职责。
+   ══════════════════════════════════════════════════════════════ */
+const BANDS = [
+  {id:"entry",   name:"① 入口 · 眼耳口",  cn:"外部世界怎么进来（感官）",      color:"#38bdf8"},
+  {id:"ingress", name:"② 接入 · 咽喉",    cn:"所有入口汇成一条咽喉",         color:"#22d3ee"},
+  {id:"orch",    name:"③ 编排 · 大脑皮层", cn:"一次对话怎么被想出来",          color:"#a78bfa"},
+  {id:"memory",  name:"④ 记忆 · 海马体",  cn:"写不丢 · 读有预算 · 注入不越权", color:"#34d399"},
+  {id:"life",    name:"⑤ 生命 · 内分泌",  cn:"状态、体检、主动与存在感",      color:"#fbbf24"},
+  {id:"out",     name:"⑥ 出站 · 心脏",    cn:"从队列到真实送达",             color:"#f472b6"},
+  {id:"tools",   name:"⑦ 工具 · 左手",    cn:"受控的动作与联网",             color:"#fb923c"},
+  {id:"ops",     name:"⑧ 运维 · 右手",    cn:"看得见、改得动、起停得住",      color:"#60a5fa"},
+  {id:"data",    name:"⑨ 存储 · 骨架与脚", cn:"SQLite、素材、模型与账号",      color:"#94a3b8"}
+];
+
+const NODES = [
+/* ── ① 入口 ── */
+{id:"qq", band:"entry", t:"本机 QQ", s:"真实账号 · 保持登录", f:"（本机客户端）",
+ d:"真实用户在这里：群聊与私聊。桌面/网页桌宠已按用户要求从当前代码移除（aiji/pet 只剩 .pyc，0 个 .py），相关描述只作为历史留在 PROJECT_STATE.md。",
+ sym:["群聊","私聊"]},
+{id:"napcat", band:"entry", t:"NapCat / OneBot 11", s:"6099 · 接管本机 QQ", f:"（外部进程）",
+ d:"用 OneBot 11 协议把本机 QQ 暴露出来。6099 端口在听表示注入层已就绪；它是「启动与结束」页依赖链的第一环。",
+ sym:["6099","OneBot 11"]},
+{id:"astrbot", band:"entry", t:"AstrBot", s:"6185 · 消息宿主 / 插件", f:"（外部进程）",
+ d:"消息处理与插件宿主，AIJiYi 的回复都经它送出。它的 OneBot 服务端在 6199，只有 QQ 登录并连上后才会出现 ESTABLISHED。",
+ sym:["6185","6199"]},
+{id:"openai_cli", band:"entry", t:"任意 OpenAI 客户端", s:"IDE / IM 网关 / 自建前端", f:"（外部）",
+ d:"填 http://127.0.0.1:8787/v1 就是一次接入：/v1/models 做模型发现，/v1/chat/completions 支持普通 JSON 与 SSE 流式。桌宠、IDE、IM 网关不必各写一套。",
+ sym:["/v1/models","/v1/chat/completions","SSE"]},
+{id:"console", band:"entry", t:"浏览器控制台", s:"127.0.0.1:8787/", f:"aiji/web/operations.html",
+ d:"4 个主入口：运行总览 / 全部功能 / 功能配置 / 启动与结束。页面状态全部来自实时接口，不使用演示数据；CORS 只放行 null 与本机 8787。",
+ sym:["overview","features","settings","lifecycle"]},
+{id:"cli", band:"entry", t:"aiji CLI", s:"17 个子命令", f:"aiji/cli.py",
+ d:"serve / remember / recall / ingest / inject / feedback / style / media / accounts / stats / doctor / export / bench / forget / archive / self-memory / quota。",
+ sym:["doctor","forget","archive","quota"]},
+{id:"octop", band:"entry", t:"Octop Gateway", s:"另一条网关适配", f:"aiji/bridge/octop_gateway.py",
+ d:"把网关消息翻译成 AIJiYi 的 inbound payload，再走同一个 HTTP 核心；不复制记忆逻辑。",
+ sym:["inbound_payload"]},
+
+/* ── ② 接入层 ── */
+{id:"server", band:"ingress", t:"HTTP 服务", s:"REST + OpenAI 兼容 + 控制台", f:"aiji/server.py",
+ d:"所有入口汇到这一个 ThreadingHTTPServer：身份三字段 (platform, platform_user_id, scope) 解析、API Key 鉴权（HMAC 比较）、CORS 白名单、SSE、/media 只回引用不回字节。探测记录 61 条路由全可达（2026-11-01）。",
+ sym:["AijiHTTPServer","_Handler","make_server","parse_identity_hint"]},
+{id:"onebot", band:"ingress", t:"OneBot 桥", s:"收事件 + 主动调 action", f:"aiji/bridge/onebot.py",
+ d:"parse_event 把 OneBot 事件标准化成 Envelope；OneBotClient / OneBotBridge 负责发送、取头像、拉媒体。群里不带 @ 的消息也会入库（只学不抢话）。",
+ sym:["parse_event","OneBotClient","OneBotBridge"]},
+{id:"octopb", band:"ingress", t:"网关桥", s:"inbound → 标准请求", f:"aiji/bridge/octop_gateway.py",
+ d:"AijiGatewayClient 把网关侧的消息换成 AIJiYi 请求；进程内直接跑，省一次网络往返。",
+ sym:["AijiGatewayClient","make_processor"]},
+{id:"clib", band:"ingress", t:"CLI 入口", s:"argparse · 单进程", f:"aiji/cli.py",
+ d:"命令行是「不装服务也能用」的入口：直接打开同一个 Memory 门面，落同一个库。doctor 会告诉你缺哪把 key、哪条路由在场。",
+ sym:["_memory","_ident","cmd_serve"]},
+{id:"netguard", band:"ingress", t:"URL 护栏", s:"公网校验 / 防私网", f:"aiji/net_guard.py",
+ d:"所有用户可控的抓取（点歌、表情包更新、MCP 研究）先过这里：只允许公网 http(s)，解析到私网/回环直接拒——防 SSRF。",
+ sym:["validate_public_http_url","UrlGuardError"]},
+
+/* ── ③ 编排层 ── */
+{id:"head", band:"orch", t:"对话头", s:"Head.reply() · 无状态", f:"aiji/head.py",
+ d:"一次对话的编排器：归一化消息 → 召回并注入记忆 → 角色边界与人格约束 → 模型池 → 出口闸门 → 拟人节奏 → 返回。不持有会话状态，也不绑定任何平台。",
+ sym:["HeadReply","Head.reply","normalize_messages"]},
+{id:"debounce", band:"orch", t:"连发合并", s:"800ms 窗口", f:"aiji/debounce.py",
+ d:"同会话连发短句并成一次模型调用（Settings.debounce_ms）。没有它，用户打三行字就是三次模型调用、三条记忆。",
+ sym:["ConversationDebouncer","merge_messages"]},
+{id:"pool", band:"orch", t:"模型池", s:"6 条默认路由 · 冷却 + 故障转移", f:"aiji/pool.py",
+ d:"轮转、冷却、故障转移。本机两个积分制反代（workbuddy 8788、agent2api 3065）已实测连通，LLM 第二层/模型抽取/摘要/软嵌入全部真机验证过；公网免费池只在本地假 OpenAI 服务上验过。PoolExhausted 立即落规则兜底，写入不丢。",
+ sym:["ModelPool","PoolExhausted","PoolResult"]},
+{id:"gate", band:"orch", t:"出口闸门", s:"人格 / 物理底线", f:"aiji/gate.py",
+ d:"sanitize_reply + check_reply：越权、身份泄露、可执行代码在出门前被拦；拦完给一套体面的替代说法，而不是报错。",
+ sym:["sanitize_reply","check_reply","GateResult"]},
+{id:"humanize", band:"orch", t:"拟人节奏", s:"首字延迟 + 打字停顿", f:"aiji/humanize.py",
+ d:"只给外部 IM 加延迟（IM_PLATFORMS 白名单）；对 API 调用者不加任何人为等待。",
+ sym:["HumanPacer","IM_PLATFORMS"]},
+{id:"role", band:"orch", t:"角色边界", s:"IM 禁代码 / 禁物理动作", f:"aiji/role_boundary.py",
+ d:"IM 角色空间里不许输出可运行代码、不许声称自己执行了物理动作；桌面平台保留工具能力。身份被追问时走 identity_repair。",
+ sym:["prompt_block","refusal","identity_repair"]},
+{id:"persona", band:"orch", t:"人格底色", s:"风格块 + few-shot", f:"aiji/persona.py",
+ d:"只提供说话风格（learned_examples / style_block / few_shot），不覆盖物理底线，也不覆盖记忆事实；素材在 data/persona/*.json。",
+ sym:["style_block","few_shot","reminder"]},
+{id:"selfhood", band:"orch", t:"自我底线", s:"不可动摇 + 可被推翻", f:"aiji/selfhood.py",
+ d:"物理底线是硬的（floor_text，assert_floor_clean 防自强化）；性格是涌出的，能被证据推翻。两者分开写，才不会互相污染。",
+ sym:["floor_text","assert_floor_clean","system_prefix"]},
+{id:"quota", band:"orch", t:"主动配额", s:"反代积分 ÷ 单条单价", f:"aiji/quota.py",
+ d:"allowed_24h = min(8, floor(剩余积分 × 0.8 ÷ 单条单价))。余额四个来源：配置 URL → 响应头 → data/credits.json → 静态/环境变量。两个反代都不吐余额，所以留了 aiji quota --set N 手填，并显示「填了多久」。",
+ sym:["QuotaState","CreditProvider","parse_credits"]},
+
+/* ── ④ 记忆核心 ── */
+{id:"memory", band:"memory", t:"Memory 门面", s:"三层存储 + 一个闭环", f:"aiji/memory.py",
+ d:"turn / remember / ingest / exchange 写；recall 100ms 预算读；inject 出软引导块；feedback 回写命中与留痕。全部按 (platform, platform_user_id, scope) 隔离，跨平台串号是这里防的。",
+ sym:["Memory.open","exchange","inject","feedback"]},
+{id:"recognize", band:"memory", t:"识别层", s:"任意输入 → Envelope", f:"aiji/recognize.py",
+ d:"把任意输入降维成 (text, meta, confidence, status)，之后与纯文本走同一条反思管线，不按类型分叉。缺引擎时如实 unsupported，不编造文本。",
+ sym:["Envelope","Item","Recognizers"]},
+{id:"engines", band:"memory", t:"OCR · ASR 适配", s:"RapidOCR · FunASR · whisper", f:"aiji/real_engines.py",
+ d:"RapidOCR 做图，FunASR paraformer-zh 做中文语音（14/14），faster-whisper tiny 回退。识别超时 45s（真引擎 2~10s 起）。",
+ sym:["ocr_image","transcribe_wav_bytes","set_asr_model"]},
+{id:"audio", band:"memory", t:"媒体音频", s:"URL → bytes → WAV", f:"aiji/media_audio.py",
+ d:"用户给的媒体 URL 下载后 ffmpeg 归一到 16k WAV 再进 ASR；下载前过 net_guard。图片走 bytes 分支——历史上只吃 url 导致生产 OCR 100% 空产出。",
+ sym:["media_bytes_from_url","transcribe_item_audio"]},
+{id:"extract", band:"memory", t:"抽取层", s:"事实/知识/关系/画像/风格/摘要", f:"aiji/extract.py",
+ d:"模型抽取为主、启发式兜底；带 artifact 过滤、口癖词表、注入文本识别——防止把自己的注入块当成用户事实再学一遍。",
+ sym:["Extraction","parse","build_messages","verbal_tic_hints"]},
+{id:"reflect", band:"memory", t:"反思 worker", s:"性格 trait 归纳", f:"aiji/reflect.py",
+ d:"从群聊互动里归纳「我长成了什么样」。单次调用、timeout 60s、按积压或空闲批处理；没有 assistant 发言就跳过，模型输出为空不写行。",
+ sym:["Reflective","ReflectionWorker","_should_run"]},
+{id:"recall", band:"memory", t:"快召回", s:"100ms 硬预算 + 多信号排序", f:"aiji/recall.py",
+ d:"另开线程 + Future.result(timeout=remaining)，超时退化纯内存并标 degraded。排序是多信号：相关度、重要度、按属性类型的半衰期、置信度、反馈命中。",
+ sym:["Recaller","score_fact","half_life_days","RecallResult"]},
+{id:"inject", band:"memory", t:"软引导注入", s:"只出文本块 · 硬字符预算", f:"aiji/inject.py",
+ d:"选择性 + 来源标注 + 关系标签 + 档位；persona_touched=False、soft=True，硬字符预算，bench 断言 0 次越权、0 次超预算。写 injection 留痕，并在同事务里做读→强化。",
+ sym:["Injector","Injection","InjectItem"]},
+{id:"store", band:"memory", t:"结构化存储", s:"冲突消解 / 关联 / 画像", f:"aiji/store.py",
+ d:"事实 ADD-only 优先：多值累积、单值才 supersede、否定 expire；valid_from/valid_to + fact_log 不删历史。关联只做 1 跳、每事实 ≤3 条边（防链接表爆炸）。",
+ sym:["Ident","plan_reconciliation","link_facts","bump_usage"]},
+{id:"vectors", band:"memory", t:"语义索引", s:"hashing / LLM 软嵌入", f:"aiji/vectors.py",
+ d:"默认 hash；HybridIndex = hashing + LLM 软嵌入，仍是暴力余弦。同义改写召回 4/5 vs 2/5；换真实 embedding 与近似索引还没做。",
+ sym:["HybridIndex","NullIndex","hashing_embed"]},
+{id:"writer", band:"memory", t:"异步写", s:"微秒级入队", f:"aiji/writer.py",
+ d:"调用方只往队列丢事件（µs 级），识别/抽取/落库全在 worker 线程。队列在内存里——进程被 kill 最多丢最后一个未处理事件（源码有 shortcut: 注释）。",
+ sym:["Writer","Job","WriterStats"]},
+{id:"janitor", band:"memory", t:"代谢清理", s:"冻结 / 归档 / 淘汰", f:"aiji/janitor.py",
+ d:"低频 + 水位触发：过期事实冻结（不删只藏，查到即解冻）、turn 归档 90 天后才物理清、自我记忆淘汰、孤儿修复。",
+ sym:["Janitor","archive_turns","freeze_facts"]},
+{id:"db", band:"memory", t:"SQLite 层", s:"schema v11 + FTS5", f:"aiji/db.py",
+ d:"按线程连接、写事务全局串行（一把锁）、版本迁移。fact_fts 用 FTS5，迁移后必须 rebuild，否则三字片段查不到。",
+ sym:["DB","migrate","fact_fts"]},
+
+/* ── ⑤ 人格 / 生命 ── */
+{id:"being", band:"life", t:"生命状态", s:"能量 / 心情 / 私密小本子", f:"aiji/being.py",
+ d:"全局角色状态：能量、情绪残留、私密笔记、事件。实体写在 SQLite（being_state / being_event / being_note），注入块会带一句状态。",
+ sym:["BeingStore","BeingState","LifeActivity"]},
+{id:"lifecard", band:"life", t:"生命卡七引擎", s:"实际 3 个在链路上", f:"aiji/life.py",
+ d:"七个引擎里真正接进链路的是内分泌、离线补偿与 endo_factor；Declarative / Procedural / SynapticDiffusion / PersonalityKernel.apply_delta 的调用方只有测试。",
+ sym:["LifeCard","EndocrineEngine","OfflineCompensation"]},
+{id:"lifeloop", band:"life", t:"生活循环", s:"有界后台推进", f:"aiji/life_loop.py",
+ d:"按 tick 推进生命卡与能量，有上下界、可停；模拟 40 轮才稳定，24 轮时历史行不足会断言失败。",
+ sym:["LifeLoop"]},
+{id:"checkup", band:"life", t:"成精体检", s:"四层确定性判定", f:"aiji/being_checkup.py",
+ d:"不调模型，纯确定性检查：四层给证据。配套 bench_self_test 跑 27 个探针、6 个指标带门槛（hit@5 1.0 / leak 0）。",
+ sym:["BeingCheckup"]},
+{id:"proactive", band:"life", t:"主动搭话", s:"配额 + 能量双闸", f:"aiji/proactive.py",
+ d:"can_proactive 要 energy≥20 且 social≥15，再过配额闸门；每次发送记账，按天计数。历史实测：能量长期 0.01，主动被永久阻断。",
+ sym:["Proactive","proactive_spend"]},
+{id:"presence", band:"life", t:"存在感广播", s:"8789", f:"aiji/presence.py",
+ d:"把各入口的交互状态广播出去，供前端同步；随 AIJiYi 一起启动，只有它不在线时才检查 8789 是否被占用。",
+ sym:["PresenceHub","PresenceServer"]},
+{id:"sense", band:"life", t:"桌面感知", s:"截屏 / OCR / 窗口标题", f:"aiji/desktop_sense.py",
+ d:"受控桌面工具的眼睛：活动窗口标题、截屏、对屏幕做 OCR。只在审批通过的动作链路里被调用。",
+ sym:["grab_screen","window_titles","look"]},
+
+/* ── ⑥ 出站 / 心脏 ── */
+{id:"heart", band:"out", t:"心脏层", s:"outbox · CAS 领取", f:"aiji/heart.py",
+ d:"实体态发件箱：outbox 消费、CAS 领取、出站入队；SendThrottled 让限流变成可见事件而不是静默丢失。生产库 outbox/send_queue 目前 0 行——发送实际由 AstrBot 插件完成。",
+ sym:["Heart","OutboxEvent","SendThrottled"]},
+{id:"dispatch", band:"out", t:"发送调度", s:"send_queue + 限流退避", f:"aiji/dispatch.py",
+ d:"独立线程扫 send_queue，限流感知退避；与心脏层配对，解决「平台每分钟只能发 5 条」被拒 22 次那类问题。",
+ sym:["Dispatcher"]},
+{id:"social", band:"out", t:"QQ 空间", s:"说说 / 评论 / 签名 / 分享", f:"aiji/social_service.py",
+ d:"走 NapCat 扩展的 onebot action：发说说、评论、自动选最新说说评论、改头像签名、分享网易云与 B 站链接。媒体路径限制在社交目录/表情包目录，/api/social/* 受 API Key 保护。",
+ sym:["SocialService","SocialError"]},
+{id:"song", band:"out", t:"点歌管线", s:"异步 jobs", f:"aiji/song_service.py",
+ d:"data/songs 下 jobs / cache / work 三段；/v1/songs 提交后轮询进度，完成后取音频。下载前过 net_guard。",
+ sym:["SongService","SongJob"]},
+{id:"sticker", band:"out", t:"表情包", s:"本地库 + 受控更新", f:"aiji/sticker_service.py",
+ d:"只读本地 manifest.json；在线更新必须过 URL 校验、图片签名、大小上限、原子写、并发锁，并且按 mood 归文件夹。",
+ sym:["StickerService","StickerUpdateLoop"]},
+{id:"voice", band:"out", t:"声线 TTS", s:"Edge 默认 · 命令式后处理", f:"aiji/voice_service.py",
+ d:"VoiceProfile + 适配器：Edge TTS（zh-CN-XiaoxiaoNeural）默认、SAPI 离线回退、url / command 两种定制后处理。客户端做峰值归一（>0.98 → 0.95），不再依赖易失的引擎实现。",
+ sym:["VoiceRegistry","SynthesisResult","_limit_peak"]},
+
+/* ── ⑦ 工具 / 研究 ── */
+{id:"t_schema", band:"tools", t:"工具定义", s:"OpenAI tools", f:"aiji/actions/schema.py",
+ d:"把可用动作写成 OpenAI Function Calling 定义（OPENAI_TOOLS），模型只能从这里挑。",
+ sym:["OPENAI_TOOLS","ToolCall"]},
+{id:"t_policy", band:"tools", t:"执行策略", s:"工作区边界 / 黑名单", f:"aiji/actions/policy.py",
+ d:"工作区边界、敏感文件、危险命令黑名单。它管「允许碰什么」，不管「谁点的头」。",
+ sym:["ActionPolicy","PolicyViolation"]},
+{id:"t_approval", band:"tools", t:"人工审批", s:"挂起等允许 / 拒绝", f:"aiji/actions/approval.py",
+ d:"人在回路：请求挂起，控制台明确允许或拒绝才继续执行，超时按拒绝；审批本身也是一条可审计记录。",
+ sym:["Approval","ApprovalManager"]},
+{id:"t_exec", band:"tools", t:"执行器", s:"文件 / 终端", f:"aiji/actions/executor.py",
+ d:"真正动手的那层：文件读写、终端命令。每个动作先过 policy，再等 approval，最后才执行，返回 ToolResult。",
+ sym:["ActionExecutor","ToolResult"]},
+{id:"t_gui", band:"tools", t:"桌面自动化", s:"截屏 / 鼠标 / 键盘", f:"aiji/actions/gui.py",
+ d:"Windows 桌面自动化，调用前必须经过 ActionExecutor 的审批；IM 角色空间整条工具链直接禁用。",
+ sym:["execute_desktop","_screenshot","_hotkey"]},
+{id:"t_mcp", band:"tools", t:"MCP 客户端", s:"白名单 stdio", f:"aiji/mcp_client.py",
+ d:"只连 config/mcp_servers.json 里登记的服务；未登记、非白名单工具直接拒（MCPToolDenied）。",
+ sym:["MCPRegistry","MCPToolDenied"]},
+{id:"t_research", band:"tools", t:"MCP 研究", s:"GitHub 发现 + 人审", f:"aiji/mcp_research.py",
+ d:"受控 GitHub 发现：读 README 分类、抽安装提示、判 Windows 兼容，产出候选清单给人审，不自己装上就跑。",
+ sym:["MCPResearcher","GitHubClient","MCPResearchLoop"]},
+
+/* ── ⑧ 运维 / 控制台 ── */
+{id:"web", band:"ops", t:"控制台前端", s:"4 视图 · 零依赖单文件", f:"aiji/web/operations.html",
+ d:"运行总览（5 段依赖链 + 实时记录 + 能力卡片）、全部功能（按身份上下文取数、可搜索）、功能配置（脏值计数 / 恢复本组默认 / 保存并重启）、启动与结束（实测依赖链 + watchdog + 日志尾部）。不引外部 CDN。",
+ sym:["#view-overview","#view-features","#view-settings","#view-lifecycle"]},
+{id:"admin", band:"ops", t:"只读数据面", s:"JSON 快照", f:"aiji/admin.py",
+ d:"把散在内核表里的状态整理成 UI 可直接消费的 JSON：记忆库、记忆星图、调度、模型、注入、主动、能力清单。只读，不写库。",
+ sym:["memory_library","memory_graph","scheduler_snapshot","models_snapshot"]},
+{id:"operations", band:"ops", t:"配置面", s:"校验 + 功能目录", f:"aiji/operations.py",
+ d:"读写非密钥运行时配置，非法值直接 400；catalog 是「全部功能」页的目录来源，read_config 会多返回 defaults 好让「恢复本组默认」有依据。",
+ sym:["read_config","save_config","catalog"]},
+{id:"service", band:"ops", t:"服务生命周期", s:"5 项依赖链实测", f:"aiji/service_control.py",
+ d:"按端口/进程/连接实测 NapCat 6099 → OneBot 6199 → AstrBot 6185 → AIJiYi 8787 → presence 8789，给出 state（ready/partial/stopped）、pid、blocked 卡点、desired 期望态、watchdog 计划任务与日志尾部。",
+ sym:["snapshot","prerequisites","watchdog","_resolve_processes"]},
+{id:"params", band:"ops", t:"参数表", s:"可调数字只在这里", f:"aiji/params.py",
+ d:"阶段 0 固化的集中参数表：所有可调数字只允许出现在这里，snapshot() 顺带告诉你这个值来自哪里（默认值还是配置文件）。",
+ sym:["snapshot","_source_of"]},
+{id:"config", band:"ops", t:"配置与路由", s:"Settings + Route", f:"aiji/config.py",
+ d:"db_path、budget_ms=100、workers=2、top_k=8、vector=hash、摘要/压缩阈值、onebot、social、sticker、routes。密钥一律从环境变量读，仓库里不落任何 key。",
+ sym:["Settings","Route","DEFAULT_ROUTES"]},
+
+/* ── ⑨ 存储与外部 ── */
+{id:"d_files", band:"data", t:"data/ 素材", s:"voices / songs / persona", f:"data/",
+ d:"voices（音色 profile + 参考音）、songs（点歌 jobs/cache/work）、persona（sunba.json）、social/media、mcp（研究产物）、evidence（真机截图）、credits.json（手填积分）。",
+ sym:["voices","songs","persona","mcp"]},
+{id:"d_voiceeng", band:"data", t:"voice-engine/", s:"RVC · 9880 是旧 Seed-VC", f:"voice-engine/",
+ d:"定制音色引擎目录。2026-11-02 起决定走 RVC，Seed-VC 已删除但迁移只做了一半：profile 的 postprocess 仍指向 9880，所以定制音色当前会回退 edge 音色。",
+ sym:["rvc","models","9880"]},
+{id:"d_llm", band:"data", t:"LLM 反代", s:"8788 / 3065 · 本机反代", f:"（本机网关）",
+ d:"两个积分制反代，已实测连通。LLM 第二层、模型抽取、摘要、软嵌入都因此可以真机验证，而不是只跑假服务。",
+ sym:["workbuddy","agent2api","glm-5.3-flash"]},
+{id:"d_pool", band:"data", t:"公网免费池", s:"4 条公网路由 · 需出网", f:"（外部 API）",
+ d:"只在本地假 OpenAI 服务上验过。本机对公网通用 API 有 SSL 拦截，所以这条仍是阻塞项——需要一台能出网的机器跑 tests/smoke_live_pool.py。",
+ sym:["smoke_live_pool.py"]},
+{id:"d_engine", band:"data", t:"OCR · ASR 引擎", s:"本地模型，无出网依赖", f:"（本地模型）",
+ d:"RapidOCR + modelscope 的 FunASR paraformer-zh + hf-mirror 的 whisper tiny。都在本机跑；质量只在合成样本（Pillow 图 + SAPI TTS）上验过。",
+ sym:["RapidOCR","FunASR","whisper tiny"]},
+{id:"d_tts", band:"data", t:"Edge TTS / SAPI", s:"zh-CN-XiaoxiaoNeural", f:"（外部 / 本地）",
+ d:"默认走 Edge 在线音色，失败回退 SAPI 离线；AIJI_TTS=sapi 可强制离线。声音默认不是定制音色，这一点常被误认。",
+ sym:["AIJI_TTS=sapi"]},
+{id:"d_ext", band:"data", t:"外部服务", s:"GitHub / QQ 空间", f:"（外部）",
+ d:"表情包 manifest、MCP 研究读 README、QQ 空间动作。凡是用户可控的 URL 都先过 net_guard，路径限制在本地白名单目录。",
+ sym:["raw.githubusercontent.com","qzone"]},
+{id:"d_db", band:"data", t:"SQLite 库", s:"24 张业务表 · schema v11", f:"data/aiji.db",
+ d:"只读实测（2026-11-02）：事实 21,365、轮次 24,817、归档 13,719、事实日志 23,469、媒体 7,639、风格 1,918、反思 1,843、trait 1,511、注入 1,512、账户 722；而 heart/outbox/send_queue/write_queue 全 0 行。库文件约 50 MB。",
+ sym:["fact","turn","injection","fact_log","turn_archive"]}
+];
+
+const EDGES = [
+/* 入口 → 接入 */
+{a:"qq",b:"napcat",k:"flow",l:"消息事件"},
+{a:"napcat",b:"astrbot",k:"flow",l:"OneBot 11"},
+{a:"astrbot",b:"server",k:"flow",l:"POST /v1/chat/completions"},
+{a:"openai_cli",b:"server",k:"flow",l:"OpenAI 协议"},
+{a:"console",b:"server",k:"data",l:"REST /api/*"},
+{a:"cli",b:"clib",k:"flow"},
+{a:"clib",b:"memory",k:"flow",l:"同进程调用"},
+{a:"octop",b:"octopb",k:"flow"},
+{a:"octopb",b:"server",k:"flow"},
+/* 接入 → 内部 */
+{a:"server",b:"head",k:"flow",l:"chat"},
+{a:"server",b:"memory",k:"flow",l:"turn / ingest / recall / inject"},
+{a:"server",b:"admin",k:"data"},
+{a:"server",b:"operations",k:"data"},
+{a:"server",b:"service",k:"data"},
+{a:"server",b:"social",k:"flow"},
+{a:"server",b:"song",k:"flow"},
+{a:"server",b:"sticker",k:"flow"},
+{a:"server",b:"voice",k:"flow"},
+{a:"server",b:"t_research",k:"flow"},
+{a:"server",b:"t_approval",k:"data",l:"审批回传"},
+{a:"onebot",b:"memory",k:"flow",l:"事件 → 回复"},
+{a:"onebot",b:"debounce",k:"async"},
+/* 编排 */
+{a:"debounce",b:"head",k:"flow"},
+{a:"head",b:"memory",k:"flow",l:"召回 + 注入"},
+{a:"head",b:"pool",k:"flow",l:"chat()"},
+{a:"head",b:"gate",k:"flow",l:"出门前"},
+{a:"head",b:"persona",k:"flow"},
+{a:"head",b:"selfhood",k:"flow"},
+{a:"head",b:"role",k:"flow",l:"IM 边界"},
+{a:"head",b:"t_schema",k:"flow",l:"tool calls"},
+{a:"head",b:"humanize",k:"flow",l:"IM 节奏"},
+{a:"head",b:"being",k:"flow",l:"状态进 prompt"},
+/* 记忆内部 */
+{a:"memory",b:"recognize",k:"flow"},
+{a:"recognize",b:"engines",k:"flow"},
+{a:"recognize",b:"audio",k:"flow"},
+{a:"memory",b:"writer",k:"async",l:"入队 µs"},
+{a:"writer",b:"extract",k:"async"},
+{a:"extract",b:"store",k:"flow"},
+{a:"extract",b:"pool",k:"flow",l:"模型抽取"},
+{a:"memory",b:"recall",k:"flow",l:"100ms 预算"},
+{a:"recall",b:"store",k:"data"},
+{a:"recall",b:"vectors",k:"data"},
+{a:"memory",b:"inject",k:"flow"},
+{a:"inject",b:"recall",k:"flow"},
+{a:"inject",b:"store",k:"data",l:"留痕 + 强化"},
+{a:"store",b:"vectors",k:"data",l:"索引重建"},
+{a:"janitor",b:"store",k:"async"},
+{a:"store",b:"db",k:"flow"},
+/* 记忆 → 生命 / 出站 */
+{a:"memory",b:"being",k:"flow",l:"observe"},
+{a:"memory",b:"lifecard",k:"flow"},
+{a:"memory",b:"presence",k:"data"},
+{a:"memory",b:"heart",k:"async",l:"出站入队"},
+{a:"lifeloop",b:"lifecard",k:"flow"},
+{a:"lifeloop",b:"being",k:"flow"},
+{a:"checkup",b:"db",k:"db"},
+{a:"proactive",b:"quota",k:"flow",l:"额度闸门"},
+{a:"proactive",b:"heart",k:"async"},
+{a:"presence",b:"web",k:"data",l:"8789"},
+/* 出站 */
+{a:"heart",b:"dispatch",k:"async"},
+{a:"dispatch",b:"onebot",k:"flow",l:"OneBot action 发送"},
+{a:"social",b:"onebot",k:"flow"},
+{a:"song",b:"onebot",k:"flow"},
+{a:"song",b:"netguard",k:"data"},
+{a:"sticker",b:"netguard",k:"data"},
+{a:"t_research",b:"netguard",k:"data"},
+{a:"voice",b:"d_tts",k:"ext"},
+{a:"voice",b:"d_voiceeng",k:"ext",l:"9880 / command"},
+{a:"song",b:"d_files",k:"data"},
+{a:"sticker",b:"d_files",k:"data"},
+{a:"sticker",b:"d_ext",k:"ext",l:"manifest 更新"},
+/* 工具 */
+{a:"t_schema",b:"t_exec",k:"flow",l:"被模型选中"},
+{a:"t_exec",b:"t_policy",k:"flow",l:"先判边界"},
+{a:"t_exec",b:"t_approval",k:"flow",l:"再等人点头"},
+{a:"t_exec",b:"t_gui",k:"flow"},
+{a:"t_gui",b:"sense",k:"flow"},
+{a:"t_research",b:"t_mcp",k:"flow"},
+{a:"t_mcp",b:"d_ext",k:"ext",l:"stdio"},
+/* 运维 */
+{a:"operations",b:"params",k:"flow"},
+{a:"params",b:"config",k:"flow"},
+{a:"operations",b:"d_files",k:"data",l:"runtime.json"},
+{a:"service",b:"d_files",k:"data",l:"lifecycle.log"},
+{a:"admin",b:"db",k:"db",l:"只读快照"},
+/* 外部与存储 */
+{a:"pool",b:"d_llm",k:"ext",l:"8788 / 3065"},
+{a:"pool",b:"d_pool",k:"ext",l:"需出网"},
+{a:"engines",b:"d_engine",k:"ext",l:"本地模型"},
+{a:"db",b:"d_db",k:"db",l:"SQLite"},
+{a:"being",b:"d_db",k:"db"},
+{a:"lifecard",b:"d_db",k:"db"}
+];
+
+/* 主链路：一次真实对话要经过的节点 */
+const MAIN = new Set(["qq","napcat","astrbot","server","head","memory","inject","recall","store",
+  "pool","gate","humanize","heart","dispatch","onebot","writer","extract","db"]);
+
+/* ══════════════════════════════════════════════════════════════
+   2. 人体布局
+   画布 1900 × 2400，中轴 x=950（脊柱）。每个系统占据一个人体部位，
+   节点按网格/列排布在器官光晕之内。
+   ══════════════════════════════════════════════════════════════ */
+const W = 1900, H = 2400, SPINE_X = 950, PAD = 46;
+const SVG = document.getElementById("stage");
+const VP = document.getElementById("viewport");
+const NS = "http://www.w3.org/2000/svg";
+
+const bandOf = {}; BANDS.forEach((b,i)=>{ b.i=i; b.nodes=[]; bandOf[b.id]=b; });
+NODES.forEach(n=>{ (bandOf[n.band]||BANDS[0]).nodes.push(n); });
+
+/* 每个系统在人身上的排布参数 */
+const LAYOUT = {
+  orch:    {kind:"grid", cols:3, nodeW:150, nodeH:50, gapX:16, gapY:16, cx:950, cy:296},
+  entry:   {kind:"rows", rows:[4,3], nodeW:136, nodeH:44, gapX:12, gapY:12, cx:950, yTop:498},
+  ingress: {kind:"rows", rows:[3,2], nodeW:130, nodeH:42, gapX:12, gapY:12, cx:950, yTop:668},
+  out:     {kind:"grid", cols:2, nodeW:140, nodeH:46, gapX:14, gapY:14, cx:800, cy:850},
+  memory:  {kind:"grid", cols:4, nodeW:160, nodeH:50, gapX:16, gapY:18, cx:950, cy:1150},
+  life:    {kind:"rows", rows:[4,3], nodeW:150, nodeH:46, gapX:14, gapY:14, cx:950, yTop:1362},
+  tools:   {kind:"col",  nodeW:140, nodeH:44, gapY:14, x:250, yTop:708},
+  ops:     {kind:"col",  nodeW:140, nodeH:44, gapY:14, x:1650, yTop:708},
+  data:    {kind:"legs", nodeW:150, nodeH:48, gapY:18, xL:700, xR:1200, yTop:1792}
+};
+
+const pos = {};
+BANDS.forEach(b=>{
+  const spec = LAYOUT[b.id], ns = b.nodes;
+  ns.forEach(nd=>{ nd._band = b; });
+  let sx, sy, sw = spec.nodeW, sh = spec.nodeH, gx = spec.gapX||0, gy = spec.gapY||0;
+  if(spec.kind === "grid"){
+    const cols = spec.cols, rows = Math.ceil(ns.length/cols);
+    const gw = cols*sw + (cols-1)*gx, gh = rows*sh + (rows-1)*gy;
+    sx = spec.cx - gw/2; sy = spec.cy - gh/2;
+    ns.forEach((nd,i)=>{
+      const r = Math.floor(i/cols), c = i%cols;
+      pos[nd.id] = {x:sx + c*(sw+gx), y:sy + r*(sh+gy), w:sw, h:sh,
+                    cx:sx+c*(sw+gx)+sw/2, cy:sy+r*(sh+gy)+sh/2};
+    });
+  } else if(spec.kind === "rows"){
+    const rows = spec.rows;
+    let yy = spec.yTop;
+    let i = 0;
+    rows.forEach((n,ri)=>{
+      const rw = n*sw + (n-1)*gx;
+      const rx = spec.cx - rw/2;
+      for(let c=0;c<n;c++,i++){
+        const nd = ns[i]; if(!nd) break;
+        pos[nd.id] = {x:rx + c*(sw+gx), y:yy, w:sw, h:sh, cx:rx+c*(sw+gx)+sw/2, cy:yy+sh/2};
+      }
+      yy += sh + gy;
+    });
+  } else if(spec.kind === "col"){
+    let yy = spec.yTop;
+    ns.forEach((nd,i)=>{
+      pos[nd.id] = {x:spec.x - sw/2, y:yy, w:sw, h:sh, cx:spec.x, cy:yy+sh/2};
+      yy += sh + gy;
+    });
+  } else if(spec.kind === "legs"){
+    const half = Math.ceil(ns.length/2);
+    ns.forEach((nd,i)=>{
+      const x = i < half ? spec.xL : spec.xR;
+      const j = i < half ? i : i - half;
+      const yy = spec.yTop + j*(sh+gy);
+      pos[nd.id] = {x:x - sw/2, y:yy, w:sw, h:sh, cx:x, cy:yy+sh/2};
+    });
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════
+   3. 人体轮廓（装饰） + 器官光晕
+   ══════════════════════════════════════════════════════════════ */
+function el(tag, attrs, parent){
+  const e = document.createElementNS(NS, tag);
+  for(const k in attrs) if(attrs[k]!==undefined && attrs[k]!==null) e.setAttribute(k, attrs[k]);
+  if(parent) parent.appendChild(e);
+  return e;
+}
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+/* 箭头 */
+const defs = document.getElementById("defs");
+const KINDS = {flow:"#7dd3fc", async:"#fbbf24", data:"#94a3b8", db:"#7c8ea8", ext:"#f472b6"};
+Object.entries(KINDS).forEach(([k,c])=>{
+  const m = el("marker", {id:"arw-"+k, viewBox:"0 0 10 10", refX:9, refY:5,
+    markerWidth:6, markerHeight:6, orient:"auto-start-reverse"}, defs);
+  el("path", {d:"M0,0 L10,5 L0,10 z", fill:c, opacity:.85}, m);
+});
+
+const gBody   = el("g", {class:"body"}, VP);
+const gBands  = el("g", {class:"bands"}, VP);
+const gEdges  = el("g", {class:"edges"}, VP);
+const gLabels = el("g", {class:"labels"}, VP);
+const gNodes  = el("g", {class:"nodes"}, VP);
+
+/* 人体轮廓 */
+const BODY = [
+  {e:"ellipse", cx:950, cy:330, rx:318, ry:298, cls:"body-out"},                    /* 头 */
+  {e:"rect",    x:884, y:600, w:132, h:106, rx:14, cls:"body-out"},                 /* 脖子 */
+  {e:"path",    d:"M 570 700 Q 950 662 1330 700 L 1302 1706 Q 950 1774 598 1706 Z", cls:"body-out"}, /* 躯干 */
+  {e:"path",    d:"M 585 708 Q 380 768 295 958 Q 255 1098 255 1188", cls:"body-limb", sw:150},      /* 左臂 */
+  {e:"path",    d:"M 1315 708 Q 1520 768 1605 958 Q 1645 1098 1645 1188", cls:"body-limb", sw:150}, /* 右臂 */
+  {e:"path",    d:"M 700 1752 L 700 2098 Q 700 2242 690 2332", cls:"body-limb", sw:132},            /* 左腿 */
+  {e:"path",    d:"M 1200 1752 L 1200 2098 Q 1200 2242 1210 2332", cls:"body-limb", sw:132},        /* 右腿 */
+  {e:"ellipse", cx:255,  cy:1215, rx:46, ry:62, cls:"body-out"},                    /* 左手 */
+  {e:"ellipse", cx:1645, cy:1215, rx:46, ry:62, cls:"body-out"},                    /* 右手 */
+  {e:"ellipse", cx:690,  cy:2340, rx:72, ry:26, cls:"body-out"},                    /* 左脚 */
+  {e:"ellipse", cx:1210, cy:2340, rx:72, ry:26, cls:"body-out"}                     /* 右脚 */
+];
+BODY.forEach(b=>{
+  const attrs = {class:b.cls};
+  if(b.e === "ellipse"){ attrs.cx=b.cx; attrs.cy=b.cy; attrs.rx=b.rx; attrs.ry=b.ry; }
+  if(b.e === "rect"){ attrs.x=b.x; attrs.y=b.y; attrs.width=b.w; attrs.height=b.h; attrs.rx=b.rx; }
+  if(b.e === "path"){ attrs.d=b.d; if(b.sw) attrs["stroke-width"]=b.sw; }
+  el(b.e, attrs, gBody);
+});
+/* 脸：眼睛 + 嘴 */
+el("circle", {class:"body-face", cx:846, cy:440, r:17}, gBody);
+el("circle", {class:"body-face", cx:1054, cy:440, r:17}, gBody);
+el("path", {class:"body-limb", d:"M 890 506 Q 950 534 1010 506", "stroke-width":3}, gBody);
+
+/* 器官光晕 + 分层标题 */
+const ORGANS = [
+  {band:"orch",   e:"ellipse", cx:950, cy:296, rx:354, ry:214},
+  {band:"entry",  e:"ellipse", cx:950, cy:548, rx:324, ry:78},
+  {band:"ingress",e:"rect",    x:836, y:660, w:228, h:112, rx:16},
+  {band:"out",    e:"ellipse", cx:800, cy:850, rx:198, ry:134},
+  {band:"memory", e:"rect",    x:600, y:1012, w:700, h:274, rx:20},
+  {band:"life",   e:"ellipse", cx:950, cy:1415, rx:354, ry:110},
+  {band:"tools",  e:"arm",     d:"M 585 708 Q 380 768 295 958 Q 255 1098 255 1188", sw:176},
+  {band:"ops",    e:"arm",     d:"M 1315 708 Q 1520 768 1605 958 Q 1645 1098 1645 1188", sw:176},
+  {band:"data",   e:"leg",     legs:[
+    {d:"M 700 1752 L 700 2098 Q 700 2242 690 2332", sw:168},
+    {d:"M 1200 1752 L 1200 2098 Q 1200 2242 1210 2332", sw:168}]}
+];
+ORGANS.forEach(o=>{
+  const b = bandOf[o.band];
+  if(o.e === "ellipse"){
+    el("ellipse", {class:"band-bg", cx:o.cx, cy:o.cy, rx:o.rx, ry:o.ry,
+      fill:b.color, "fill-opacity":.045, stroke:b.color, "stroke-opacity":.16}, gBands);
+  } else if(o.e === "rect"){
+    el("rect", {class:"band-bg", x:o.x, y:o.y, width:o.w, height:o.h, rx:o.rx,
+      fill:b.color, "fill-opacity":.045, stroke:b.color, "stroke-opacity":.16}, gBands);
+  } else if(o.e === "arm"){
+    el("path", {class:"band-arm", d:o.d, "stroke-width":o.sw,
+      stroke:b.color, "stroke-opacity":.10, "fill-opacity":0}, gBands);
+  } else if(o.e === "leg"){
+    o.legs.forEach(l=>{
+      el("path", {class:"band-arm", d:l.d, "stroke-width":l.sw,
+        stroke:b.color, "stroke-opacity":.10, "fill-opacity":0}, gBands);
+    });
+  }
+});
+
+/* 器官标签 */
+const BAND_LABELS = {
+  orch:    {x:628, y:118},
+  entry:   {x:640, y:484},
+  ingress: {x:848, y:654},
+  out:     {x:606, y:710},
+  memory:  {x:606, y:1000},
+  life:    {x:600, y:1296},
+  tools:   {x:150, y:668},
+  ops:     {x:1540, y:668},
+  data:    {x:620, y:1740}
+};
+BANDS.forEach(b=>{
+  const lp = BAND_LABELS[b.id];
+  if(!lp) return;
+  const lab = el("text", {class:"band-label", x:lp.x, y:lp.y, fill:b.color, "fill-opacity":.85}, gBands);
+  lab.textContent = b.name;
+});
+
+/* 节点 */
+const nodeEl = {}, edgeEl = {};
+NODES.forEach(nd=>{
+  const p = pos[nd.id], b = nd._band;
+  const g = el("g", {class:"node", "data-id":nd.id, transform:`translate(${p.x},${p.y})`}, gNodes);
+  el("rect", {class:"box", x:0, y:0, width:p.w, height:p.h, rx:11}, g);
+  el("rect", {class:"accent", x:0, y:8, width:3.5, height:p.h-16, rx:2, fill:b.color, opacity:.75}, g);
+  const t = el("text", {class:"t", x:15, y:p.h/2-6}, g); t.textContent = nd.t;
+  const s = el("text", {class:"s", x:15, y:p.h/2+10}, g); s.textContent = nd.s;
+  g.addEventListener("click", ev=>{ ev.stopPropagation(); pin(nd.id); });
+  g.addEventListener("mouseenter", ()=>{ hoverId = nd.id; apply(); });
+  g.addEventListener("mouseleave", ()=>{ hoverId = null; apply(); });
+  nodeEl[nd.id] = g;
+});
+
+/* 边：db 类沿「脊柱」（中轴）走总线 */
+function pathFor(e){
+  const a = pos[e.a], b = pos[e.b];
+  if(!a || !b) return null;
+  if(e.k === "db"){
+    const sx = a.x + a.w, sy = a.y + a.h/2;
+    const ty = b.y + b.h/2;
+    return {d:`M${sx},${sy} L${SPINE_X},${sy} L${SPINE_X},${ty} L${b.x+b.w},${ty}`,
+            x:(SPINE_X + b.x + b.w)/2, y:ty-6};
+  }
+  if(e.a === e.b) return null;
+  const sameBand = Math.abs(a.y - b.y) < 1;
+  if(sameBand){
+    if(b.x > a.x){
+      const x1=a.x+a.w, y1=a.y+a.h/2, x2=b.x, y2=b.y+b.h/2;
+      return {d:`M${x1},${y1} C${x1+30},${y1} ${x2-30},${y2} ${x2},${y2}`, x:(x1+x2)/2, y:y1-7};
+    }
+    const dip = a.y + a.h + 30;
+    const x1=a.x+a.w/2, x2=b.x+b.w/2;
+    return {d:`M${x1},${a.y+a.h} C${x1},${dip} ${x2},${dip} ${x2},${b.y+b.h}`, x:(x1+x2)/2, y:dip};
+  }
+  if(b.y > a.y){
+    const x1=a.x+a.w/2, y1=a.y+a.h, x2=b.x+b.w/2, y2=b.y;
+    const dy = Math.max(26, (y2-y1)*0.48);
+    return {d:`M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2}`,
+            x:(x1+x2)/2, y:(y1+y2)/2};
+  }
+  const x1=a.x+a.w/2, y1=a.y, x2=b.x+b.w/2, y2=b.y+b.h;
+  const dy = Math.max(30, (y1-y2)*0.45);
+  return {d:`M${x1},${y1} C${x1},${y1-dy} ${x2},${y2+dy} ${x2},${y2}`,
+          x:(x1+x2)/2, y:(y1+y2)/2};
+}
+
+const adj = {}; NODES.forEach(n=>{ adj[n.id] = new Set(); });
+EDGES.forEach((e,idx)=>{
+  const p = pathFor(e);
+  if(!p) return;
+  const path = el("path", {class:"edge k-"+e.k, d:p.d, "marker-end":`url(#arw-${e.k})`}, gEdges);
+  edgeEl[idx] = path;
+  if(e.l){
+    const lab = el("text", {class:"lbl", x:p.x, y:p.y, "text-anchor":"middle"}, gLabels);
+    lab.textContent = e.l; e._lab = lab;
+  }
+  adj[e.a] && adj[e.a].add(e.b);
+  adj[e.b] && adj[e.b].add(e.a);
+});
+
+/* ══════════════════════════════════════════════════════════════
+   4. 视图变换（缩放 / 平移）
+   ══════════════════════════════════════════════════════════════ */
+const view = {k:1, tx:0, ty:0, min:.18, max:2.4};
+
+function applyView(){
+  VP.setAttribute("transform", `matrix(${view.k},0,0,${view.k},${view.tx},${view.ty})`);
+}
+/* 可用宽度：抽屉打开时，画布不该被它盖住 */
+function availW(){
+  const r = SVG.getBoundingClientRect();
+  const d = drawer.classList.contains("open") ? Math.min(392, r.width*0.46) : 0;
+  return r.width - d;
+}
+function fit(){
+  const r = SVG.getBoundingClientRect();
+  const aw = availW();
+  const kk = Math.min((aw-30)/W, (r.height-30)/H);
+  view.k = Math.max(view.min, Math.min(view.max, kk));
+  view.tx = (aw - W*view.k)/2;
+  view.ty = (r.height - H*view.k)/2;
+  applyView();
+}
+function zoomAt(factor, cx, cy){
+  const r = SVG.getBoundingClientRect();
+  const px = (cx ?? availW()/2), py = (cy ?? SVG.getBoundingClientRect().height/2);
+  const nk = Math.max(view.min, Math.min(view.max, view.k*factor));
+  const ratio = nk/view.k;
+  view.tx = px - (px - view.tx)*ratio;
+  view.ty = py - (py - view.ty)*ratio;
+  view.k = nk;
+  applyView();
+}
+SVG.addEventListener("wheel", ev=>{
+  ev.preventDefault();
+  const r = SVG.getBoundingClientRect();
+  zoomAt(Math.pow(1.0016, -ev.deltaY), ev.clientX-r.left, ev.clientY-r.top);
+  applyLabels();
+}, {passive:false});
+
+let drag = null;
+SVG.addEventListener("pointerdown", ev=>{
+  if(ev.button !== 0) return;
+  drag = {x:ev.clientX, y:ev.clientY, tx:view.tx, ty:view.ty, moved:false};
+  SVG.classList.add("dragging");
+  SVG.setPointerCapture(ev.pointerId);
+});
+SVG.addEventListener("pointermove", ev=>{
+  if(!drag) return;
+  const dx = ev.clientX-drag.x, dy = ev.clientY-drag.y;
+  if(Math.abs(dx)+Math.abs(dy) > 3) drag.moved = true;
+  view.tx = drag.tx + dx; view.ty = drag.ty + dy;
+  applyView();
+});
+function endDrag(ev){
+  if(!drag) return;
+  const moved = drag.moved;
+  drag = null;
+  SVG.classList.remove("dragging");
+  try{ SVG.releasePointerCapture(ev.pointerId); }catch(_){}
+  if(!moved) pin(null);
+}
+SVG.addEventListener("pointerup", endDrag);
+SVG.addEventListener("pointercancel", endDrag);
+
+/* ══════════════════════════════════════════════════════════════
+   5. 高亮 / 搜索 / 分层开关
+   ══════════════════════════════════════════════════════════════ */
+let hoverId = null, pinned = null, mainMode = false, query = "";
+const offBands = new Set();
+const drawer = document.getElementById("drawer");
+
+function matches(nd, q){
+  if(!q) return true;
+  const hay = [nd.t, nd.s, nd.f, nd.d, nd.band, (nd.sym||[]).join(" ")].join(" ").toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(w=>hay.includes(w));
+}
+function apply(){
+  const q = query.trim();
+  const hits = q ? new Set(NODES.filter(n=>matches(n,q)).map(n=>n.id)) : null;
+  const active = pinned || hoverId;
+  const hood = active ? new Set([active, ...(adj[active]||[])]) : null;
+
+  NODES.forEach(nd=>{
+    const g = nodeEl[nd.id];
+    const off = offBands.has(nd.band);
+    g.classList.toggle("off", off);
+    const dim = off ||
+      (mainMode && !MAIN.has(nd.id)) ||
+      (hits && !hits.has(nd.id)) ||
+      (hood && !hood.has(nd.id));
+    g.classList.toggle("dim", !!dim && !off);
+    g.classList.toggle("sel", pinned === nd.id);
+    g.classList.toggle("hit", !!(hits && hits.has(nd.id) && !dim));
+  });
+
+  EDGES.forEach((e,idx)=>{
+    const g = edgeEl[idx]; if(!g) return;
+    const off = offBands.has(e.a) || offBands.has(e.b);
+    const hl = !!active && (e.a === active || e.b === active);
+    const dim = off ||
+      (mainMode && !(MAIN.has(e.a) && MAIN.has(e.b))) ||
+      (hits && !(hits.has(e.a) && hits.has(e.b))) ||
+      (hood && !hl);
+    g.classList.toggle("hl", hl && !dim);
+    g.classList.toggle("dim", !!dim);
+    if(e._lab){
+      const on = (hl && !dim) || (q && !dim) || (!dim && view.k > 1.25);
+      e._lab.classList.toggle("on", !!on);
+    }
+  });
+  applyLabels();
+  if(pinned) showDetail(pinned);
+}
+function applyLabels(){ /* 缩放后按需显示边标签 */
+  EDGES.forEach(e=>{
+    if(!e._lab) return;
+    const dim = e._lab.classList.contains("on");
+    if(!dim && view.k > 1.25 && !e._lab.classList.contains("dim")) e._lab.classList.add("on");
+  });
+}
+
+/* 分层开关 */
+const chips = document.getElementById("chips");
+BANDS.forEach(b=>{
+  const c = document.createElement("div");
+  c.className = "chip"; c.dataset.band = b.id;
+  c.innerHTML = `<i style="background:${b.color}"></i>${esc(b.name.replace(/^[①②③④⑤⑥⑦⑧⑨]\s*/,""))}`;
+  c.title = b.cn + " · 点击隐藏/显示";
+  c.onclick = ()=>{
+    if(offBands.has(b.id)) offBands.delete(b.id); else offBands.add(b.id);
+    c.classList.toggle("off", offBands.has(b.id));
+    apply();
+  };
+  chips.appendChild(c);
+});
+
+/* 搜索 */
+const qInput = document.getElementById("q");
+qInput.addEventListener("input", ()=>{ query = qInput.value; apply(); });
+qInput.addEventListener("keydown", ev=>{
+  if(ev.key === "Escape"){ qInput.value = ""; query = ""; apply(); qInput.blur(); }
+});
+
+/* 主链路开关 */
+const mainBtn = document.getElementById("mainpath");
+mainBtn.onclick = ()=>{ mainMode = !mainMode; mainBtn.classList.toggle("on", mainMode); apply(); };
+
+/* 详情 */
+function neighborsOf(id){ return [...(adj[id]||[])].sort(); }
+function showDetail(id){
+  const nd = NODES.find(n=>n.id === id); if(!nd) return;
+  const b = nd._band;
+  const nbs = neighborsOf(id).map(nid=>{
+    const n = NODES.find(x=>x.id === nid);
+    return n ? `<button data-go="${n.id}">${esc(n.t)} <span style="color:#6f8fb3">· ${esc(n.s)}</span></button>` : "";
+  }).join("");
+  drawer.innerHTML = `
+    <button class="close" id="dclose" aria-label="关闭">×</button>
+    <div class="bandtag"><i style="width:7px;height:7px;border-radius:2px;background:${b.color};display:inline-block"></i>${esc(b.name)}</div>
+    <h2>${esc(nd.t)}</h2>
+    <div style="color:#8ea3bf;font-size:12px">${esc(nd.s)}</div>
+    <div class="file">${esc(nd.f)}</div>
+    <p>${esc(nd.d)}</p>
+    ${ (nd.sym&&nd.sym.length) ? `<h3>关键符号</h3><div>${nd.sym.map(s=>`<span class="sym">${esc(s)}</span>`).join("")}</div>` : "" }
+    <h3>相连 ${neighborsOf(id).length} 处</h3>
+    <div class="nb">${nbs || '<span class="hint">没有连线。</span>'}</div>
+    <h3>相关的落盘证据</h3>
+    <div class="hint">
+      代码位置：<kbd>${esc(nd.f)}</kbd><br>
+      数据库：<kbd>data/aiji.db</kbd> · schema v11 · 24 张业务表<br>
+      项目档案：<kbd>docs/agent/PROJECT_STATE.md</kbd>
+    </div>`;
+  drawer.classList.add("open");
+  drawer.querySelectorAll("[data-go]").forEach(btn=>{
+    btn.onclick = ()=>{ pin(btn.dataset.go); };
+  });
+  drawer.querySelector("#dclose").onclick = ()=>{ pin(null); };
+}
+function overview(){
+  const cn = NODES.length, en = EDGES.length;
+  drawer.innerHTML = `
+    <button class="close" id="dclose" aria-label="关闭">×</button>
+    <div class="bandtag">怎么读这具身体</div>
+    <h2>AIJiYi：一具会记忆、会说话、有心跳的身体</h2>
+    <p>这张图把系统画成一个人：<b>眼耳口</b>接收外部世界（QQ、客户端、控制台）→ <b>咽喉</b>汇流成一条 HTTP 核心 → <b>大脑皮层</b>想出一句话 → <b>心脏</b>泵出、由血管（OneBot）送达；<b>海马体</b>负责记忆，<b>内分泌</b>掌管状态与存在感，<b>双手</b>执行动作与运维，<b>骨架与双脚</b>托住全部数据。位置即职责。</p>
+    <p>全图 ${cn} 个节点、${en} 条连线，覆盖 <b>aiji/ 下 55 个 .py 模块</b>、控制台前端、6 个外部进程与本地模型。</p>
+    <h3>三个抓手</h3>
+    <div class="hint">
+      ① <b>一次对话（神经信号）</b>：QQ → NapCat → AstrBot → 咽喉 <kbd>/v1/chat/completions</kbd> → 大脑对话头 → 召回/注入 → 模型池 → 出口闸门 → 心脏 → OneBot 送出。<br>
+      ② <b>一次沉淀（消化吸收）</b>：入队 µs 级 → 眼睛看/耳朵听（识别）→ 抽取（事实/知识/关系/画像/风格/摘要）→ 冲突消解 → 写进海马体（SQLite）；全过程不阻塞主链路。<br>
+      ③ <b>一次代谢（清理）</b>：读→强化、冻结、归档、淘汰；由 janitor 低频 + 水位触发。
+    </div>
+    <h3>关键数字（只读实测）</h3>
+    <div class="hint">
+      事实 21,365 · 轮次 24,817 · 归档 13,719 · 注入 1,512 · 事实日志 23,469<br>
+      heart / outbox / send_queue / write_queue：<b>全 0 行</b>（发送实际由 AstrBot 插件完成）
+    </div>
+    <h3>操作</h3>
+    <div class="hint">
+      滚轮缩放、拖拽平移；点节点看说明与相邻关系；<kbd>F</kbd> 适应窗口、<kbd>+</kbd>/<kbd>−</kbd> 缩放、<kbd>Esc</kbd> 取消选中、<kbd>/</kbd> 搜索。<br>
+      顶部「主链路」只高亮一次真实对话的路径；点分层胶囊可以单独隐藏一个器官/系统。
+    </div>`;
+  drawer.classList.add("open");
+  drawer.querySelector("#dclose").onclick = ()=>{ drawer.classList.remove("open"); };
+}
+function readHash(){
+  const h = decodeURIComponent((location.hash || "").slice(1));
+  return NODES.some(n=>n.id === h) ? h : null;
+}
+function pin(id, opts){
+  pinned = id;
+  if(id) showDetail(id); else if(drawer.classList.contains("open")) overview();
+  apply();
+  if(!(opts && opts.silent)){
+    try{ history.replaceState(null, "", location.pathname + location.search + (id ? "#"+id : "")); }catch(_){}
+  }
+}
+window.addEventListener("hashchange", ()=>{
+  const h = readHash();
+  if(h !== pinned) pin(h, {silent:true});
+});
+
+/* 顶栏统计 */
+const statsEl = document.getElementById("stats");
+[
+  ["aiji/ 模块", "55"], ["schema", "v11"], ["业务表", "24"],
+  ["单测", "478"], ["测试文件", "43"], ["bench", "9"]
+].forEach(([a,b])=>{
+  const d = document.createElement("div");
+  d.className = "stat"; d.innerHTML = `${a} <b>${b}</b>`;
+  statsEl.appendChild(d);
+});
+
+document.getElementById("fit").onclick = ()=>fit();
+document.getElementById("zin").onclick = ()=>zoomAt(1.22);
+document.getElementById("zout").onclick = ()=>zoomAt(1/1.22);
+
+document.addEventListener("keydown", ev=>{
+  const inField = /input|textarea/i.test(ev.target.tagName);
+  if(ev.key === "Escape"){
+    if(query){ qInput.value=""; query=""; apply(); }
+    else { pinned = null; drawer.classList.remove("open"); apply(); }
+    return;
+  }
+  if(inField) return;
+  if(ev.key === "/"){ ev.preventDefault(); qInput.focus(); }
+  else if(ev.key === "f" || ev.key === "F"){ fit(); }
+  else if(ev.key === "0"){ view.k=1; view.tx=0; view.ty=0; applyView(); }
+  else if(ev.key === "+" || ev.key === "="){ zoomAt(1.22); }
+  else if(ev.key === "-" || ev.key === "_"){ zoomAt(1/1.22); }
+});
+
+/* 启动 */
+applyView();
+fit();
+apply();
+if(readHash()) pin(readHash(), {silent:true}); else overview();
+window.addEventListener("resize", ()=>{ /* 保持用户视角，不强制 reset */ });
+</script>
+</body>
+</html>

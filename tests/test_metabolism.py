@@ -13,6 +13,7 @@ import sys
 import time
 import types
 import unittest
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,9 +30,7 @@ WX = Ident("wechat", "u1", "default")
 
 
 def workdir(name: str) -> Path:
-    d = ROOT / ".tmp" / f"test_meta_{name}"
-    if d.exists():
-        shutil.rmtree(d, ignore_errors=True)
+    d = ROOT / ".tmp" / f"test_meta_{name}_{uuid.uuid4().hex[:8]}"
     d.mkdir(mode=0o777, parents=True, exist_ok=True)
     return d
 

@@ -1,0 +1,93 @@
+{
+  "src": "D:\\AIJiYi\\docs\\architecture.html",
+  "url": "file:///D:/AIJiYi/docs/architecture.html",
+  "outdir": "D:\\AIJiYi\\docs\\_shots\\_gaze_check",
+  "include": [
+    "lint",
+    "screenshots",
+    "structure"
+  ],
+  "shots": {
+    "desktop": {
+      "revealed": 0,
+      "eval": {
+        "executed": true,
+        "result": [
+          "translate(6.984623707150455,-0.4637150736301868)",
+          "translate(0,0)"
+        ]
+      },
+      "screenshot": "D:\\AIJiYi\\docs\\_shots\\_gaze_check\\architecture_desktop.jpg",
+      "screenshotBytes": 67681,
+      "truncated": false,
+      "structure": {
+        "title": "AIJiYi 人体架构 · 儿童行为",
+        "firstH1": "AIJiYi 人体架构",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "fullpage": {
+          "w": 1440,
+          "h": 900
+        },
+        "counts": {
+          "section": 0,
+          "h1": 1,
+          "h2": 1,
+          "img": 0,
+          "canvas": 0,
+          "svg": 6,
+          "links": 0,
+          "buttons": 5
+        }
+      },
+      "consoleErrors": [],
+      "consoleWarnings": [],
+      "horizontalOverflow": [],
+      "resourceErrors": []
+    }
+  },
+  "engine": "playwright",
+  "chromiumExec": "C:\\Users\\22166/AppData/Local/ms-playwright\\chromium-1134\\chrome-win\\chrome.exe",
+  "elapsedSec": 3.94,
+  "schemaVersion": 2,
+  "status": "pass",
+  "engineInfo": {
+    "name": "playwright",
+    "degraded": false,
+    "degradedReasons": []
+  },
+  "input": {
+    "original": "D:\\AIJiYi\\docs\\architecture.html",
+    "resolvedPath": "D:\\AIJiYi\\docs\\architecture.html",
+    "baseUrl": "file:///D:/AIJiYi/docs/architecture.html",
+    "protocol": "file",
+    "cwd": "D:\\AIJiYi",
+    "mediaMode": {
+      "reducedMotion": true
+    }
+  },
+  "artifacts": {
+    "screenshots": [
+      {
+        "viewport": "desktop",
+        "path": "D:\\AIJiYi\\docs\\_shots\\_gaze_check\\architecture_desktop.jpg",
+        "size": 67681,
+        "visualCoverage": {
+          "complete": true,
+          "reason": null
+        }
+      }
+    ]
+  },
+  "summary": {
+    "blocker": 0,
+    "error": 0,
+    "warning": 0,
+    "info": 0
+  },
+  "findings": [],
+  "prioritizedActions": [],
+  "reportPath": "D:\\AIJiYi\\docs\\_shots\\_gaze_check\\report.json"
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -141,12 +142,15 @@ try:
     probe.case("真实 ASR 引擎已安装（funasr/whisper）", re.HAS_ASR or re.HAS_FUNASR,
                f"HAS_ASR={re.HAS_ASR} HAS_FUNASR={re.HAS_FUNASR}")
     if re.HAS_ASR or re.HAS_FUNASR:
-        from aiji.pet import voice as pv
-
         wav = base_dir / "tts.wav"
-        saved = pv.save_wav("我叫陈明，住在深圳，周末喜欢钓鱼。", wav)
-        probe.case("SAPI 合成参考音频成功", bool(saved) and wav.exists(),
-                   f"path={saved} bytes={wav.stat().st_size if wav.exists() else 0}")
+        tts = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(Path(__file__).resolve().parents[1] / "sapi_tts.ps1"),
+             "-Text", "我叫陈明，住在深圳，周末喜欢钓鱼。", "-Output", str(wav)],
+            capture_output=True, timeout=60, check=False,
+        )
+        probe.case("SAPI 合成参考音频成功", tts.returncode == 0 and wav.exists(),
+                   f"path={wav} bytes={wav.stat().st_size if wav.exists() else 0}")
         if wav.exists():
             started = time.time()
             text, conf = re.transcribe_wav_bytes(wav.read_bytes())

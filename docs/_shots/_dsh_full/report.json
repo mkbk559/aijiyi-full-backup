@@ -1,0 +1,117 @@
+{
+  "src": "D:\\AIJiYi\\docs\\architecture.html",
+  "url": "file:///D:/AIJiYi/docs/architecture.html",
+  "outdir": "D:\\AIJiYi\\docs\\_shots\\_dsh_full",
+  "include": [
+    "lint",
+    "screenshots",
+    "structure"
+  ],
+  "shots": {
+    "desktop": {
+      "revealed": 0,
+      "eval": {
+        "executed": true,
+        "result": null
+      },
+      "screenshot": "D:\\AIJiYi\\docs\\_shots\\_dsh_full\\architecture_desktop.jpg",
+      "screenshotBytes": 75446,
+      "truncated": false,
+      "textContrastIssues": [
+        {
+          "_samplingFailed": 1,
+          "_note": "1 组候选的背景采样截图失败（首个错误：Page.screenshot: Clipped area is either empty or outside the resulting image\nCall log:\n  - taking page screenshot\n  - waiting for fonts to load...\n  - fonts loa），这些段落未被检测"
+        }
+      ],
+      "textContrastHint": "含义：正文段落（`<p>`）的文字颜色与背景色对比度过低，读起来吃力或几乎读不出来。contrastRatio 是 WCAG 对比度（1.0 = 完全同色），count 是同一套配色在页面里出现的次数，color / background 是实际渲染色（已合成 rgba 透明度与祖先 opacity）。**本规则只查 `<p>`、只报低于 1.6 的**：人工盲测 28 个真实产物的结论——低对比度的标签、徽章、序号、按钮（span / div / a / button）全部被判「不影响使用」，它们靠位置和形状就能识别；只有需要通读的正文段落读不清才是真问题。所以触发了基本就是真的，不要当成可选建议。 | 修法：把正文色与背景拉开亮度差——正文正常应在 4.5:1 以上，最低 3:1。常见根因是**同一套文字色被复用到了两种背景上**（浅色区和深色区共用一个 --text 变量），在其中一种上就糊了；按背景分层定义文字色（如 --text-on-light / --text-on-dark）可以根治。只调透明度（`opacity` / `rgba` 的 alpha）通常不够，要动色值本身的明度。 | 检测局限（不是豁免，是**查不到**）：背景为渐变、图片、伪元素色块或绝对定位覆盖层时，拿不到确定的背景色，这些元素一律跳过不报——**渐变背景上的靠色本规则发现不了，要靠截图人工核对**。 | 豁免：(1) 故意做的水印、暗纹、装饰性段落，截图上确认是设计意图；(2) 正文本身是次要信息且用户明确要求低调处理。",
+      "structure": {
+        "title": "AIJiYi 人体架构 · 儿童行为",
+        "firstH1": "AIJiYi 人体架构",
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "fullpage": {
+          "w": 1440,
+          "h": 900
+        },
+        "counts": {
+          "section": 0,
+          "h1": 1,
+          "h2": 1,
+          "img": 0,
+          "canvas": 0,
+          "svg": 6,
+          "links": 0,
+          "buttons": 5
+        }
+      },
+      "consoleErrors": [],
+      "consoleWarnings": [],
+      "horizontalOverflow": [],
+      "resourceErrors": []
+    }
+  },
+  "engine": "playwright",
+  "chromiumExec": "C:\\Users\\22166/AppData/Local/ms-playwright\\chromium-1134\\chrome-win\\chrome.exe",
+  "elapsedSec": 6.2,
+  "schemaVersion": 2,
+  "status": "warning",
+  "engineInfo": {
+    "name": "playwright",
+    "degraded": false,
+    "degradedReasons": []
+  },
+  "input": {
+    "original": "D:\\AIJiYi\\docs\\architecture.html",
+    "resolvedPath": "D:\\AIJiYi\\docs\\architecture.html",
+    "baseUrl": "file:///D:/AIJiYi/docs/architecture.html",
+    "protocol": "file",
+    "cwd": "D:\\AIJiYi",
+    "mediaMode": {
+      "reducedMotion": true
+    }
+  },
+  "artifacts": {
+    "screenshots": [
+      {
+        "viewport": "desktop",
+        "path": "D:\\AIJiYi\\docs\\_shots\\_dsh_full\\architecture_desktop.jpg",
+        "size": 75446,
+        "visualCoverage": {
+          "complete": true,
+          "reason": null
+        }
+      }
+    ]
+  },
+  "summary": {
+    "blocker": 0,
+    "error": 0,
+    "warning": 1,
+    "info": 0
+  },
+  "findings": [
+    {
+      "ruleId": "textContrastIssues",
+      "severity": "warning",
+      "kind": "accessibility",
+      "viewport": "desktop",
+      "selector": null,
+      "evidence": {
+        "_samplingFailed": 1,
+        "_note": "1 组候选的背景采样截图失败（首个错误：Page.screenshot: Clipped area is either empty or outside the resulting image\nCall log:\n  - taking page screenshot\n  - waiting for fonts to load...\n  - fonts loa），这些段落未被检测"
+      },
+      "dedupeKey": "textContrastIssues|desktop||0"
+    }
+  ],
+  "prioritizedActions": [
+    {
+      "ruleId": "textContrastIssues",
+      "severity": "warning",
+      "viewport": "desktop",
+      "selector": null
+    }
+  ],
+  "reportPath": "D:\\AIJiYi\\docs\\_shots\\_dsh_full\\report.json"
+}

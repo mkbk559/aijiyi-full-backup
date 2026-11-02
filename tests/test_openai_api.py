@@ -1,4 +1,4 @@
-"""OpenAI 兼容接入层：外部桌宠/IDE/网关只依赖标准协议。
+"""OpenAI 兼容接入层：外部 IDE/网关只依赖标准协议。
 
 跑法： python -m unittest tests.test_openai_api -v
 """
@@ -780,12 +780,12 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         self.assertEqual(content, "你在杭州。")
         self.assertEqual(chunks[-1]["choices"][0]["finish_reason"], "stop")
 
-    def test_console_page_is_served(self):
+    def test_operations_page_is_served(self):
         with urllib.request.urlopen(self.base + "/", timeout=10) as response:
             self.assertTrue(response.headers["Content-Type"].startswith("text/html"))
             html = response.read().decode("utf-8")
 
-        self.assertIn("大肥鱼", html)
+        self.assertIn("全部具体功能", html)
         self.assertIn("/v1/chat/completions", html)
 
     def test_openai_routes_require_bearer_key_when_configured(self):

@@ -118,6 +118,7 @@ class VoiceRegistryTest(unittest.TestCase):
             with (
                 mock.patch.object(registry, "_edge", fake_edge),
                 mock.patch.object(registry, "_to_wav", fake_to_wav),
+                mock.patch.object(registry, "_provider_ready", return_value=True),
             ):
                 result = registry.synthesize(
                     "测试语音", root / "out.wav", profile_id="fragile")

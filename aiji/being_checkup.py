@@ -227,7 +227,7 @@ class BeingCheckup:
             _check(
                 "environmental_spontaneity",
                 None,
-                "需要桌宠真实截屏、用户行为和主动开口形成闭环。",
+                "需要真实用户互动和主动开口形成闭环。",
             ),
             _check(
                 "community_surprise",

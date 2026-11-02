@@ -136,6 +136,9 @@ class Settings:
                   "writer_backlog_heuristic_at",
                   "typing_min_ms", "typing_max_ms", "actions_enabled", "action_root",
                   "action_approval_timeout_s", "action_max_rounds", "persona",
+                  "rank_mode", "decay_enabled", "inject_min_rel",
+                  "credits_url", "credits_json_path", "credits_models_url",
+                  "credits_model", "credits_static", "credits_reserve",
                   "social_media_dir", "sticker_dir"):
             if k in cfg:
                 setattr(s, k, cfg[k])

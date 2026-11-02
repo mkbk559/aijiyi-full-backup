@@ -19,8 +19,6 @@ from aiji.db import DB
 from aiji.head import Head
 from aiji.pool import ModelPool, PoolExhausted
 from aiji.presence import PresenceHub, PresenceServer
-from aiji.pet.brain import FishBrain
-from aiji.pet.presence_client import PresenceClient
 from aiji.reflect import Reflective, ReflectionWorker
 from aiji.server import make_server
 from aiji.store import Ident
@@ -238,10 +236,10 @@ class TestHumanDelay(unittest.TestCase):
                 [{"role": "user", "content": "你好"}],
                 Ident("desktop", "owner", "default"),
                 session="s1",
-                system_suffix="桌宠气泡最多三句",
+                system_suffix="请用三句话以内回答",
             )
             prompt = json.dumps(pool.calls[0], ensure_ascii=False)
-            self.assertIn("桌宠气泡最多三句", prompt)
+            self.assertIn("请用三句话以内回答", prompt)
         finally:
             memory.close()
             shutil.rmtree(path, ignore_errors=True)
@@ -274,28 +272,6 @@ class TestPresenceBroadcast(unittest.TestCase):
         finally:
             server.stop()
 
-    def test_pet_presence_client_receives_remote_state(self) -> None:
-        hub = PresenceHub()
-        server = PresenceServer(hub, "127.0.0.1", 0).start()
-        events = []
-        client = PresenceClient(
-            f"ws://127.0.0.1:{server.port}", events.append,
-        ).start()
-        try:
-            deadline = time.monotonic() + 2
-            while time.monotonic() < deadline and not client.stats["connected"]:
-                time.sleep(0.01)
-            hub.publish({"state": "speaking", "mood": "愉快", "platform": "qq"})
-            deadline = time.monotonic() + 2
-            while time.monotonic() < deadline and not any(
-                item.get("state") == "speaking" for item in events
-            ):
-                time.sleep(0.01)
-            self.assertTrue(any(item.get("state") == "speaking" for item in events))
-        finally:
-            client.stop()
-            server.stop()
-
     def test_head_publishes_presence_for_cross_client_sync(self) -> None:
         path = workdir()
         memory = Memory(Settings(
@@ -317,28 +293,6 @@ class TestPresenceBroadcast(unittest.TestCase):
             self.assertEqual(latest["platform"], "qq")
             self.assertEqual(latest["session"], "s1")
             self.assertGreater(memory.presence.stats["published"], 1)
-        finally:
-            memory.close()
-            shutil.rmtree(path, ignore_errors=True)
-
-    def test_pet_brain_uses_shared_head_pipeline(self) -> None:
-        path = workdir()
-        memory = Memory(Settings(
-            db_path=path / "pet-head.db", routes=(), reflection_interval_s=60,
-            debounce_ms=0, humanize_min_ms=0, humanize_max_ms=0,
-            typing_min_ms=0, typing_max_ms=0,
-        ), engines="none")
-        pool = FakePool("桌宠回答")
-        memory.pool = pool
-        memory.reflective.pool = pool
-        try:
-            result = FishBrain(memory, Ident("desktop", "owner", "default"), "pet").reply(
-                "说句话",
-            )
-            self.assertEqual(result["text"], "桌宠回答")
-            self.assertEqual(memory.presence.snapshot()["state"], "speaking")
-            prompt = json.dumps(pool.calls[0], ensure_ascii=False)
-            self.assertIn("桌宠气泡放不下长文", prompt)
         finally:
             memory.close()
             shutil.rmtree(path, ignore_errors=True)

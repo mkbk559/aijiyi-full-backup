@@ -518,6 +518,67 @@
 76. **不成立：`docs/agent/**` 用 PowerShell 写**。`Add-Content`/`Copy-Item` 到这个目录会被 ACL 拒
     （`Access is denied`），只能用编辑工具写；创建新子目录也会被拒。
 
+## 2026-11-02（运行与功能页 / 启动与结束）
+
+77. **不成立：沙箱里 `schtasks /Query` 退出码 1 就等于任务不存在**。`AIJiYi Console Watchdog`
+    实际存在（`C:\Windows\System32\Tasks\AIJiYi Console Watchdog`，3790 B，2026-11-01 18:49），
+    服务进程内查询 exit 0；沙箱内 `schtasks /Query` 报
+    `ERROR: The system cannot find the path specified.`、`Get-ScheduledTask` 报
+    `无法从客户端中访问 CIM 资源`——**两条都是假阴性**。
+    → 判定计划任务存在：`schtasks` 退出码 + `System32\Tasks\<名字>` 定义文件双证人；
+      只有文件缺失才能证明"真的没注册"。
+78. **不成立：`tasklist` 能拿到端口进程名**。沙箱内 `tasklist /FI "PID eq N"` 直接
+    `ERROR: Access denied`，`Get-CimInstance Win32_Process` 返回空；
+    `powershell -Command "(Get-Process -Id N).ProcessName"` 可用。
+    → 一次 `Get-Process -Id a,b,c` 批量解析；AIJiYi 自己的 pid 不必查（直接标"本进程"）。
+79. **不成立：`/v1/audio/speech` 返回 400 是 `_audio_error` 映射写错**。复现到根因：
+    `server.py` 用 `tempfile.TemporaryDirectory(prefix="aiji-speech-")` 建 0o700 目录，沙箱下
+    `PermissionError: [WinError 5]` → 被归成 `audio_error` 400（`profile_not_found` 的 404 映射本身
+    是好的，live 打同一路径确实回 404）。已改用 `voice._workdir()`（0o777）+ `finally` 清理。
+80. **不成立：本机能用 Chrome/Edge headless 截图**（同日再次确认）。`--headless=new` 在沙箱内
+    crashpad `OpenProcess: 拒绝访问`，随后 mojo `platform_channel.cc Check failed: 拒绝访问`
+    自行终止（Chrome exit -36863、Edge -2147483645）；`--disable-breakpad` / `--no-sandbox` 无效。
+    → 页面视觉证据只能"真窗口 + 桌面截图"；DOM 一致性改用静态检查
+      （脚本引用的 58 个 id 全部存在于 HTML）。
+
+## 2026-11-02（日志体系）
+
+81. **不成立：`Start-Process -RedirectStandardOutput` 会追加**。它是**截断**：每次启停把
+    `data\console.{out,err}.log`、`astrbot.{out,err}.log` 归零（今天两次重启把 11 MB 的
+    AstrBot 流水与 2.9 MB 的 err 全洗掉，验证脚本里 `handshake_before=0` 就是这么来的）。
+    → 拉起前先 `Rotate-Log` 改名；判断"日志没内容"之前先确认这期间有没有重启过。
+82. **不成立：`proactive_audit_1h.py` 应该常驻**。`DURATION_S = 3600`，跑完自己写
+    `proactive_audit_1h_summary.json` 并 `PID.unlink()`。今天 09:13 起跑到 10:24 结束、
+    pid 文件消失都是**正常收工**，别接进保活（会每小时重跑一次）。
+    要常驻的是 `tools/field_monitor.py`（`while True` + `sleep(15)`）。
+83. **不成立：AstrBot 日志是 UTF-8**。它跟随控制台代码页，本机就是 cp936：`astrbot.out.log`
+    是 GBK 字节（UTF-8 工具读成乱码），`astrbot.err.log` 2.9 MB 里 **2022 条**
+    `UnicodeEncodeError: 'gbk' can't encode '\u2728'`（loguru handler 全线失败）。
+    → 启动子进程时 `PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8`；读旧日志要用 gbk 解码。
+84. **不成立：QQ 媒体下载失败一定是 URL 过期**。今天 13:10–20:35 有 4084 条
+    `Failed to download file ... HTTP status code: 4xx`，**AstrBot 重启后立刻归零**（同一批群里
+    十余张图连续被正常描述），说明不是"URL 一律过期"。同时验证：裸 GET
+    `https://multimedia.nt.qq.com.cn/` 直连与走 7897 代理**都**回 `400 Bad Request`，
+    所以单看 400 无法区分"隧道改写"还是"CDN 拒签"。AstrBot 日志用
+    `_safe_url_for_log()` 抹掉 query，拿不到带 `rkey` 的原始 URL 做对照——**根因仍未证实**，
+    当前只做了 `NO_PROXY` 加固（AstrBot 的 aiohttp 是 `trust_env=True`）。
+85. **不成立：`Get-Process python*` 能列出正在跑的服务**。沙箱里按名字查返回空，`tasklist`
+    被拒、`Get-CimInstance Win32_Process` 也空；能用的只有 `Get-Process -Id <已知pid>`、
+    `netstat -ano` 和 `Get-NetTCPConnection`（后者在无匹配对象时会抛 CIM 异常，要 try/catch）。
+86. **不成立：`Stop-Process` 杀 QQ 再拉起是"无害重启"**。2026-11-02 21:15 QQ 正在自更新
+    （`D:\QQNT\versions\config.json` 的 `baseVersion`/`curVersion` 不一致、`readyVersion` 为空，
+    两个 json 在 21:15:26/27 被改写），我 21:18 强杀 → 20:19 起桌面弹
+    **“文件已损坏，请重新安装QQ。”**，之后 QQ 启动只剩 1 个 22 MB 进程、`6099` 不监听、
+    没有窗口，机器人 `ready 3/5` 直到重装。
+    → **别用杀进程来"重启 QQ"**：NapCat 注入在 QQ 里，QQ 自己的更新/实例互斥比想象中脆；
+      真要重启整套请用 `启动AIJiYi.bat` / `tools/ensure_console.ps1`，它们会在 `6099` 不在时
+      才拉 NapCat。杀掉前先看 `D:\QQNT\versions\config.json` 里 `readyVersion` 是否为空
+      （空 = 更新没完成）。
+87. **不成立：`ws://127.0.0.1:6199/ws` 拿正确 token 就能连上**。这是 aiocqhttp 的**反向**
+    WS 服务端，除 `Authorization: Bearer <token>` 外还要求 OneBot v11 的 `X-Self-ID` 头；
+    探测脚本只带 token 会被回 `HTTP 400`（无 token 是 `401`、裸 HTTP 是 `405`）。
+    → 判"服务端活着"用 400/401 这一对即可，别把 400 当成服务端故障。
+
 
 
 

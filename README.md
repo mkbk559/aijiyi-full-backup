@@ -1,6 +1,8 @@
-# aiji — AI 智能体分层记忆（学习 / 总结 / 操控，多平台共用一套表）
+# AIJiYi — AI 智能体分层记忆与本地陪伴服务
 
-**一句话**：SQLite 存事实与画像，内存存最近对话，向量索引可选；写与识别全异步走积分模型网关，读是 100ms 硬超时快召回，注入是带来源标注的软引导块；对外提供 OpenAI 兼容入口，桌宠 / IDE / IM 网关可直接接入。
+> 当前功能与运行条件以 [功能清单](docs/FEATURES.md) 为准。下文的性能数字是相应日期的历史测量结果，不代表当前机器的实时保证；`docs/agent/` 中的审计和设计文档保留当时结论。
+
+**一句话**：SQLite 存事实与画像，内存存最近对话，向量索引可选；写与识别全异步走积分模型网关，读是 100ms 硬超时快召回，注入是带来源标注的软引导块；对外提供 OpenAI 兼容入口，IDE / IM 网关可直接接入。
 
 三件事，一个闭环，全部不阻塞主链路：
 
@@ -33,8 +35,8 @@ video  仅元数据（不做视觉理解）
 |---|---|---|
 | text | 直用 | ✅ |
 | emoji | 常见表情 → 语义标签（开心/生气/赞同…） | ✅ |
-| image | 需注入 OCR 引擎；缺引擎记 `unsupported` | ✅（引擎可插拔） |
-| voice | 需注入 ASR 引擎；缺引擎记 `unsupported` | ✅（引擎可插拔） |
+| image | 自动接线已安装的 OCR，或由调用方注入；缺引擎记 `unsupported` | ✅（依赖引擎） |
+| voice | 自动接线已安装的 ASR，或由调用方注入；缺引擎记 `unsupported` | ✅（依赖引擎） |
 | file | 调用方给文本或 MIME 可读时提取 | ⚠️ 部分 |
 | link | 抓 `<title>` | ✅ |
 | video | **只存元数据**，明确不做理解 | ✅（有意为之） |
@@ -134,7 +136,7 @@ python -m aiji.cli --db data/aiji.db serve --port 8787
 
 配置：`config/aiji.example.json`（`AIJI_CONFIG` 指定）。路由 key 一律走环境变量；缺 key 的路由自动跳过，抽取退化为本地规则（仍能存事实/画像/风格，`source_kind='heuristic'`）。
 
-OCR/ASR 引擎从代码注入（不内置、不打包模型）：
+OCR/ASR 引擎可自动接线已安装的依赖，也可从代码注入；模型权重不随主包打包：
 
 ```python
 m = Memory.open("data/aiji.db",
@@ -168,8 +170,8 @@ $env:AGENT2API_KEY = "<在 Agent2API 后台生成的新 key>"
 python -m aiji.cli serve --host 127.0.0.1 --port 8787
 ```
 
-浏览器打开 `http://127.0.0.1:8787/` 是本地控制台；任意支持自定义
-OpenAI API 的桌宠/IDE 填写：
+浏览器打开 `http://127.0.0.1:8787/` 是运行与功能页面；任意支持自定义
+OpenAI API 的 IDE 或其他客户端填写：
 
 ```text
 Base URL: http://127.0.0.1:8787/v1
@@ -177,18 +179,58 @@ Model:    aiji
 API Key:  留空；若设置了 AIJI_API_KEY，则填同一个值
 ```
 
-### 本地控制台（`http://127.0.0.1:8787/`）
+### 运行与功能页面（`http://127.0.0.1:8787/`）
 
-双击 `启动控制台.bat` 后台起服务并打开浏览器；`tools/stop_console.bat` 按端口停。
-控制台默认 **4 个主入口**（仪表盘 / 对话测试 / 记忆库 / 日志·死信），另有 11 个功能页
-（记忆关系 / 说话习惯 / 聊天身份 / 生活状态 / 模型线路 / 待确认操作 / 主动聊天 / 语音 /
-连接服务 / 设置 / 工作区），都走同一套侧栏导航与 `#graph` 之类深链。
-星图/人设/生命卡等仍有后端 API，但不再往控制台堆页面；工作区/终端默认关闭
-（`AIJI_ENABLE_WORKSPACE=1` 才开，且与 IDE 重复，不建议开）。
+双击 `启动AIJiYi.bat` 启动 AIJiYi、AstrBot 和 NapCat，并打开页面；`tools/结束AIJiYi.bat`
+结束服务链路，QQ 客户端保持打开。页面分为运行总览、全部功能、功能配置、启动与结束。
+运行总览展示各服务状态、消息处理链路和后台任务；全部功能按实际接口列出 22 项能力，
+点开后读取实时数据，并为记忆、对话、语音、歌曲、社交、表情包、审批等提供操作表单。
+功能配置保存到 `config/runtime.json`，需要重启服务生效；密钥不在页面显示或保存。
+页面也能直接用 `file:///D:/AIJiYi/aiji/web/operations.html#lifecycle` 打开（服务端只为
+`null` 与 `127.0.0.1:8787` 两个本地来源放行 CORS）；`/`、`/operations`、`/operations.html`
+是同一份页面。
+旧 15 页控制台与 ECharts 资源已经移除。工作区 API 默认关闭
+（`AIJI_ENABLE_WORKSPACE=1` 才开）；原有终端 API 仍需显式设置 `AIJI_UNSAFE_SHELL=1`。
 
-- **桌宠**（右下角）：whale 精灵动画；点一下 = 摸头（+1，10s 冷却），悬停面板可
-  喂食（+5，30s 冷却，消耗小鱼干）/ 改名 / 隐藏；状态与 Tk 桌宠共用 `data/pet_state.json`。
-- **对话测试**：每个回复显示路由、模型耗时、总耗时、token 估算、tok/s、注入 id。
+**启动与结束**（`#lifecycle`）是唯一会真的动本机服务的地方，读的都是实时探测：
+
+- 依赖链按 NapCat → QQ 反向连接 → AstrBot → AIJiYi → 实时状态 排列，每张卡显示
+  端口、PID、进程名、已建立连接数；第一个没就绪的就是**卡点**，卡点给出对应处置建议。
+- 顶部状态条给出「整套服务在线 / 部分未就绪 / 未启动」、`x / 5 就绪`、目标状态
+  （`data/service_state.txt`：`stopped` 时保活不会拉起）、检查时间与卡点。
+- **启动前置检查**：Python、AstrBot 运行环境、NapCat 注入器、QQ 客户端、运行配置
+  （可选）五项路径实测；缺哪一项就直接标 ✗。
+- **守护方式**：登录启动项（开始菜单 `AIJiYi Startup.lnk`）与计划任务
+  `AIJiYi Console Watchdog` 两项实测，页面可直接注册/注销该保活任务。
+  `schtasks /Query` 在某些沙箱/受限账户下会假阴性，此时按
+  `C:\Windows\System32\Tasks\<任务名>` 定义文件二次判定。
+- 启动/重启/结束下发后，页面每 2 秒复查真实端口，直到全部就绪（或结束服务后与核心
+  断开）才收工，最多等 90 秒；不使用预设动画。
+- 下方日志框显示 `data/lifecycle.log` 尾部，启停失败时先看这里。
+
+### 日志文件（`data/`）
+
+| 文件 | 谁在写 | 说明 |
+|---|---|---|
+| `lifecycle.log` | `tools/lifecycle.ps1` | 每次启停追加一行（ASCII，UTF-8） |
+| `console.out.log` / `console.err.log` | AIJiYi 核心 | 模型下载、引擎回退等；**UTF-8** |
+| `astrbot.out.log` / `astrbot.err.log` | AstrBot | 群消息流水与告警；由启动脚本强制 **UTF-8** |
+| `field_monitor.jsonl` | `tools/field_monitor.py` | 每 15 秒一条现场采样 |
+| `*.jsonl` / `*.log.<时间戳>.log` | 审计脚本 / 轮转产物 | 轮转产物保留最近 5 个 |
+
+启动脚本做了三件事，都是被真实现场故障逼出来的：
+
+- **轮转而不是截断**：`Start-Process -RedirectStandardOutput` 会清空目标文件，所以
+  `tools/ensure_console.ps1` 在拉起前把非空日志改名成 `<名字>.<yyyyMMdd-HHmmss>.log`，
+  只保留最近 5 个。否则每次重启都把上一次的证据抹掉。
+- **强制 UTF-8**：AstrBot 往控制台写中文/emoji，cp936 下一天能刷出两千条
+  `UnicodeEncodeError: 'gbk'`，日志还读不出中文。启动前设 `PYTHONUTF8=1` +
+  `PYTHONIOENCODING=utf-8`。
+- **QQ 媒体绕开代理**：AstrBot 的下载用 aiohttp `trust_env=True`，会继承机器上的
+  `HTTP_PROXY`。QQ 富媒体（`multimedia.nt.qq.com.cn`）走隧道会被改写成 4xx，
+  所以启动脚本把该域名加进子进程的 `NO_PROXY`（其余照旧走代理）。
+
+- **对话测试**：功能详情中的对话表单调用真实 `/v1/chat/completions`。
 - **声音**：默认走 Edge TTS（`pip install edge-tts`，微软在线音色，`AIJI_VOICE` 可选
   `zh-CN-XiaoxiaoNeural` / `YunxiNeural` 等）；网络不可用时自动回退 Windows SAPI。
   `AIJI_TTS=sapi` 可强制离线。
@@ -393,6 +435,13 @@ python tools\field_monitor.py
 请求数、tokens、200/408 数量、今日累计和各 provider 的剩余额度；token 速率过高、
 超时率过高或账本不可读会触发告警。
 
+`field_monitor.py` 是常驻采集器，可以交给保活：建一个 `data\monitors.on` 空文件，
+`tools\ensure_console.ps1`（计划任务每 5 分钟、以及每次启停）会检查
+`data\field_monitor.jsonl` 的写入时间，超过 2 分钟没更新就重新拉起
+`tools\start_field_monitor.py`（自带去重）。删掉该文件即不再自动拉起。
+`tools\proactive_audit_1h.py` 是**一次性**审计（`DURATION_S=3600`，跑完自己退出并删 pid），
+不要接进保活。
+
 需要固定时长审计时运行：
 
 ```powershell
@@ -448,7 +497,7 @@ python tools\being_checkup.py --db data\aiji.db --user 2216608312 --live
 ```
 
 QQ/微信群聊属于角色空间：要求写可运行代码、执行命令或控制电脑时，会触发物理
-动作边界，用角色内的话拒绝，不输出代码块。桌宠/桌面平台仍保留编码和工具能力。
+动作边界，用角色内的话拒绝，不输出代码块。桌面平台仍保留编码和工具能力。
 
 ### MCP 自动研究
 
@@ -515,8 +564,8 @@ $env:AIJI_API_KEY = "<给下游客户端使用的密钥>"
 
 此时 `/v1/*`、`/api/*`、`/turns`、`/remember`、`/ingest`、`/recall`、
 `/inject`、`/feedback`、`/media`、`/style`、`/accounts`、`/stats` 和 `/flush`
-都需要 `Authorization: Bearer <AIJI_API_KEY>`；`/health`、控制台页面和静态资源保持公开。
-控制台的对话页和 API 请求会复用页面上填写的 API key。上游
+都需要 `Authorization: Bearer <AIJI_API_KEY>`；`/health` 与运行页面保持公开。
+页面在首次请求受保护 API 时询问 API key，并仅保存在当前浏览器会话。上游
 `AGENT2API_KEY` 与下游 `AIJI_API_KEY` 是两把不同的钥匙，不要混用。
 
 本仓库**不开源**：`LICENSE` 为专有许可（保留所有权利，未授权使用/复制/分发）。
@@ -536,9 +585,9 @@ python bench/demo_loop.py                        # 端到端演示：学习→�
 
 ## 已知边界
 
-- **OCR/ASR 内置但可插拔**：`Memory.open(engines="auto")` 默认接 RapidOCR（图片）与
-  FunASR paraformer-zh（语音，失败回退 faster-whisper）；也可通过 `ocr=` / `asr=` 注入自己的引擎。
-  图片必须带字节（`extra["bytes"]`）才会被识别——只给 url 时如实记 `low_confidence`，不会去下载。
+- **OCR/ASR 可自动接线或注入**：`Memory.open(engines="auto")` 在相应依赖已安装时接入
+  RapidOCR（图片）与 FunASR / faster-whisper（语音）；也可通过 `ocr=` / `asr=` 注入自己的引擎。
+  自动 OCR 接线支持 `extra["bytes"]`、`extra["bytes_list"]`，以及可访问的图片 URL；URL 下载失败、引擎缺失或识别置信度不足时，不会编造识别文本。
 - **模型摘要的真实质量没验证**：`summary_model=true` 时走网关模型，本机有假 OpenAI 服务的契约测试；
   模型不可用会退回本地压缩（去重 + 截断）。真实摘要质量还没做过人工评分。
 - **否定识别是确定性的**：依赖抽取器给出 `negated`（规则看"不/没/别/不再"前缀，模型看显式字段）。复杂否定（反问、双重否定）会漏。

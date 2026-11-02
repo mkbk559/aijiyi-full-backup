@@ -1,6 +1,6 @@
 """HTTP 全端点矩阵探测（隔离服务 + 假模型池）。
 
-覆盖：公开资产 / 控制台 / 只读 API / 写 API / 桌宠 / 工作区 / 鉴权 / 负面输入。
+覆盖：公开资产 / 控制台 / 只读 API / 写 API / 工作区 / 鉴权 / 负面输入。
 判定：每个端点都要有"预期状态码"，5xx 一律 FAIL（除有意的上游不可用 503）。
 """
 
@@ -32,11 +32,7 @@ ident_q = "platform=wechat&platform_user_id=u1&scope=personal"
 try:
     # ---------- 公开页面与资产 ----------
     for path, want in (
-        ("/", 200), ("/console", 200), ("/health", 200),
-        ("/assets/dafeiyu_256.png", 200),
-        ("/assets/whale_spritesheet.webp", 200),
-        ("/assets/whale_pet.json", 200),
-        ("/assets/echarts.min.js", 200),
+        ("/", 200), ("/operations", 200), ("/health", 200),
     ):
         status, payload, text = http_call(base, "GET", path)
         probe.expect(f"GET {path}", status, want, f"status={status} bytes={len(text)}")
@@ -56,7 +52,7 @@ try:
         f"/api/self?{ident_q}", "/api/scheduler", "/api/models", "/api/capabilities",
         "/api/mcp", f"/api/recent-turns?{ident_q}", f"/api/injections?{ident_q}",
         "/api/proactive", f"/api/life?{ident_q}", "/api/actions/pending",
-        "/api/actions/stats", "/api/integrations/onebot", "/api/pet",
+        "/api/actions/stats", "/api/integrations/onebot",
         "/api/social", "/api/stickers", "/api/being/checkup", "/v1/voices", "/v1/songs",
     ]
     for path in readonly:
@@ -120,15 +116,6 @@ try:
     ):
         status, payload, _ = http_call(base, "POST", path, body)
         probe.expect(f"POST {path}", status, (200, 201), f"status={status} {payload}")
-
-    # ---------- 桌宠 ----------
-    for path, body in (
-        ("/api/pet/pet", {"now": time.time()}),
-        ("/api/pet/feed", {"now": time.time()}),
-        ("/api/pet/rename", {"name": "探测鱼"}),
-    ):
-        status, payload, _ = http_call(base, "POST", path, body)
-        probe.expect(f"POST {path}", status, 200, f"status={status} {str(payload)[:100]}")
 
     # ---------- 外部依赖型（不应 5xx） ----------
     external = [
@@ -228,7 +215,7 @@ try:
     status, _, _ = http_call(base, "GET", "/v1/models",
                              headers={"Authorization": "Bearer probe-secret"})
     probe.expect("鉴权：对 token → 200", status, 200, f"status={status}")
-    for path in ("/health", "/", "/assets/whale_pet.json"):
+    for path in ("/health", "/"):
         status, _, _ = http_call(base, "GET", path)
         probe.expect(f"鉴权：{path} 保持公开", status, 200, f"status={status}")
 

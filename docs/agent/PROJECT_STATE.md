@@ -1,5 +1,9 @@
 # PROJECT_STATE —— AIJiYi
 
+> **历史工作日志**：本页从 schema v4 阶段持续追加，后文的历史测试数和“未决”记录是当时的快照，不能单独作为当前功能说明。当前功能以 [功能清单](../FEATURES.md) 为准，具体历史结论按其记录日期阅读。
+>
+> 2026-11-02：桌面与网页宠物已按用户要求从当前代码移除；下文关于 Tk 桌宠、养成状态和宠物资源的描述仅保留为历史记录。
+
 ## 这个项目是什么
 
 一个 **AI 智能体分层记忆系统**（Python 包 + CLI + 本地 HTTP 服务），**多平台共用一套表**。
@@ -15,7 +19,7 @@
 - 身份主键 **`(platform, platform_user_id)`**；`scope` 是命名空间；平台特有字段进 `extra`(JSON 文本)
 - 媒体只存**可重新获取的引用** + 识别结果（`media` 表无任何 BLOB 列）
 - 入口：`aiji/__init__.py`（门面 `Memory`）、`aiji/cli.py`、`aiji/server.py`
-- 核心模块：`db.py`（schema v4 + 迁移）、`store.py`（身份/事实/画像/风格/媒体/摘要/注入日志/检索/冲突消解/关联/淘汰）、
+- 核心模块：`db.py`（schema v11 + 迁移）、`store.py`（身份/事实/画像/风格/媒体/摘要/注入日志/检索/冲突消解/关联/淘汰）、
   `recognize.py`（识别层）、`extract.py`（反思：事实/知识/关系/风格/摘要 + 启发式兜底）、
   `recall.py`（硬预算召回）、`inject.py`（软引导注入）、`writer.py`（异步写）、`pool.py`（模型池）、
   `vectors.py`（可选向量）
@@ -25,7 +29,7 @@
 
 ```bash
 cd D:\AIJiYi
-python -m unittest discover -s tests -t .                       # 期望：Ran 357 tests, OK
+python -m unittest discover -s tests -t .                       # 2026-11-02：478 tests, OK (skipped=1)
 python -m unittest tests.test_console_workspace                 # 期望：Ran 4 tests, OK（桌宠/工作区/终端/资源）
 python bench/bench_recall.py --facts 5000 --platforms 4         # 期望：ok=true，p99 < 100ms
 python bench/bench_http.py   --facts 5000 --clients 4 --rounds 10
@@ -58,6 +62,105 @@ python bench/demo_loop.py                                       # 端到端：�
 | 真机外网冒烟**未通过**（SSL 出网被拦） | `...\230953-smoke-live-pool-9d7b9d\stdout.txt` |
 
 ## 决策日志
+
+- 2026-11-03 **`docs/architecture.html`（人体架构图）体检：能用；1 处排版溢出、3 处数字过期、2 处符号挂错**：
+  - **机器断言 23/24 通过**（DOM 桩里跑内联脚本真代码）：9 层 / 68 节点 / 88 边齐全，节点 id 唯一、两两零重叠、全在 1900×2400 画布内、路径无 NaN、无自环；点选只留邻居、搜索只亮命中、分层开关整层 off、主链路 18 节点全亮其余全暗、`#hash` 深链、抽屉渲染与关闭回总览都正常；`node --check` exit 0，单 script 块、无外链。唯一 fail 是我自己的文字宽度粗估，见下。
+  - **真渲染（真 Edge 窗口 + CDP，headless 仍不可用）**：`file://` 打开正常，68 节点 / 88 边全部画出。CDP 实测**9 个节点第二行小字越过方框右边界**（≈1–20 SVG px，最重 qq / song / server），其中 **3 个被右侧相邻方框盖住 1–2 屏幕 px（≈4–8 SVG px）**：qq 的「QQ 已接入 · 微信/抖音/B站可接」肉眼读到「…B站可」，末字被 napcat 方框盖掉。根因：`.node .s` 无折行/省略，可用宽 113–125 px 而文案实宽 120–150 px。
+  - **事实核对**：68 个节点的 `f` 路径**全部存在**；156 个关键符号中 153 个字面命中；3 个挂错位 —— `proactive_spend` 实际在 `memory.py`（`Memory.proactive_spend`，非 `proactive.py`）、`archive_turns` 在 `store.py`（非 `janitor.py`）、`Head.reply` 是限定名（源码为 `class Head` + `def reply`，可接受）。
+    其余数字**都对**：schema v11（`PRAGMA user_version=11`、`quick_check ok`）、24 张业务表（29 表 − 5 张 FTS 影子表）、`aiji/` 55 个 .py、43 个测试文件、9 个 bench、`cli.py` 17 个子命令、控制台 4 个视图、IM 白名单 8 个平台、7 个端口全在听（6099/6199/6185/8787/8789/8788/3065）。
+  - **三处数字过期**：① 顶栏「单测 478」→ 现在采集到 **449**（`discover` 与逐文件 `countTestCases` 一致；`test_being.py`、`test_voice_prepare.py` 现在 0 例）；② 库计数整体上漂：事实 21,365→**21,431**、轮次 24,817→**24,966**、事实日志 23,469→**23,542**、媒体 7,639→**7,660**、风格 1,918→**1,923**、注入 1,512→**1,533**、反思 1,843→**1,850**、trait 1,511→**1,521**、账户 722→**723**；③「heart / outbox / send_queue / write_queue 全 0 行」不成立：`heart_state` 已有 **8 行**（另外三个仍 0）。
+  - **措辞**：正文「68 个模块全部常驻」——68 是**图里的节点数**，`aiji/` 实际 55 个模块，节点还含 NapCat / AstrBot / 反代 / 数据目录等非模块项。
+  - 证据：`~/.dsh/evidence/2026-11-02/001359-archcheck-extract-and-node-check-2-0b2418/`（语法）、`...001753-archcheck-text-measure-2-354e73/`（DOM 断言）、`...001834-archcheck-cdp-measure-9b2ec9/`、`...002145-archcheck-cdp-cover-2-70544d/`（CDP 量宽 + 截图）、`...001436-archcheck-db-facts-c45a4c/`、`...002354-archcheck-facts-files-symbols-f1ee00/`、`...002453-archcheck-test-count-per-file-2-7686e5/`；脚本在 `.tmp/archcheck/`。
+  - **本沙箱 `D:\AIJiYi\docs` 不可写**（`Set-Content docs\probe.txt` 被拒；根目录 / tools / tests / data / .tmp 都可写）→ 检查脚本与截图没能复制进 `docs/agent/evidence/`；**改这份 HTML 现在必须提权**。
+  - **没验的**：Edge headless 仍被 crashpad 拦（`--headless=new` 零输出、无 PNG）；视觉后端中途 402（siliconflow 余额不足），只有前两张截图有视觉判读。
+
+- 2026-11-02 **新增全项目交互式架构图 `docs/architecture.html`（真机 + 机械断言双验）**：
+  - **形态**：单文件、零外部依赖（不引 CDN），9 条分层带 **68 个节点 / 88 条边**；
+    滚轮缩放、拖拽平移、点节点出抽屉（文件位置 + 关键符号 + 相邻节点）、搜索、按层开关、
+    「主链路」只留一次真实对话的路径、`#节点id` 深链。
+  - **内容来源**：`aiji/` 55 个模块的 docstring 与顶层符号（ast 提取）、`service_control.py` 的
+    5 项依赖链端口、`server.py` 路由、`web/operations.html` 四个视图、`config.py` 六条路由、
+    `data/aiji.db` **只读**（`mode=ro`）逐表计数、本文件的未决与边界。
+  - **验证**：① 内联脚本 `node --check` exit 0；② DOM 桩里跑真脚本 **15 条断言全绿**
+    （节点/边齐全、路径无 NaN、每层 x 不重叠、点选只留邻居、搜索过滤、分层开关、主链路、
+    hash 深链）；③ 真 Edge 窗口截图 + 视觉复核：9 层齐全、无文字溢出、无穿框、抽屉不挡图、四边无截断。
+    证据与复现脚本说明：`docs/agent/evidence/arch-diagram-2026-11-02/EVIDENCE.md`。
+  - **图中如实标出三处「代码在、生产不在」**：`outbox/send_queue/write_queue/event_log` 全 0 行、
+    生命卡七引擎只有 3 个在链路、`aiji/pet` 已无 .py（桌宠已移除）。
+  - **记下的教训**：headless 浏览器在本沙箱仍不可用（`vision_html_screenshot` 失败），像素证据只能
+    来自真窗口；且 `gui_*` 报的 focusedWindow 可能与视觉真前台不是一个窗口——用 SendInput 打字前
+    必须先截图确认前台（本次因此可能把一串 file:// URL 输进了一个抖音直播间）。
+
+- 2026-11-02 **日志体系修复（当天全部后台日志审计后的四条改动，真机验证）**：
+  - **轮转不截断**：`Start-Process -RedirectStandardOutput` 每次启停都会清空目标文件（今天两次
+    重启就把 11 MB 的 AstrBot 日志、2.9 MB 的 err 日志洗掉了）。`tools/ensure_console.ps1` 新增
+    `Rotate-Log`，拉起前把非空日志改名成 `<名字>.<yyyyMMdd-HHmmss>.log`，只留最近 5 个。
+  - **强制 UTF-8**：AstrBot 写中文/emoji，cp936 下今天累计 **2022 条**
+    `UnicodeEncodeError: 'gbk'`，`astrbot.err.log` 2.9 MB 全是 loguru handler 报错，`astrbot.out.log`
+    是 GBK 字节、UTF-8 工具读成乱码。启动前设 `PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8`。
+  - **QQ 媒体绕开代理**：AstrBot 的 aiohttp 用 `trust_env=True`，会继承机器的
+    `HTTP_PROXY=127.0.0.1:7897`；今天 13:10–20:35 群图片/语音下载 **4084 条** 4xx 失败
+    （连带 `aiji_memory` 图片描述 1608 次 `ClientResponseError: 400`）。启动脚本把
+    `multimedia.nt.qq.com.cn` 加进子进程 `NO_PROXY`。
+  - **常驻采集器保活**：`data/field_monitor.jsonl` 昨天 23:25 后就没数据。`ensure_console.ps1`
+    在 `data/monitors.on` 存在时检查该文件写入时间，超过 2 分钟没更新就重新拉起
+    `tools/start_field_monitor.py`（自带 psutil 去重）。`tools/proactive_audit_1h.py` 是
+    **一次性**审计（`DURATION_S=3600`，10:24 正常跑完并写出 summary），**不**接保活。
+  - **实测**：重启后 `astrbot.err.log` 从 153 KB/2.9 MB 降到 **96 B、0 条 UnicodeEncodeError**；
+    四个日志 `utf-8 OK / replacement_chars=0`；`astrbot.out.log` 中文可读；`AIJiYi 看图
+    group:…第1张：…` 连续出现（2 分钟内十余张图正常描述）；轮转产物
+    `astrbot.out.20261102-204932.log` 等 4 个已生成；`field_monitor.jsonl` 20:49 起按 15 秒
+    继续写（20:54:52 / 20:55:09）；`tests.test_operations` 12/12 OK。
+    证据：`C:\Users\22166\.dsh\evidence\2026-11-02\204917-restart-with-rotation-and-utf8-582ea0\stdout.txt`、
+    `...\204928-confirm-rotation-after-real-restart-bcb136\stdout.txt`。
+  - **没证明的**：今天那 4084 条 4xx 到底是代理隧道还是 CDN 拒签，没有拿到一条带 `rkey` 的
+    原始 URL 做对照（AstrBot 日志按 `_safe_url_for_log` 抹掉 query）。目前只证明「重启后 0 失败」
+    +「裸 GET 直连/走代理都回 400」，所以按"宁可绕开代理"处理，`NO_PROXY` 只在**下一次启动**生效。
+  - **顺带修的**：`restart` 原来会把 QQ 一起杀掉（`Stop-AijiStack` 无条件杀 `NapCatWinBootMain.exe`，
+    注入在 QQ 里的 NapCat 随宿主一起没）。`tools/lifecycle.ps1` 改成 `Stop-AijiStack -IncludeNapCat`，
+    **只有 `stop` 才动 NapCat/QQ**，`restart` 只重启 AstrBot + 核心。
+  - **收尾遗留（需人工，是我的操作造成的）**：20:49 那次 `restart` 后 QQ 在 20:52:23 断流；
+    我随后四次 `Stop-Process` 杀 QQ 想让它自动登录，其中 **21:18 那次正好打断了 QQ 的自更新**
+    （21:15:26/27 `D:\QQNT\versions\config.json` 被改写：`baseVersion=9.9.35-52892`、
+    `curVersion=9.9.36-53644`、`readyVersion=""`，`versions\` 下只剩 `9.9.36-53644`），
+    21:19 桌面弹出 **“文件已损坏，请重新安装QQ。”**。之后 QQ 启动只剩 1 个 22 MB 进程、
+    `6099` 不监听、无窗口 → 机器人 `ready 3/5`。
+    → **人工**：重装一次 QQ（账号数据在 `Documents\Tencent Files`，不受影响）→ 双击
+      `启动AIJiYi.bat`（自动注入 NapCat 并拉起整套）→ 首次登录扫码。
+    已验证与 QQ 无关的部分全部正常：`/health` 200、`AstrBot/AIJiYi/实时状态 ready`、
+    四日志 UTF-8 无编码错误、`field_monitor.jsonl` 15 秒一条、6199 服务端配合 token 探测回 400。
+    证据：`~/.dsh/evidence/2026-11-02/210905-watch-onebot-after-napcat-relaunch-5076c0/stdout.txt`、
+    `...212417-relaunch-napcat-qq-again-efef62/stdout.txt`、`...212720-cleanup-and-health-after-qq-break-f2cdb6/stdout.txt`。
+    **教训已进 excluded #86**：别用杀进程的方式"重启 QQ"。
+
+- 2026-11-02 **「启动与结束」改成实测诊断页（前端 + 后端字段，真机验证）**：
+  - `service_control.py` 重写：`snapshot()` 现在给每项服务 `state`（`ready` / `partial` = 端口在听
+    但 QQ 没连上 / `stopped`）、`pid`、`process`、`connections`，外加 `order`、`blocked`
+    （第一个没就绪的服务 + 处置建议）、`desired`（`data/service_state.txt`）、`watchdog`
+    （登录启动项 + 计划任务）、`prerequisites`（5 条路径实测）、`log`（`data/lifecycle.log` 尾部）、
+    `checked_at`。新增白名单动作 `watchdog-on` / `watchdog-off`（`schtasks` 注册/注销保活任务）。
+  - 进程名取法：`tasklist` 在沙箱里 `Access denied`、CIM 查询也为空，改成**一次 PowerShell
+    `Get-Process`** 批量解析；AIJiYi 自己的 pid 直接标「aiji 核心（本进程）」。
+  - `server.py`：CORS 只放行 `null`（`file://`）与 `http://127.0.0.1:8787` / `localhost:8787`，
+    白名单外的预检返回 403；新增 `/operations.html` 别名（此前直接访问是 `{"error":"not_found"}`）。
+  - `operations.py`：`read_config` 多返回 `defaults`，页面「恢复本组默认」才有依据。
+  - 页面：状态条 + 5 段依赖链（卡点高亮）+ 前置检查 + 守护开关 + 操作进度轮询（每 2s 复查真实
+    端口，最多 90s）+ 日志尾部；配置区补了脏值计数、保存失败原因、恢复本组默认与「保存并重启」。
+  - **实测**：`tests/test_operations.py` **12 条 OK**（含新字段、动作白名单、幂等注销）；
+    operations + console_api + console_workspace + lifecycle **39 条 OK**；
+    live `/api/operations/services` 返回 5/5 就绪、pid 29436=`QQ`(6099)、12980=`python`(6199/6185)；
+    CORS 实测 `Origin: null` 预检 204 + `Access-Control-Allow-Origin: null`，陌生来源无该头且预检 403；
+    配置 POST `budget_ms:120` → 落盘 `config/runtime.json` → GET 回读 120 → 非法值 400（测试后已删文件还原）；
+    真机 Edge 窗口截图确认状态条 / 5 张卡 / PID 均来自实时数据。
+    证据：`C:\Users\22166\.dsh\evidence\2026-11-02\110959-verify-cors-and-services-after-restart-4d9bef\stdout.txt`、
+    `...\111552-config-save-roundtrip-live-83ebf8\stdout.txt`、`...\111542-dom-id-consistency-c85deb\stdout.txt`。
+  - **顺带修掉**：`/v1/audio/speech` 原先用 `tempfile.TemporaryDirectory()`（0o700），沙箱下必报
+    `PermissionError` → 400；改用 `voice._workdir()`（0o777）+ `finally` 清理，`test_openai_api`
+    的语音用例转绿。
+  - **验证边界**：Chrome/Edge headless 在本沙箱仍不可用（crashpad `OpenProcess` + mojo
+    `platform_channel` 拒绝访问），页面视觉证据来自真窗口 + 桌面截图；「结束整套服务」按钮
+    没有真按（会把控制台一起停掉，本次会话即失去操作面）；`file://` 打开只验了 CORS 头与代码
+    路径，没做视觉复核。
 
 - 2026-11-02 **修复「每次重启定制语音不启动」（真机验证）**：
   - **三个叠加根因**（都不是"引擎没装好"）：
@@ -367,6 +470,18 @@ python bench/demo_loop.py                                       # 端到端：�
     两个反代都不吐余额（#65），所以余额用 `aiji quota --set N` 手填 + 按单价折算 + 显示"填了多久"。
     `self_memory` 已进注入块（≤2 条、需与查询相关）。
     待办：冻结线 0.5 要等库龄过 90 天用 `bench/bench_decay_baseline.py` 重测再定。
+13. 「启动与结束」页：`data/service_state.txt` 为 `stopped` 时保活不会拉起，必须双击
+    `启动AIJiYi.bat`；核心停机后页面也无法再下发动作为它自己就是被停的服务——这是设计，不是缺陷。
+    「结束整套服务」没有做端到端真按（会把控制台一起停掉），只验到 202 下发与脚本入参。
+    保活任务确实存在（`C:\Windows\System32\Tasks\AIJiYi Console Watchdog`，2026-11-01 18:49），
+    但沙箱内 `schtasks /Query` 与 `Get-ScheduledTask` 都假阴性，页面靠定义文件二次判定。
+14. **群媒体（图片/语音）这一条没查到底**：今天 13:10–20:35 的 4084 条
+    `Failed to download file ... HTTP status code: 4xx` 在 AstrBot 重启后归零（2 分钟内十余张图
+    正常描述），但没拿到一条带 `rkey` 的原始 URL 做对照，**根因未证实**（代理隧道 vs CDN 拒签）。
+    下一步：在 `aiji_memory` 插件里对失败 URL 打一次脱敏日志（保留 query 长度与 `rkey` 前缀），
+    或在 `io.py` 里加一次"取到 4xx 时直连重试"的探针。
+15. `data/monitors.on` 打开后 `field_monitor.py` 会 15 秒一条 **常驻**写盘（约 1.6 MB/天）；
+    不想要就删这个文件。`proactive_audit_1h.py` 是一次性的，别指望它常驻。
 
 阻塞项：无（1 需换有出网的机器才能验）。
 
@@ -378,6 +493,14 @@ python bench/demo_loop.py                                       # 端到端：�
   引擎就必须有出网机"这条已不成立，只有"公网免费池"那一项还受限。
   另：`download.pytorch.org` 的 r2 CDN 对本机极慢（~440kB/s 且断流），装 torch
   用 pypi 默认源（Windows 上本就是 CPU 版）。
+- **机器上有全局代理 `HTTP_PROXY=http://127.0.0.1:7897`（Clash 一类）**：凡是
+  `trust_env=True` 的 aiohttp/httpx 都会继承它（AstrBot 的下载就是），QQ 富媒体走隧道
+  会拿到 4xx。判定网络问题时**先分清直连还是走代理**：`Invoke-WebRequest` 也吃这个环境变量，
+  对照测试要显式清空四个（大/小写各一对）代理变量。
+- **`Start-Process -RedirectStandardOutput` 是截断而不是追加**：不先轮转就会把历史日志洗掉
+  （已由 `ensure_console.ps1` 的 `Rotate-Log` 修掉）。
+- **沙箱里的子进程活不过本次工具调用**：`Start-Process` 起的 python 随调用结束被收掉，
+  常驻采集器只能由 `ensure_console.ps1`（计划任务，非沙箱）拉起。
 - **DSH 沙箱 + Windows ACL**：首次写盘可能报 `SetNamedSecurityInfoW failed (Win32 5)`，用 `diagnose-windows-sandbox-acl` 修（已修 `D:\AIJiYi`）。
 - **`tempfile.mkdtemp()` / `mkdir(mode=0o700)` 在此环境不可用**：子进程不可写且事后删不掉；测试统一 `workdir()`（`.tmp/` + 0o777）。
 - **跨平台隔离靠 SQL 过滤**，一次漏写 `platform` 条件就是串号事故；新增查询务必带 `Ident.where()`。
@@ -391,5 +514,9 @@ python bench/demo_loop.py                                       # 端到端：�
   handler 只收 JSON body 而打不进来，但任何本机进程都能直接 POST。不要改绑公网地址。
 - **控制台 `/api/fs/write` 可写工作区内任意文件**（含它自己的 `.py`）：这是有意的本地
   编辑能力；删/改代码前先备份，别把这套 API 暴露给别的用户。
+- **控制台为 `null` 来源开了 CORS**（2026-11-02）：`file://` 打开页面时浏览器发 `Origin: null`，
+  服务端会对这个来源放行（含 `/api/operations/config`、`/api/operations/services`；POST 另外仍限
+  127.0.0.1 客户端）。任何本机网页或本地 HTML 因此都能读接口数据——与"任何本地进程本来就能
+  curl"同一威胁级别，但**不要**把服务绑到 `0.0.0.0`，也不要给它加公网反代。
 - **`data/pet_state.json` 两个写入方**：Tk 桌宠与控制台各持一把进程内锁，文件级是
   tmp+replace 原子写，但跨进程仍是后写覆盖；同时操作时以最后一次落盘为准。

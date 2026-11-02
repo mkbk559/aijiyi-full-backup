@@ -610,7 +610,7 @@ def archive_turns(
         "INSERT INTO turn_archive(platform,platform_user_id,scope,session,role,content,"
         "extra,ts,archived_at,summary_id)"
         f" SELECT platform,platform_user_id,scope,session,role,content,extra,ts,?,?"
-        f" FROM turn WHERE id IN ({q}) AND {w}",
+        f" FROM turn WHERE id IN ({q}) AND {w} ORDER BY id ASC",
         (t, summary_id, *ids, *args),
     )
     return int(cur.rowcount or 0)
@@ -633,7 +633,7 @@ def evict_turns(
     q = ",".join("?" * len(drop))
     w, args = ident.where()
     rows = conn.execute(
-        f"SELECT role, content FROM turn WHERE id IN ({q}) AND {w}", (*drop, *args)
+        f"SELECT role, content FROM turn WHERE id IN ({q}) AND {w} ORDER BY id ASC", (*drop, *args)
     ).fetchall()
     archive_turns(conn, ident, session, drop, summary_id=summary_id, now=now)
     conn.execute(f"DELETE FROM turn WHERE id IN ({q}) AND {w}", (*drop, *args))
@@ -1184,7 +1184,7 @@ def self_memory_list(
     if scope:
         sql += " AND scope=?"
         args.append(scope)
-    sql += " ORDER BY COALESCE(last_used_at, created_at) DESC LIMIT ?"
+    sql += " ORDER BY COALESCE(last_used_at, created_at) DESC, id DESC LIMIT ?"
     args.append(int(limit))
     return [dict(r) for r in conn.execute(sql, tuple(args)).fetchall()]
 
@@ -1195,7 +1195,7 @@ def trim_self_memory(conn: sqlite3.Connection, cap: int | None = None) -> int:
     cur = conn.execute(
         "UPDATE self_memory SET status='archived' WHERE status='active' AND id NOT IN ("
         " SELECT id FROM self_memory WHERE status='active'"
-        " ORDER BY COALESCE(last_used_at, created_at) DESC LIMIT ?)",
+        " ORDER BY COALESCE(last_used_at, created_at) DESC, id DESC LIMIT ?)",
         (limit,),
     )
     return int(cur.rowcount or 0)

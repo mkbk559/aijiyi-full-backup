@@ -1,4 +1,4 @@
-"""控制台新增面：桌宠养成、工作区文件树/预览/写入、工作区终端。"""
+"""控制台工作区文件树/预览/写入、工作区终端。"""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from pathlib import Path
 from unittest import mock
 
 from aiji.config import Settings
+from aiji import operations
 from aiji.memory import Memory
-from aiji.pet.growth import PetStore
 from aiji.server import make_server
 
 TMP_ROOT = Path(__file__).resolve().parent.parent / ".tmp"
@@ -25,14 +25,12 @@ TMP_ROOT.mkdir(mode=0o777, exist_ok=True)
 
 
 class TestConsoleNavigation(unittest.TestCase):
-    def test_every_view_has_navigation_and_title(self):
-        html = (Path(__file__).resolve().parent.parent / "aiji" / "web" / "console.html").read_text("utf-8")
-        views = set(re.findall(r'<section id="view-([\w-]+)"', html))
+    def test_operations_views_have_navigation(self):
+        html = (Path(__file__).resolve().parent.parent / "aiji" / "web" / "operations.html").read_text("utf-8")
+        views = set(re.findall(r'<section class="view[^\"]*" id="view-([\w-]+)"', html))
         nav = set(re.findall(r'<button[^>]*data-view="([\w-]+)"', html))
-        title_block = html.split("const titles = {", 1)[1].split("};", 1)[0]
-        titles = set(re.findall(r"\b([a-z][\w-]*):\s*\[", title_block))
         self.assertEqual(views, nav)
-        self.assertEqual(views, titles)
+        self.assertEqual(views, {"overview", "features", "settings", "lifecycle"})
 
 
 def workdir() -> Path:
@@ -95,47 +93,32 @@ class TestConsoleWorkspace(unittest.TestCase):
         status, raw, _ = self.request(path, body)
         return status, json.loads(raw) if raw else {}
 
-    # ---- 桌宠 ----
+    def test_removed_pet_routes_do_not_create_state(self):
+        for route in ("/api/pet", "/assets/whale_spritesheet.webp"):
+            status, _, _ = self.request(route)
+            self.assertEqual(status, 404)
+        for route in ("/api/pet/pet", "/api/pet/feed", "/api/pet/rename"):
+            status, _ = self.post(route, {})
+            self.assertEqual(status, 404)
+        self.assertFalse((self.dir / "pet_state.json").exists())
 
-    def test_pet_snapshot_interactions_and_rename(self):
-        pet = self.get("/api/pet")
-        self.assertEqual(pet["name"], "大肥鱼")
-        self.assertEqual(pet["treats"], 0)
-        self.assertEqual(pet["affinity"]["points"], 0)
-        self.assertEqual(pet["affinity"]["rank"], "幼鲸")
+    def test_operations_api_lists_features_and_services(self):
+        features = self.get("/api/operations/features")
+        self.assertGreaterEqual(len(features["items"]), 18)
+        services = self.get("/api/operations/services")
+        self.assertIn("aiji", {item["id"] for item in services["services"]})
 
-        status, first = self.post("/api/pet/pet", {})
-        self.assertEqual(status, 200)
-        self.assertTrue(first["ok"])
-        self.assertEqual(first["delta"], 1)
-        self.assertIn("摸摸", first["line"])
-
-        # 10s 冷却内再摸：不加分，但要给冷却台词
-        status, second = self.post("/api/pet/pet", {})
-        self.assertEqual(status, 200)
-        self.assertFalse(second["ok"])
-        self.assertEqual(second["delta"], 0)
-
-        # 没有小鱼干时喂食：明确拒绝且不扣粮
-        status, hungry = self.post("/api/pet/feed", {})
-        self.assertEqual(status, 200)
-        self.assertFalse(hungry["ok"])
-        self.assertEqual(hungry["snapshot"]["treats"], 0)
-
-        # 直接给 3 条鱼干，再喂：消耗一条 +5
-        store = PetStore(self.dir / "pet_state.json")
-        store.treats = {**store.treats, "treats": 3}
-        store.save()
-        status, fed = self.post("/api/pet/feed", {})
-        self.assertEqual(status, 200)
-        self.assertTrue(fed["ok"])
-        self.assertEqual(fed["delta"], 5)
-        self.assertEqual(fed["snapshot"]["treats"], 2)
-
-        status, renamed = self.post("/api/pet/rename", {"name": "小白鱼"})
-        self.assertEqual(status, 200)
-        self.assertEqual(renamed["name"], "小白鱼")
-        self.assertEqual(self.get("/api/pet")["name"], "小白鱼")
+    def test_operations_config_saves_validated_values(self):
+        with mock.patch.object(operations, "CONFIG_PATH", self.dir / "runtime.json"):
+            status, payload = self.post("/api/operations/config", {
+                "changes": {"budget_ms": 150, "rank_mode": "rrf_shadow"}})
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["values"]["budget_ms"], 150)
+            self.assertEqual(self.get("/api/operations/config")["values"]["rank_mode"], "rrf_shadow")
+            status, _ = self.post("/api/operations/config", {
+                "changes": {"onebot_token": "must-not-save"}})
+            self.assertEqual(status, 400)
+            self.assertNotIn("onebot_token", (self.dir / "runtime.json").read_text("utf-8"))
 
     # ---- 工作区文件 ----
 
@@ -212,23 +195,17 @@ class TestConsoleWorkspace(unittest.TestCase):
 
     # ---- 静态资源 ----
 
-    def test_console_page_and_assets(self):
+    def test_operations_page_replaces_console(self):
         status, raw, ctype = self.request("/")
         self.assertEqual(status, 200)
         self.assertIn("text/html", ctype)
         html = raw.decode("utf-8")
-        for marker in ("工作区", "pet-dock", "echarts.min.js", "whale_spritesheet.webp"):
+        for marker in ("全部具体功能", "功能配置", "启动与结束"):
             self.assertIn(marker, html)
+        self.assertNotIn("pet-dock", html)
+        status, _, _ = self.request("/console")
+        self.assertEqual(status, 404)
 
-        status, raw, ctype = self.request("/assets/echarts.min.js")
-        self.assertEqual(status, 200)
-        self.assertIn("javascript", ctype)
-        self.assertGreater(len(raw), 500_000)
-
-        status, raw, ctype = self.request("/assets/whale_spritesheet.webp")
-        self.assertEqual(status, 200)
-        self.assertEqual(ctype, "image/webp")
-        self.assertGreater(len(raw), 100_000)
 
 
 if __name__ == "__main__":

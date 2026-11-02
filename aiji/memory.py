@@ -214,10 +214,6 @@ class Memory:
             max_chars=settings.inject_chars, max_items=settings.inject_items,
             min_rel=float(getattr(settings, "inject_min_rel", 0.0)),
         )
-        # 桌宠养成状态：和 Tk 桌宠共用 data/pet_state.json（JSON 原子写，不进 schema）。
-        # 路径跟着 db 走，测试用临时库时不会污染真实 data/。
-        from .pet.growth import PetStore
-        self.pet = PetStore(Path(settings.db_path).parent / "pet_state.json")
         self.being = BeingStore(
             self.db, persona=str(getattr(settings, "persona", "sunba")))
 
