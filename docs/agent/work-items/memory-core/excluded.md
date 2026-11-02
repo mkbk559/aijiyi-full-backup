@@ -579,7 +579,11 @@
     探测脚本只带 token 会被回 `HTTP 400`（无 token 是 `401`、裸 HTTP 是 `405`）。
     → 判"服务端活着"用 400/401 这一对即可，别把 400 当成服务端故障。
 
-
-
-
-
+88. **不成立：本机那 77 个 `tempfile` 用例 ERROR 是"沙箱限制，无解"**。真实原因是 `.tmp/` 目录的
+    **陈旧 ACL**（`chmod 0o700` 与在它下面 `mkdir` 都被拒），不是代码也不是沙箱策略。
+    → 证据：`python tools/cleanup_junk.py --apply` 删掉整个 `.tmp/` 后，同一套用例
+      `Counter({'ok': 449})` 全绿（`tools/archcheck/results/suite_after.json`）。
+    → 以后见到 `PermissionError: [WinError 5] ... .tmp\...` 先删 `.tmp` 重建，再怀疑代码。
+89. **不成立：验证脚本放在 `.tmp/` 就算留档**。`.tmp/` 会被清理（本次一次清掉 218 MB），
+    写进 `.tmp` 的判据脚本和结果等于没留。
+    → 现在判据全部入库在 `tools/archcheck/`（见其 README），结果落 `tools/archcheck/results/`（gitignore）。
