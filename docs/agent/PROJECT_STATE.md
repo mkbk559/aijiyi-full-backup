@@ -69,6 +69,17 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **缺口⑤「生命卡引擎接线 / 能量经济学」：能量经济是真的，七引擎里 2 个是死代码**。
+  新增 `tools/archcheck/wiring_audit.py`（AST 三条判据：LifeCard 字段组合 / LifeCard 方法内真调用 / 外部调用点，
+  含模块级 helper，避免只匹配类名的假阴性）。实测：`LifeCard`、`EndocrineEngine` 在链路上；
+  `PersonalityKernel.apply_delta`、`OfflineCompensation.compress_days`、`ContextBudget` 只经 LifeCard 内部调用
+  （后者只由 `/api/life/context` 暴露）；**`DeclarativeEngine`/`ProceduralEngine` 组合了但没有任何调用方，
+  `SynapticDiffusion` 连组合都没进**。同时改掉架构图一处错误说法（原文称 `apply_delta` 只被测试调用，
+  实际 `life_event → card.apply_event` 每次情绪事件都跑）。能量账本（睡/醒收支、每条消息成本、力竭强制休息、
+  `can_proactive` 闸门）与"激素→注入条数"（`head.py:240-250` 的 `endo_factor`）都已核对。
+  证据：`docs/agent/evidence/gap-closure-2026-11-03/EVIDENCE-life-engines.md`。
+  **待办**：Declarative/Procedural 删或接线（决定权在产品）；`SynapticDiffusion` 若用应落在 recall 的 2 跳联想上。
+
 - 2026-11-03 **缺口④「FSRS-5 衰减」：其实早就实现了，缺的是"排序没接它"**。
   核对：`fact.stability/difficulty`（schema v11）、`store.retrievability()`（`R=(1+F·t/S)^-0.5`，F=19/81）、
   `bump_usage()`（被引用就涨 stability）全都在——但 `recall.score_fact` 的排序新近度一直用**按类型写死的半衰期**，

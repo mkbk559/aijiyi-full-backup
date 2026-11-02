@@ -325,7 +325,7 @@ const NODES = [
  d:"全局角色状态：能量、情绪残留、私密笔记、事件。实体写在 SQLite（being_state / being_event / being_note），注入块会带一句状态。",
  sym:["BeingStore","BeingState","LifeActivity"]},
 {id:"lifecard", band:"life", t:"生命卡七引擎", s:"实际 3 个在链路上", f:"aiji/endocrine/life.py",
- d:"七个引擎里真正接进链路的是内分泌、离线补偿与 endo_factor；Declarative / Procedural / SynapticDiffusion / PersonalityKernel.apply_delta 的调用方只有测试。",
+ d:"接线实况（tools/archcheck/wiring_audit.py 机器可查）：人格核/内分泌/离线补偿/上下文预算都在 LifeCard 里被真调用，endo_factor 还会反过来决定注入条数；Declarative 与 Procedural 只有定义、没有任何调用方，SynapticDiffusion 连组合都没进。修正一处旧说法：PersonalityKernel.apply_delta 不是只被测试调用，它在 apply_event 里每次情绪事件都会跑。",
  sym:["LifeCard","EndocrineEngine","OfflineCompensation"]},
 {id:"lifeloop", band:"life", t:"生活循环", s:"有界后台推进", f:"aiji/endocrine/life_loop.py",
  d:"按 tick 推进生命卡与能量，有上下界、可停；模拟 40 轮才稳定，24 轮时历史行不足会断言失败。",

@@ -32,6 +32,17 @@ def text_strategy():
     return st.text(min_size=1, max_size=24)
 
 
+def fact_text_strategy():
+    """事实正文/对象：必须是 `strip()` 后非空的可见字符。
+
+    hypothesis 第一版给了 `'\\r'`——被 `add_fact` 的"三元组不可为空"挡下（那是**正确**的校验），
+    说明这条属性测试真的能挖到东西；这里把生成域收窄到"合法但千奇百怪"的输入。
+    """
+    visible = st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp"))
+    return st.text(alphabet=visible, min_size=1, max_size=24).filter(lambda s: bool(s.strip()))
+
+
+
 @unittest.skipUnless(HAS_HYPOTHESIS, "未安装 hypothesis：pip install hypothesis")
 class TestIdentWhere(unittest.TestCase):
     @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
@@ -71,7 +82,7 @@ class TestIsolationEndToEnd(unittest.TestCase):
     @settings(max_examples=15, deadline=None,
               suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     @given(pa=text_strategy(), ua=text_strategy(), pb=text_strategy(), ub=text_strategy(),
-           obj=text_strategy())
+           obj=fact_text_strategy())
     def test_two_idents_never_see_each_other(self, pa, ua, pb, ub, obj):
         # 同一个 (platform, user) 组合时本来就该看到，跳过这种退化情形
         if (pa, ua) == (pb, ub):
