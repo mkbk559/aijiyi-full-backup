@@ -18,7 +18,8 @@ from aiji.brain import persona as persona_mod
 from aiji.brain import role_boundary
 from aiji.brain import selfhood
 from aiji.left_hand.actions import OPENAI_TOOLS
-from aiji.brain.gate import check_reply
+from aiji.brain.gate import check_reply, fit_reply, reply_char_limit
+from aiji.right_hand import params
 from aiji.brain.humanize import IM_PLATFORMS
 from aiji.endocrine.life import infer_event
 from aiji.brain.pool import PoolExhausted
@@ -314,6 +315,11 @@ class Head:
             item.name == "tools" or item.kind == inspect.Parameter.VAR_KEYWORD
             for item in chat_params
         )
+        # 池子不一定收 max_tokens（测试里的假池子就不收）：收才塞，别把 fixture 打崩
+        supports_max_tokens = any(
+            item.name == "max_tokens" or item.kind == inspect.Parameter.VAR_KEYWORD
+            for item in chat_params
+        )
         try:
             for round_no in range(max_rounds + 1):
                 kwargs = {"timeout_s": timeout_s}
@@ -321,8 +327,10 @@ class Head:
                     kwargs["temperature"] = temperature
                 if top_p is not None:
                     kwargs["top_p"] = top_p
-                if max_tokens is not None:
-                    kwargs["max_tokens"] = max_tokens
+                # 硬上限：不给就用默认上限，给了也不许超过 params.MAX_REPLY_TOKENS
+                if supports_max_tokens:
+                    kwargs["max_tokens"] = params.MAX_REPLY_TOKENS if max_tokens is None else min(
+                        int(max_tokens), params.MAX_REPLY_TOKENS)
                 if tools and supports_tools:
                     kwargs["tools"] = tools
                 result = self.memory.pool.chat(model_messages, **kwargs)
@@ -444,8 +452,9 @@ class Head:
                 rewrite_kwargs = {"timeout_s": timeout_s, "temperature": 1.05}
                 if top_p is not None:
                     rewrite_kwargs["top_p"] = top_p
-                if max_tokens is not None:
-                    rewrite_kwargs["max_tokens"] = max_tokens
+                if supports_max_tokens:
+                    rewrite_kwargs["max_tokens"] = params.MAX_REPLY_TOKENS if max_tokens is None else min(
+                        int(max_tokens), params.MAX_REPLY_TOKENS)
                 rewritten = self.memory.pool.chat(
                     rewrite_messages, **rewrite_kwargs)
                 candidate = (getattr(rewritten, "text", "") or "").strip()
@@ -476,6 +485,8 @@ class Head:
                 "我是大肥鱼",
                 raw,
             )
+        # 出口硬上限：先按平台裁进字符预算，再交给闸门校验（裁过不再整条丢弃）
+        raw = fit_reply(raw, reply_char_limit(ident.platform))
         gate = check_reply(raw)
         text = gate.text if gate.ok else "这话我说不出口。"
         pacer = getattr(self.memory, "human_pacer", None)

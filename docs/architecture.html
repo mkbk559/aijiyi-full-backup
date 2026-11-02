@@ -261,7 +261,7 @@ const NODES = [
  d:"轮转、冷却、故障转移。本机两个积分制反代（workbuddy 8788、agent2api 3065）已实测连通，LLM 第二层/模型抽取/摘要/软嵌入全部真机验证过；公网免费池只在本地假 OpenAI 服务上验过。PoolExhausted 立即落规则兜底，写入不丢。",
  sym:["ModelPool","PoolExhausted","PoolResult"]},
 {id:"gate", band:"orch", t:"出口闸门", s:"人格 / 物理底线", f:"aiji/brain/gate.py",
- d:"sanitize_reply + check_reply：越权、身份泄露、可执行代码在出门前被拦；拦完给一套体面的替代说法，而不是报错。",
+ d:"sanitize_reply + check_reply：越权、身份泄露、可执行代码在出门前被拦；拦完给一套体面的替代说法，而不是报错。长度是双保险：生成侧 max_tokens 掐在 MAX_REPLY_TOKENS，出口侧 fit_reply 按平台裁字符（IM 200 / 其它 500），超长改裁不整条丢。",
  sym:["sanitize_reply","check_reply","GateResult"]},
 {id:"humanize", band:"orch", t:"拟人节奏", s:"首字延迟 + 打字停顿", f:"aiji/brain/humanize.py",
  d:"只给外部 IM 加延迟（IM_PLATFORMS 白名单）；对 API 调用者不加任何人为等待。",

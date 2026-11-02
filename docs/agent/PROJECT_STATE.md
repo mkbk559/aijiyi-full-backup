@@ -69,6 +69,13 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **缺口①「回复长度硬上限」已落地（原来超长是整条丢弃，且 QQ 200 字上限声明了没人用）**：
+  生成侧 `max_tokens` 夹到 `MAX_REPLY_TOKENS=400`（池子不收就不塞），出口侧新增 `gate.fit_reply` 按平台裁字符
+  （IM 200 / 其它 500，切句末、不劈 emoji ZWJ 与 CQ 码），三条出口路径（head / heart / proactive）统一
+  "先裁后校验"。新增 `tests/test_reply_limit.py` 12 条，全量 **464/464 全绿**。
+  证据：`docs/agent/evidence/gap-closure-2026-11-03/EVIDENCE-reply-cap.md`。踩坑：假池子签名不含 `max_tokens` 会炸、
+  `send_queue` 正文在 `payload` JSON 里而不是 `text` 列。
+
 - 2026-11-03 **全量单测 452/452 全绿（此前一直红着的 77 例其实不是代码问题）**：
   那 77 例是 `.tmp/` 目录**陈旧 ACL**导致 `chmod 0o700` / `mkdir` 被拒；`python tools/cleanup_junk.py --apply`
   删掉整个 `.tmp/` 重建后同一套用例全绿。判据脚本已入库 `tools/archcheck/`（README 内有通过标准），

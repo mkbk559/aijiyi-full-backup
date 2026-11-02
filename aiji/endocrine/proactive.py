@@ -13,7 +13,7 @@ from typing import Callable
 
 from aiji.right_hand import params
 from aiji.hippocampus.db import DB
-from aiji.brain.gate import check_reply
+from aiji.brain.gate import check_reply, fit_reply, reply_char_limit
 from aiji.heart.heart import Heart, OutboxEvent, PRI_PROACTIVE
 from aiji.hippocampus.store import Ident
 
@@ -138,7 +138,7 @@ class Proactive:
                 text = self.handler(ident)
             except Exception:
                 text = None
-            gate = check_reply(text) if text else None
+            gate = check_reply(fit_reply(text, reply_char_limit(ident.platform))) if text else None
             if not text or gate is None or not gate.ok:
                 self._quota_refund(ident, old_window)  # 拦截/放弃 → 退还
                 self._backoff(ident, t)

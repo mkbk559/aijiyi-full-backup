@@ -193,7 +193,9 @@ class Heart:
                         extra=extra))
                 if reply:
                     # 方案 1.5 第 2 层：出口硬校验 fail-closed（gate 拦截不重试、进不了出站）
-                    from aiji.brain.gate import check_reply
+                    # 2026-11-03：先进字符预算（按平台 200/500），再校验——超长改裁不整条丢
+                    from aiji.brain.gate import check_reply, fit_reply, reply_char_limit
+                    reply = fit_reply(reply, reply_char_limit(ident.platform))
                     gate = check_reply(reply)
                     if gate.ok:
                         self._enqueue_send(

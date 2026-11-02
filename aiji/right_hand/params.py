@@ -20,8 +20,10 @@ DISPATCH_INTERVAL = 1.0        # 先验：发送线程扫描周期（秒）
 PLATFORM_BLOCK_DELAY = 30.0    # 先验：平台限流时该平台行推迟秒数（等 rate_info.reset_at 或退避）
 RATE_RESET_CAP = 3600.0        # 先验：reset_at 异常值防御封顶
 
-# ---- 闸门：aiji/gate.py ----
-MAX_REPLY_CHARS = 500          # 来自方案 1.5：回复长度出口硬校验
+# ---- 闸门：aiji/brain/gate.py ----
+MAX_REPLY_CHARS = 500          # 来自方案 1.5：回复长度出口硬校验（默认/非 IM 平台的字符上限）
+MAX_REPLY_TOKENS = 400         # 2026-11-03 新加：模型侧硬上限。生成前就掐住，不为注定被裁的字付钱
+IM_REPLY_CHAR_LIMIT = 200      # 2026-11-03 新加：IM（QQ/微信等）出口字符上限 = 原 QQ_MAX_REPLY_CHARS 的通用名
 
 # ---- 清理：aiji/janitor.py ----
 CONF_FLOOR = 0.15              # 待实测：纠错地板（方案 1.11 #4）。初数据：0.9 置信 4 连纠错触底（NEG_FACTOR=0.7）——真实负载下是否过狠待验证
@@ -63,7 +65,7 @@ REFLECT_MAX_TURNS = 60         # 先验：单次反思最多回看 60 条（控 
 # ---- QQ 接入：aiji/bridge/onebot.py（低风险路径）----
 QQ_RATE_PER_MIN = 4            # 现场实测：平台硬上限 5 条/分钟；保留 1 条给表情/人工动作
 QQ_COOLDOWN_S = 2.0            # 先验：同一条消息最短间隔，防连发触发频控
-QQ_MAX_REPLY_CHARS = 200       # 先验：群聊回复上限（比私聊的 500 短，防刷屏）
+QQ_MAX_REPLY_CHARS = IM_REPLY_CHAR_LIMIT   # 兼容旧名：真正的取值在闸门区 IM_REPLY_CHAR_LIMIT，别在这里改
 
 # ---- 反馈下修：aiji/hippocampus/store.py ----
 FEEDBACK_FLOOR = 0.15          # 同 CONF_FLOOR（apply_feedback 负向路径地板）

@@ -110,6 +110,60 @@ def sanitize_reply(text: str) -> str:
     return value.strip()
 
 
+IM_REPLY_PLATFORMS = frozenset({"qq", "onebot", "wechat", "wecom", "lark", "telegram", "discord"})
+
+
+def reply_char_limit(platform: str | None) -> int:
+    """按平台给出出口字符上限：IM 防刷屏用 200，其它（网页/API/桌面）用 500。"""
+    name = str(platform or "").strip().lower()
+    return params.IM_REPLY_CHAR_LIMIT if name in IM_REPLY_PLATFORMS else MAX_REPLY_CHARS
+
+
+_SENTENCE_END = "。！？!?；;…\n"
+_OPEN_BRACKETS = "【[（("
+_CLOSE_BRACKETS = "】]）)"
+_JOINERS = "\u200d\ufe0f\ufe0e"   # ZWJ / 变体选择符：切在它们前面会把 emoji 拆坏
+
+
+def fit_reply(text: str, limit: int | None = None) -> str:
+    """把回复裁进字符上限，尽量落在句末，绝不把 emoji/CQ 码/括号标记切成两半。
+
+    这是"硬上限"的执行者：生成侧另有 `params.MAX_REPLY_TOKENS` 从源头掐住，
+    两边一起保证"再长的模型回复也不会原样进 send_queue"。
+    """
+    limit = int(limit if limit is not None else MAX_REPLY_CHARS)
+    if limit <= 0:
+        return ""
+    if len(text) <= limit:
+        return text
+
+    budget = max(1, limit - 1)          # 留一格放省略号
+    window = text[:budget]
+
+    # 1) 优先切在句末（且不能只留个开头）
+    cut = -1
+    for i in range(len(window) - 1, max(-1, int(budget * 0.5) - 1), -1):
+        if window[i] in _SENTENCE_END:
+            cut = i + 1
+            break
+    if cut < 0:
+        cut = budget
+
+    # 2) 别把 emoji 的 ZWJ/变体选择符劈开
+    while 0 < cut < len(text) and text[cut] in _JOINERS:
+        cut -= 1
+
+    # 3) 别停在未闭合的括号/CQ 码中间
+    head = text[:cut]
+    if head.count("[") > head.count("]") or head.count("【") > head.count("】"):
+        last_open = max(head.rfind("["), head.rfind("【"))
+        if last_open > 0:
+            cut = last_open
+
+    trimmed = text[:cut].rstrip()
+    return (trimmed + "…") if trimmed else ""
+
+
 def check_reply(text: str) -> GateResult:
     """出口硬校验：先剔除文字表情标记，再做内容拦截。"""
     cleaned = sanitize_reply(text)
