@@ -137,7 +137,6 @@ class BeingCheckup:
         )
 
     def _continuity(self) -> dict[str, Any]:
-        ident = store.Ident("local", "checkup", "default")
         global_block = selfhood.system_prefix(
             [{"value": "局部短句", "confidence": 0.6, "evidence": 2}],
             global_traits=[{
