@@ -12,10 +12,11 @@ import types
 import unittest
 from pathlib import Path
 
-from aiji import role_boundary, selfhood, store
-from aiji.db import DB
-from aiji.reflect import Reflective, _clean_trait, _parse
-from aiji.store import Ident
+from aiji.brain import role_boundary, selfhood
+from aiji.hippocampus import store
+from aiji.hippocampus.db import DB
+from aiji.hippocampus.reflect import Reflective, _clean_trait, _parse
+from aiji.hippocampus.store import Ident
 
 TMP_ROOT = Path(__file__).resolve().parent.parent / ".tmp"
 TMP_ROOT.mkdir(mode=0o777, exist_ok=True)

@@ -26,9 +26,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji.config import Settings  # noqa: E402
-from aiji.memory import Memory  # noqa: E402
-from aiji.store import FactDraft, Ident, add_fact  # noqa: E402
+from aiji.right_hand.config import Settings  # noqa: E402
+from aiji.hippocampus.memory import Memory  # noqa: E402
+from aiji.hippocampus.store import FactDraft, Ident, add_fact  # noqa: E402
 
 ME = Ident("selfcheck", "me", "default")
 OTHER = Ident("selfcheck", "other", "default")

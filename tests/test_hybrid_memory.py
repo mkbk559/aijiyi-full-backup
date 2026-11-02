@@ -9,10 +9,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from aiji.config import Route, Settings
-from aiji.db import DB
-from aiji.memory import Memory
-from aiji.store import FactDraft, Ident, add_fact
+from aiji.right_hand.config import Route, Settings
+from aiji.hippocampus.db import DB
+from aiji.hippocampus.memory import Memory
+from aiji.hippocampus.store import FactDraft, Ident, add_fact
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -53,7 +53,7 @@ class TestHybridStartup(unittest.TestCase):
         )
         memory = None
         try:
-            with mock.patch("aiji.memory.ModelPool", FakePool):
+            with mock.patch("aiji.hippocampus.memory.ModelPool", FakePool):
                 memory = Memory(settings, engines="none")
             self.assertIsNotNone(memory._hybrid._items[fid][1])
         finally:

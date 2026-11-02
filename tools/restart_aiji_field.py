@@ -29,7 +29,7 @@ def listener_pid() -> int:
 def main() -> None:
     process = psutil.Process(listener_pid())
     command = " ".join(process.cmdline())
-    if "aiji.cli" not in command or "serve" not in command:
+    if "aiji.senses.cli" not in command or "serve" not in command:
         raise RuntimeError(f"refusing to restart unexpected process: {command}")
     environment = process.environ()
     environment.update({
@@ -57,7 +57,7 @@ def main() -> None:
         ROOT / "data" / "console.err.log"
     ).open("ab", buffering=0) as stderr:
         child = subprocess.Popen(
-            [sys.executable, "-m", "aiji.cli", "serve"],
+            [sys.executable, "-m", "aiji.senses.cli", "serve"],
             cwd=ROOT,
             env=environment,
             stdin=subprocess.DEVNULL,

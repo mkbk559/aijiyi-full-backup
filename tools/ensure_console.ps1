@@ -122,7 +122,7 @@ if ($listener) { exit 1 }
 if (-not (Test-Path -LiteralPath $pythonExe)) { exit 2 }
 
 $runtimeConfig = Join-Path $projectRoot 'config\runtime.json'
-$launchArgs = @('-m', 'aiji.cli')
+$launchArgs = @('-m', 'aiji.senses.cli')
 if (Test-Path -LiteralPath $runtimeConfig) { $launchArgs += @('--config', $runtimeConfig) }
 $launchArgs += 'serve'
 Rotate-Log (Join-Path $dataDir 'console.out.log')

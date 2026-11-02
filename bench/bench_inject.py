@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from aiji import Memory  # noqa: E402
-from aiji.config import Settings  # noqa: E402
+from aiji.right_hand.config import Settings  # noqa: E402
 from bench_recall import ident, pct, seed  # noqa: E402
 
 

@@ -23,8 +23,8 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from aiji import Memory  # noqa: E402
-from aiji.config import Settings  # noqa: E402
-from aiji.store import FactDraft, Ident, add_fact  # noqa: E402
+from aiji.right_hand.config import Settings  # noqa: E402
+from aiji.hippocampus.store import FactDraft, Ident, add_fact  # noqa: E402
 
 CITIES = ["杭州", "北京", "上海", "深圳", "成都", "武汉", "西安", "南京", "苏州", "广州"]
 JOBS = ["后端工程师", "产品经理", "设计师", "数据分析师", "运维工程师", "算法工程师"]

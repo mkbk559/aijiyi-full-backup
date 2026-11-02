@@ -9,13 +9,13 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
-from aiji.config import Settings
-from aiji.db import DB
-from aiji.pool import ModelPool
-from aiji.recall import Recaller
-from aiji.recognize import Item, Recognizers
-from aiji.store import Ident
-from aiji.writer import Job, Writer
+from aiji.right_hand.config import Settings
+from aiji.hippocampus.db import DB
+from aiji.brain.pool import ModelPool
+from aiji.hippocampus.recall import Recaller
+from aiji.hippocampus.recognize import Item, Recognizers
+from aiji.hippocampus.store import Ident
+from aiji.hippocampus.writer import Job, Writer
 
 
 ROOT = Path(__file__).resolve().parent.parent

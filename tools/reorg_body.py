@@ -121,6 +121,10 @@ for old, new in MOVE.items():
         continue
     om = old[:-3].replace("/", ".")
     nm = new[:-3].replace("/", ".")
+    if om.endswith(".__init__"):        # aiji.actions.__init__ → aiji.actions（包本身）
+        om = om[: -len(".__init__")]
+    if nm.endswith(".__init__"):
+        nm = nm[: -len(".__init__")]
     MODMAP[om] = nm
 # 包路径也要能整包改（aiji.bridge → aiji.throat.bridge 已由上面覆盖）
 for pkg, (_, _, _) in REGISTRY.items():
@@ -198,20 +202,35 @@ def rewrite_imports(file: Path, write: bool = True) -> list[str]:
                 continue
             aliases = [(a.name, a.asname) for a in node.names]
             mod_names = [n for n, _ in aliases]
-            # from aiji import store —— 成员其实是被搬走的子模块
-            if old_mod == "aiji" and all(f"aiji.{n}" in MODMAP or dotted_to_file(f"aiji.{n}") for n in mod_names):
-                parts = []
-                groups: dict[str, list[tuple[str, str | None]]] = {}
+            # from aiji import store —— 成员可能既含被搬走的子模块，也含包级符号
+            if old_mod == "aiji":
+                mod_aliases, plain_aliases = [], []
                 for n, asn in aliases:
                     target = f"aiji.{n}"
-                    nm = new_mod(target)
+                    if target in MODMAP:
+                        mod_aliases.append((n, asn))
+                    else:
+                        plain_aliases.append((n, asn))
+                if not mod_aliases:
+                    # 纯包级符号（如 from . import __version__）：改成绝对，免得跟着文件换包
+                    if node.level:
+                        txt = ", ".join(n if not a else f"{n} as {a}" for n, a in plain_aliases)
+                        edits.append((node.lineno - 1, (node.end_lineno or node.lineno) - 1,
+                                      f"from aiji import {txt}\n"))
+                    continue
+                parts = []
+                if plain_aliases:
+                    parts.append("from aiji import " + ", ".join(
+                        n if not a else f"{n} as {a}" for n, a in plain_aliases))
+                groups: dict[str, list[tuple[str, str | None]]] = {}
+                for n, asn in mod_aliases:
+                    nm = new_mod(f"aiji.{n}")
                     pkgname = nm.rsplit(".", 1)[0] if nm.count(".") >= 1 else "aiji"
                     groups.setdefault(pkgname, []).append((n, asn))
                 for pkgname, names in groups.items():
                     txt = ", ".join(n if not a else f"{n} as {a}" for n, a in names)
                     parts.append(f"from {pkgname} import {txt}")
-                new_lines = "\n".join(parts) + "\n"
-                edits.append((node.lineno - 1, (node.end_lineno or node.lineno) - 1, new_lines))
+                edits.append((node.lineno - 1, (node.end_lineno or node.lineno) - 1, "\n".join(parts) + "\n"))
                 continue
             nm = new_mod(old_mod)
             if nm != old_mod or node.level:
@@ -236,17 +255,143 @@ def rewrite_imports(file: Path, write: bool = True) -> list[str]:
     edits.sort(reverse=True)
     out = lines[:]
     for s, e, txt in edits:
+        indent = re.match(r"[ \t]*", out[s]).group(0)
+        body = txt.split("\n")
+        if body and body[-1] == "":
+            body.pop()
+        body = [indent + ln if ln.strip() else ln for ln in body]
         tail = ""
-        last = out[e]
-        m = re.search(r"#.*$", last)
-        if m and last.rstrip().endswith(m.group(0)):
+        m = re.search(r"#.*$", out[e])
+        if m and out[e].rstrip().endswith(m.group(0)):
             tail = "  " + m.group(0)
-        if not txt.endswith("\n"):
-            txt += "\n"
-        out[s:e + 1] = [txt.rstrip("\n") + tail + "\n"]
-        notes.append(f"  {file.relative_to(ROOT)}: L{s + 1} → {txt.strip()}")
+        body[-1] = body[-1] + tail
+        out[s:e + 1] = [ln + "\n" for ln in body]
+        notes.append(f"  {file.relative_to(ROOT)}: L{s + 1} → {body[0].strip()}")
     if write:
         file.write_text("".join(out), encoding="utf-8")
+    return notes
+
+
+PATHS_PY = '''"""aiji.skeleton.paths —— ⑨ 骨架：仓库根与数据地基的唯一来源。
+
+任何模块要读 data/、config/、tools/、bench/、web/ 都从这里取，
+不要再写 Path(__file__).resolve().parents[N]——身体再分一层这种写法必炸。
+"""
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]        # aiji/skeleton/paths.py → 仓库根
+AIIJI = ROOT / "aiji"
+DATA = ROOT / "data"
+CONFIG = ROOT / "config"
+TOOLS = ROOT / "tools"
+BENCH = ROOT / "bench"
+WEB_DIR = AIIJI / "right_hand" / "web"
+
+__all__ = ["ROOT", "AIIJI", "DATA", "CONFIG", "TOOLS", "BENCH", "WEB_DIR"]
+'''
+
+# (文件, [(旧片段, 新片段)], 需要从那 paths 导入的名字)
+PATH_FIXES: list[tuple[str, list[tuple[str, str]], list[str]]] = [
+    ("aiji/senses/cli.py", [('str(Path(__file__).resolve().parent.parent / "bench")', "str(BENCH)")], ["BENCH"]),
+    ("aiji/hippocampus/memory.py", [('str(Path(__file__).resolve().parents[1] / "tools")', "str(TOOLS)")], ["TOOLS"]),
+    ("aiji/right_hand/operations.py", [("ROOT = Path(__file__).resolve().parents[1]\n", "")], ["ROOT"]),
+    ("aiji/brain/persona.py", [('Path(__file__).resolve().parents[1] / "data" / "persona"', 'DATA / "persona"')], ["DATA"]),
+    ("aiji/throat/server.py", [
+        ('Path(__file__).resolve().parent / "web" / "operations.html"', 'WEB_DIR / "operations.html"'),
+        ('Path(__file__).resolve().parents[1] / "config" / "mcp_servers.json"', 'ROOT / "config" / "mcp_servers.json"'),
+    ], ["ROOT", "WEB_DIR"]),
+    ("aiji/right_hand/service_control.py", [("ROOT = Path(__file__).resolve().parents[1]\n", "")], ["ROOT"]),
+    ("aiji/heart/voice_service.py", [('Path(__file__).resolve().parents[1] / "tools" / "sapi_tts.ps1"', 'ROOT / "tools" / "sapi_tts.ps1"')], ["ROOT"]),
+]
+
+# 只改“确定是模块路径”的字符串：quote + aiji.<old module> + '.'
+def patch_quoted_module_paths() -> list[str]:
+    alts = sorted({m[5:] for m in MODMAP if m != "aiji"}, key=len, reverse=True)
+    pat = re.compile(r"""(["'])aiji\.(""" + "|".join(re.escape(a) for a in alts) + r""")(?=\.)""")
+    notes = []
+    for f in iter_py():
+        if f.name == "reorg_body.py":
+            continue
+        src = f.read_text(encoding="utf-8")
+        def _sub(m):
+            return f"{m.group(1)}aiji.{new_mod('aiji.' + m.group(2))}"
+        new, n = pat.subn(_sub, src)
+        if n:
+            f.write_text(new, encoding="utf-8")
+            notes.append(f"  {f.relative_to(ROOT)}: {n} 处字符串模块路径")
+    return notes
+
+
+def fix_skeleton_paths() -> list[str]:
+    skel = ROOT / "aiji" / "skeleton"
+    skel.mkdir(parents=True, exist_ok=True)
+    (skel / "__init__.py").write_text(
+        f'"""{REGISTRY["skeleton"][1]}\n\n对应 docs/architecture.html 的 data 层。\n"""\n', encoding="utf-8")
+    (skel / "paths.py").write_text(PATHS_PY, encoding="utf-8")
+    notes = ["  new aiji/skeleton/paths.py"]
+    for rel, subs, names in PATH_FIXES:
+        p = ROOT / rel
+        if not p.exists():
+            notes.append(f"  SKIP {rel}（不存在）")
+            continue
+        src = p.read_text(encoding="utf-8")
+        for old, new in subs:
+            if old not in src:
+                notes.append(f"  MISS {rel}: {old[:50]}")
+                continue
+            src = src.replace(old, new, 1)
+        imp = f"from aiji.skeleton.paths import {', '.join(names)}\n"
+        if "from aiji.skeleton.paths import" in src:
+            m = re.search(r"^from aiji\.skeleton\.paths import (.+)$", src, re.M)
+            have = {x.strip() for x in m.group(1).split(",")}
+            add = [n for n in names if n not in have]
+            if add:
+                src = src.replace(m.group(0), m.group(0).rstrip() + ", " + ", ".join(add), 1)
+        else:
+            try:
+                tree = ast.parse(src)
+            except SyntaxError as e:
+                notes.append(f"  SYNTAX {rel}: {e}")
+                p.write_text(src, encoding="utf-8")
+                continue
+            last = None
+            for node in tree.body:
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    last = node
+            lines = src.splitlines(keepends=True)
+            at = (last.end_lineno if last else 0)
+            lines.insert(at, imp)
+            src = "".join(lines)
+        p.write_text(src, encoding="utf-8")
+        notes.append(f"  patched {rel} ({', '.join(names)})")
+    return notes
+
+
+def fix_external() -> list[str]:
+    notes = []
+    simple = {
+        "pyproject.toml": [('aiji = "aiji.cli:main"', 'aiji = "aiji.senses.cli:main"'),
+                           ('aiji = ["web/*.html"]', 'aiji = ["right_hand/web/*.html"]')],
+        "tools/ensure_console.ps1": [("'-m', 'aiji.cli'", "'-m', 'aiji.senses.cli'")],
+        "tools/restart_aiji_field.py": [("aiji.cli", "aiji.senses.cli")],
+        "tools/audit_pkg_dead.py": [("aiji.cli", "aiji.senses.cli")],
+        "README.md": [("-m aiji.cli", "-m aiji.senses.cli")],
+    }
+    for rel, subs in simple.items():
+        p = ROOT / rel
+        if not p.exists():
+            notes.append(f"  SKIP {rel}")
+            continue
+        src = p.read_text(encoding="utf-8")
+        n = 0
+        for old, new in subs:
+            c = src.count(old)
+            if c:
+                src = src.replace(old, new)
+                n += c
+        if n:
+            p.write_text(src, encoding="utf-8")
+        notes.append(f"  {rel}: {n} 处")
     return notes
 
 
@@ -303,6 +448,17 @@ def main() -> int:
             init.parent.mkdir(parents=True, exist_ok=True)
             init.write_text(f'"""{doc}\n\n对应 docs/architecture.html 的 {band} 层。\n"""\n', encoding="utf-8")
             print(f"  new {init.relative_to(ROOT)}")
+
+    # 5) 骨架路径 + 字符串里的模块路径 + 仓库外引用
+    print("\n-- 骨架/路径 --")
+    for n in fix_skeleton_paths():
+        print(n)
+    print("\n-- 字符串模块路径 --")
+    for n in patch_quoted_module_paths():
+        print(n)
+    print("\n-- 外部引用 --")
+    for n in fix_external():
+        print(n)
 
     print("\n下一步：python -m compileall -q aiji tests tools bench && python .tmp/archcheck/run_suite.py")
     return 0

@@ -7,10 +7,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from aiji.heart import Heart, OutboxEvent, PRI_MENTION
-from aiji.params import HEART_INSTANCE_TTL, HEART_LEASE_SECONDS
-from aiji.store import Ident
-from aiji.db import DB
+from aiji.heart.heart import Heart, OutboxEvent, PRI_MENTION
+from aiji.right_hand.params import HEART_INSTANCE_TTL, HEART_LEASE_SECONDS
+from aiji.hippocampus.store import Ident
+from aiji.hippocampus.db import DB
 
 ROOT = Path(__file__).resolve().parents[1]
 

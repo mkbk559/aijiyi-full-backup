@@ -18,9 +18,9 @@ from tools.load_keys import bridge  # noqa: E402
 bridge()
 import os  # noqa: E402
 
-from aiji.config import Route  # noqa: E402
-from aiji.pool import ModelPool  # noqa: E402
-from aiji.vectors import BruteForceIndex, HybridIndex, llm_dim_embed  # noqa: E402
+from aiji.right_hand.config import Route  # noqa: E402
+from aiji.brain.pool import ModelPool  # noqa: E402
+from aiji.hippocampus.vectors import BruteForceIndex, HybridIndex, llm_dim_embed  # noqa: E402
 
 # 语料：fact 库（10 条）+ 5 个改写 query（正确答案 id + 干扰项）
 FACTS = [

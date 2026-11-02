@@ -1,7 +1,7 @@
 """只看 `aiji/` 包的模块级死代码：某模块没被包内任何其它模块 import 就是候选。
 
 注意：CLI/服务入口（`aiji/__main__.py`、`cli.py`、`server.py`）是通过
-`python -m aiji.cli` / 打包入口调用的，天然没有 import 方，要单独放行。
+`python -m aiji.senses.cli` / 打包入口调用的，天然没有 import 方，要单独放行。
 """
 from __future__ import annotations
 

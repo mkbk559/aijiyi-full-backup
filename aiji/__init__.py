@@ -4,12 +4,12 @@
 读是 100ms 硬预算的本地快召回，注入是带来源标注的软引导文本块。
 """
 
-from .config import Route, Settings
-from .inject import Injection, Injector
-from .memory import Memory
-from .recall import Hit, RecallResult
-from .recognize import Envelope, Item, Recognizers
-from .store import Ident
+from aiji.right_hand.config import Route, Settings
+from aiji.hippocampus.inject import Injection, Injector
+from aiji.hippocampus.memory import Memory
+from aiji.hippocampus.recall import Hit, RecallResult
+from aiji.hippocampus.recognize import Envelope, Item, Recognizers
+from aiji.hippocampus.store import Ident
 
 __version__ = "0.8.3"
 __all__ = [

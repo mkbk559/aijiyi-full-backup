@@ -13,9 +13,9 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
-from aiji.config import Settings
-from aiji.memory import Memory
-from aiji.server import make_server
+from aiji.right_hand.config import Settings
+from aiji.hippocampus.memory import Memory
+from aiji.throat.server import make_server
 
 
 ROOT = Path(__file__).resolve().parent.parent

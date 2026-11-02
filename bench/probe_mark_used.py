@@ -22,10 +22,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji import params  # noqa: E402
-from aiji.config import Settings  # noqa: E402
-from aiji.memory import Memory  # noqa: E402
-from aiji.store import FactDraft, Ident, add_fact  # noqa: E402
+from aiji.right_hand import params  # noqa: E402
+from aiji.right_hand.config import Settings  # noqa: E402
+from aiji.hippocampus.memory import Memory  # noqa: E402
+from aiji.hippocampus.store import FactDraft, Ident, add_fact  # noqa: E402
 
 IDENT = Ident("probe", "reinforce", "default")
 

@@ -6,7 +6,7 @@ import pathlib
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
-path = pathlib.Path(r"D:\AIJiYi\aiji\server.py")
+path = pathlib.Path(r"D:\AIJiYi\aiji\throat\server.py")
 src = path.read_text(encoding="utf-8")
 tree = ast.parse(src)
 gets, posts = [], []

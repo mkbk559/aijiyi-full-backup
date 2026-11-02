@@ -8,9 +8,9 @@ import time
 import unittest
 from pathlib import Path
 
-from aiji.being import BeingStore
-from aiji.db import DB
-from aiji.life_loop import LifeLoop
+from aiji.endocrine.being import BeingStore
+from aiji.hippocampus.db import DB
+from aiji.endocrine.life_loop import LifeLoop
 
 
 def noon() -> float:

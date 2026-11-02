@@ -13,15 +13,16 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from aiji import Memory, store
-from aiji.config import Route, Settings
-from aiji.db import DB
-from aiji.head import Head
-from aiji.pool import ModelPool, PoolExhausted
-from aiji.presence import PresenceHub, PresenceServer
-from aiji.reflect import Reflective, ReflectionWorker
-from aiji.server import make_server
-from aiji.store import Ident
+from aiji import Memory
+from aiji.hippocampus import store
+from aiji.right_hand.config import Route, Settings
+from aiji.hippocampus.db import DB
+from aiji.brain.head import Head
+from aiji.brain.pool import ModelPool, PoolExhausted
+from aiji.endocrine.presence import PresenceHub, PresenceServer
+from aiji.hippocampus.reflect import Reflective, ReflectionWorker
+from aiji.throat.server import make_server
+from aiji.hippocampus.store import Ident
 
 TMP_ROOT = Path(__file__).resolve().parent.parent / ".tmp"
 TMP_ROOT.mkdir(mode=0o777, exist_ok=True)

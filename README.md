@@ -76,7 +76,7 @@ video  仅元数据（不做视觉理解）
 
 所有历史行都保留（Graphiti 式"失效不删除"）：`valid_from` 是它开始为真的时间，`valid_to` 是失效时间；`status='active'` 才参与召回。
 
-**排序**（`aiji/recall.py::score_fact`）不再是"FTS 名次 × 新近度"，而是：
+**排序**（`aiji/hippocampus/recall.py::score_fact`）不再是"FTS 名次 × 新近度"，而是：
 
 ```
 score = (0.55·相关度 + 0.20·重要度 + 0.15·新近度 + 0.10·置信度)
@@ -114,24 +114,24 @@ score = (0.55·相关度 + 0.20·重要度 + 0.15·新近度 + 0.10·置信度)
 ## 快速开始
 
 ```bash
-python -m aiji.cli doctor                                   # 自检：SQLite/FTS5/哪些模型路由在场
+python -m aiji.senses.cli doctor                                   # 自检：SQLite/FTS5/哪些模型路由在场
 
 # 学习
-python -m aiji.cli --db data/aiji.db remember --platform wechat --user u1 \
+python -m aiji.senses.cli --db data/aiji.db remember --platform wechat --user u1 \
         "我叫李雷，住在杭州，张伟是我的同事，我说话比较随意呀~~"
-python -m aiji.cli --db data/aiji.db ingest --platform wechat --user u1 \
+python -m aiji.senses.cli --db data/aiji.db ingest --platform wechat --user u1 \
         --kind image --ref msg-7781 --url "https://cdn.example/fapiao.jpg"
 
 # 召回 / 注入 / 反馈
-python -m aiji.cli --db data/aiji.db recall --platform wechat --user u1 "我住哪"
-python -m aiji.cli --db data/aiji.db inject --platform wechat --user u1 "我住哪" --session s1
-python -m aiji.cli --db data/aiji.db feedback --platform wechat --user u1 --injection-id 1 --used 2 3
+python -m aiji.senses.cli --db data/aiji.db recall --platform wechat --user u1 "我住哪"
+python -m aiji.senses.cli --db data/aiji.db inject --platform wechat --user u1 "我住哪" --session s1
+python -m aiji.senses.cli --db data/aiji.db feedback --platform wechat --user u1 --injection-id 1 --used 2 3
 
 # 看沉淀结果
-python -m aiji.cli --db data/aiji.db style    --platform wechat --user u1
-python -m aiji.cli --db data/aiji.db media    --platform wechat --user u1
-python -m aiji.cli --db data/aiji.db accounts
-python -m aiji.cli --db data/aiji.db serve --port 8787
+python -m aiji.senses.cli --db data/aiji.db style    --platform wechat --user u1
+python -m aiji.senses.cli --db data/aiji.db media    --platform wechat --user u1
+python -m aiji.senses.cli --db data/aiji.db accounts
+python -m aiji.senses.cli --db data/aiji.db serve --port 8787
 ```
 
 配置：`config/aiji.example.json`（`AIJI_CONFIG` 指定）。路由 key 一律走环境变量；缺 key 的路由自动跳过，抽取退化为本地规则（仍能存事实/画像/风格，`source_kind='heuristic'`）。
@@ -167,7 +167,7 @@ curl localhost:8787/health
 
 ```powershell
 $env:AGENT2API_KEY = "<在 Agent2API 后台生成的新 key>"
-python -m aiji.cli serve --host 127.0.0.1 --port 8787
+python -m aiji.senses.cli serve --host 127.0.0.1 --port 8787
 ```
 
 浏览器打开 `http://127.0.0.1:8787/` 是运行与功能页面；任意支持自定义
@@ -186,7 +186,7 @@ API Key:  留空；若设置了 AIJI_API_KEY，则填同一个值
 运行总览展示各服务状态、消息处理链路和后台任务；全部功能按实际接口列出 22 项能力，
 点开后读取实时数据，并为记忆、对话、语音、歌曲、社交、表情包、审批等提供操作表单。
 功能配置保存到 `config/runtime.json`，需要重启服务生效；密钥不在页面显示或保存。
-页面也能直接用 `file:///D:/AIJiYi/aiji/web/operations.html#lifecycle` 打开（服务端只为
+页面也能直接用 `file:///D:/AIJiYi/aiji/right_hand/web/operations.html#lifecycle` 打开（服务端只为
 `null` 与 `127.0.0.1:8787` 两个本地来源放行 CORS）；`/`、`/operations`、`/operations.html`
 是同一份页面。
 旧 15 页控制台与 ECharts 资源已经移除。工作区 API 默认关闭

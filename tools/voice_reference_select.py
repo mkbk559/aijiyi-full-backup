@@ -187,7 +187,7 @@ def main() -> int:
     transcript = ""
     confidence = 0.0
     if not args.no_asr:
-        from aiji.real_engines import transcribe_file
+        from aiji.hippocampus.real_engines import transcribe_file
 
         transcript, confidence = transcribe_file(args.out)
         (args.out.parent / "reference.txt").write_text(

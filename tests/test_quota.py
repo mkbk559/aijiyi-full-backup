@@ -16,13 +16,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji import params  # noqa: E402
-from aiji.config import Settings  # noqa: E402
-from aiji.memory import Memory  # noqa: E402
-from aiji.quota import (  # noqa: E402
-    CreditProvider, parse_credits, record_send, sends_last_24h,
-)
-from aiji.store import FactDraft, Ident, add_fact  # noqa: E402
+from aiji.right_hand import params  # noqa: E402
+from aiji.right_hand.config import Settings  # noqa: E402
+from aiji.hippocampus.memory import Memory  # noqa: E402
+from aiji.brain.quota import CreditProvider, parse_credits, record_send, sends_last_24h
+from aiji.hippocampus.store import FactDraft, Ident, add_fact  # noqa: E402
 
 ME = Ident("quota", "me", "default")
 

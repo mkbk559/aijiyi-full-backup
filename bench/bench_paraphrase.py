@@ -24,10 +24,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji import store  # noqa: E402
-from aiji.db import DB  # noqa: E402
-from aiji.recall import Recaller  # noqa: E402
-from aiji.store import FactDraft, Ident  # noqa: E402
+from aiji.hippocampus import store  # noqa: E402
+from aiji.hippocampus.db import DB  # noqa: E402
+from aiji.hippocampus.recall import Recaller  # noqa: E402
+from aiji.hippocampus.store import FactDraft, Ident  # noqa: E402
 
 IDENT = Ident("bench", "para", "default")
 

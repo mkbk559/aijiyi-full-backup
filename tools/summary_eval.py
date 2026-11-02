@@ -19,9 +19,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
 from tools.load_keys import bridge  # noqa: E402
-from aiji.extract import heuristic_summary, build_summary_messages  # noqa: E402
-from aiji.pool import ModelPool  # noqa: E402
-from aiji.config import Route  # noqa: E402
+from aiji.hippocampus.extract import heuristic_summary, build_summary_messages  # noqa: E402
+from aiji.brain.pool import ModelPool  # noqa: E402
+from aiji.right_hand.config import Route  # noqa: E402
 
 bridge()
 import os  # noqa: E402

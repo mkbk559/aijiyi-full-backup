@@ -31,20 +31,17 @@ def workdir(prefix: str = "t") -> Path:
     return p
 
 
-import aiji.recall as recall_mod  # noqa: E402
+import aiji.hippocampus.recall as recall_mod  # noqa: E402
 from aiji import Memory  # noqa: E402
-from aiji.recall import half_life_days, score_fact  # noqa: E402
-from aiji.config import Route, Settings  # noqa: E402
-from aiji.db import DB, SCHEMA_VERSION, SCHEMA_V2  # noqa: E402
-from aiji.extract import heuristic, parse, style_hints  # noqa: E402
-from aiji.inject import FOOTER, HEADER, STYLE_HEADER  # noqa: E402
-from aiji.pool import ModelPool, PoolExhausted  # noqa: E402
-from aiji.recognize import Item, Recognizers  # noqa: E402
-from aiji.server import make_server  # noqa: E402
-from aiji.store import (  # noqa: E402
-    FactDraft, Ident, add_fact, add_media, media_for, put_summary, search_facts,
-    upsert_profile, upsert_style,
-)
+from aiji.hippocampus.recall import half_life_days, score_fact  # noqa: E402
+from aiji.right_hand.config import Route, Settings  # noqa: E402
+from aiji.hippocampus.db import DB, SCHEMA_VERSION, SCHEMA_V2  # noqa: E402
+from aiji.hippocampus.extract import heuristic, parse, style_hints  # noqa: E402
+from aiji.hippocampus.inject import FOOTER, HEADER, STYLE_HEADER  # noqa: E402
+from aiji.brain.pool import ModelPool, PoolExhausted  # noqa: E402
+from aiji.hippocampus.recognize import Item, Recognizers  # noqa: E402
+from aiji.throat.server import make_server  # noqa: E402
+from aiji.hippocampus.store import FactDraft, Ident, add_fact, add_media, media_for, put_summary, search_facts, upsert_profile, upsert_style
 
 WX = Ident("wechat", "u1", "default")
 DY = Ident("douyin", "u1", "default")
@@ -670,13 +667,13 @@ class TestRecognize(TmpDB):
         self.assertTrue(any("1280" in h.text for h in m.recall("发票金额", WX, session="s1").hits))
 
     def test_auto_ocr_downloads_url_only_image_before_recognition(self):
-        with mock.patch("aiji.real_engines.HAS_OCR", True), \
+        with mock.patch("aiji.hippocampus.real_engines.HAS_OCR", True), \
                 mock.patch(
-                    "aiji.real_engines.ocr_image",
+                    "aiji.hippocampus.real_engines.ocr_image",
                     return_value=("群友发了一张猫的照片", 0.91),
                 ), \
                 mock.patch(
-                    "aiji.media_audio._default_fetch",
+                    "aiji.hippocampus.media_audio._default_fetch",
                     return_value=b"image-bytes",
                 ):
             m = self.mem(routes=())
@@ -705,20 +702,20 @@ class TestRecognize(TmpDB):
     # ---- 识别批量（2026-10-29 第二十二批）：多图/多音频合并单次引擎调用 ----
 
     def test_ocr_images_batch_concats_and_averages(self):
-        from aiji import real_engines as re
+        from aiji.hippocampus import real_engines as re
         with mock.patch.object(re, "ocr_image", side_effect=[("图一文字", 0.8), ("", 0.0), ("图二文字", 0.6)]):
             text, conf = re.ocr_images([b"a", b"b", b"c"])
         self.assertEqual(text, "图一文字\n图二文字")   # 空结果跳过、按行拼接
         self.assertAlmostEqual(conf, 0.7)               # 只对非空取平均 (0.8+0.6)/2
 
     def test_ocr_images_batch_empty(self):
-        from aiji import real_engines as re
+        from aiji.hippocampus import real_engines as re
         with mock.patch.object(re, "ocr_image", return_value=("", 0.0)):
             self.assertEqual(re.ocr_images([b"a", b"b"]), ("", 0.0))
         self.assertEqual(re.ocr_images([]), ("", 0.0))
 
     def test_transcribe_wavs_batch_concats(self):
-        from aiji import real_engines as re
+        from aiji.hippocampus import real_engines as re
         with mock.patch.object(re, "transcribe_wav_bytes", side_effect=[("第一段", 0.9), ("第二段", 0.7)]):
             text, conf = re.transcribe_wavs([b"a", b"b"])
         self.assertEqual(text, "第一段 第二段")
@@ -726,7 +723,7 @@ class TestRecognize(TmpDB):
 
     def test_memory_dispatches_bytes_list_to_batch(self):
         # Memory 自动接线时，extra["bytes_list"] 走批量函数（一次 ingest 多份字节）
-        from aiji import real_engines as re
+        from aiji.hippocampus import real_engines as re
         with mock.patch.object(re, "HAS_OCR", True), \
              mock.patch.object(re, "ocr_images", return_value=("批量图文字 1280 元", 0.85)) as batch:
             m = self.mem(routes=(), engines="auto")
@@ -1060,7 +1057,7 @@ def _fact(**kw):
         source_kind="heuristic",
     )
     base.update(kw)
-    from aiji.store import Fact
+    from aiji.hippocampus.store import Fact
     return Fact(**base)
 
 

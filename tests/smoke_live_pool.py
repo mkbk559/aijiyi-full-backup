@@ -14,9 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 from tools.load_keys import bridge  # noqa: E402
-from aiji.config import Route  # noqa: E402
-from aiji.extract import build_messages, parse  # noqa: E402
-from aiji.pool import ModelPool  # noqa: E402
+from aiji.right_hand.config import Route  # noqa: E402
+from aiji.hippocampus.extract import build_messages, parse  # noqa: E402
+from aiji.brain.pool import ModelPool  # noqa: E402
 
 TEXT = "我叫李雷，住在杭州，在做后端开发。"
 

@@ -10,8 +10,8 @@ from pathlib import Path
 from unittest import mock
 
 from aiji import Memory
-from aiji.bridge.onebot import OneBotBridge, OneBotClient, parse_event
-from aiji.config import Settings
+from aiji.throat.bridge.onebot import OneBotBridge, OneBotClient, parse_event
+from aiji.right_hand.config import Settings
 
 
 class TestOneBotParse(unittest.TestCase):
@@ -211,7 +211,7 @@ class TestOneBotBridge(unittest.TestCase):
             timeout_s=9,
         )
         with mock.patch(
-            "aiji.bridge.onebot.urllib.request.urlopen",
+            "aiji.throat.bridge.onebot.urllib.request.urlopen",
             fake_urlopen,
         ):
             data = client.call(

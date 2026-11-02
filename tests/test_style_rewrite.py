@@ -8,11 +8,11 @@ import unittest
 from pathlib import Path
 from typing import ClassVar
 
-from aiji.config import Settings
-from aiji.head import Head
-from aiji.memory import Memory
-from aiji import store
-from aiji.store import FactDraft, Ident, add_fact
+from aiji.right_hand.config import Settings
+from aiji.brain.head import Head
+from aiji.hippocampus.memory import Memory
+from aiji.hippocampus import store
+from aiji.hippocampus.store import FactDraft, Ident, add_fact
 
 
 class SequencePool:

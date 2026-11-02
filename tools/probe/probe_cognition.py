@@ -13,13 +13,14 @@ from tools.probe._harness import (  # noqa: E402
     FakePool, Probe, cleanup, make_memory, quiet_env, workdir,
 )
 
-from aiji import selfhood, store  # noqa: E402
-from aiji.being import ACTIVITIES, BeingStore  # noqa: E402
-from aiji.being_checkup import BeingCheckup  # noqa: E402
-from aiji.db import DB  # noqa: E402
-from aiji.life import LifeCard, load_life_card, save_life_card  # noqa: E402
-from aiji.reflect import Reflective  # noqa: E402
-from aiji.store import Ident  # noqa: E402
+from aiji.brain import selfhood
+from aiji.hippocampus import store  # noqa: E402
+from aiji.endocrine.being import ACTIVITIES, BeingStore  # noqa: E402
+from aiji.endocrine.being_checkup import BeingCheckup  # noqa: E402
+from aiji.hippocampus.db import DB  # noqa: E402
+from aiji.endocrine.life import LifeCard, load_life_card, save_life_card  # noqa: E402
+from aiji.hippocampus.reflect import Reflective  # noqa: E402
+from aiji.hippocampus.store import Ident  # noqa: E402
 
 quiet_env()
 probe = Probe("cognition")

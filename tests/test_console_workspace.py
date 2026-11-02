@@ -15,10 +15,10 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
-from aiji.config import Settings
-from aiji import operations
-from aiji.memory import Memory
-from aiji.server import make_server
+from aiji.right_hand.config import Settings
+from aiji.right_hand import operations
+from aiji.hippocampus.memory import Memory
+from aiji.throat.server import make_server
 
 TMP_ROOT = Path(__file__).resolve().parent.parent / ".tmp"
 TMP_ROOT.mkdir(mode=0o777, exist_ok=True)
@@ -26,7 +26,7 @@ TMP_ROOT.mkdir(mode=0o777, exist_ok=True)
 
 class TestConsoleNavigation(unittest.TestCase):
     def test_operations_views_have_navigation(self):
-        html = (Path(__file__).resolve().parent.parent / "aiji" / "web" / "operations.html").read_text("utf-8")
+        html = (Path(__file__).resolve().parent.parent / "aiji" / "right_hand" / "web" / "operations.html").read_text("utf-8")
         views = set(re.findall(r'<section class="view[^\"]*" id="view-([\w-]+)"', html))
         nav = set(re.findall(r'<button[^>]*data-view="([\w-]+)"', html))
         self.assertEqual(views, nav)

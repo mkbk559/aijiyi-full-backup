@@ -12,9 +12,9 @@ from tools.probe._harness import (  # noqa: E402
     Probe, cleanup, make_memory, quiet_env, workdir,
 )
 
-from aiji import store  # noqa: E402
-from aiji.janitor import Janitor  # noqa: E402
-from aiji.store import FactDraft, Ident  # noqa: E402
+from aiji.hippocampus import store  # noqa: E402
+from aiji.hippocampus.janitor import Janitor  # noqa: E402
+from aiji.hippocampus.store import FactDraft, Ident  # noqa: E402
 
 quiet_env()
 probe = Probe("memory-pipeline")
@@ -263,7 +263,7 @@ try:
                 f"id={media_id} cols={cols}")
 
     # ================= 12. 风格与口癖 =================
-    from aiji.extract import style_hints, verbal_tic_hints
+    from aiji.hippocampus.extract import style_hints, verbal_tic_hints
     hints = style_hints("反正我觉得吧~~~ 就是那种感觉哈哈 😂")
     tics = verbal_tic_hints("反正我觉得吧，就是那种感觉")
     probe.case("风格四维（语气/长度/表情/口癖）",

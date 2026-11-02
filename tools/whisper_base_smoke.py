@@ -36,7 +36,7 @@ def make_wav(path: str) -> str:
 
 
 def load_wav_16k(path: str):
-    from aiji.real_engines import _resample16k
+    from aiji.hippocampus.real_engines import _resample16k
 
     with wave.open(path, "rb") as w:
         sr, ch, sw = w.getframerate(), w.getnchannels(), w.getsampwidth()

@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 
-from aiji.being_checkup import BeingCheckup
-from aiji.memory import Memory
-from aiji.store import Ident
+from aiji.endocrine.being_checkup import BeingCheckup
+from aiji.hippocampus.memory import Memory
+from aiji.hippocampus.store import Ident
 
 
 def main() -> int:

@@ -12,19 +12,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
-from aiji.actions import (
-    ActionExecutor,
-    ActionPolicy,
-    ApprovalManager,
-    PolicyViolation,
-    ToolCall,
-)
-from aiji.actions.gui import parse_hotkey
-from aiji.config import Route, Settings
-from aiji.head import Head
-from aiji.memory import Memory
-from aiji.pool import ModelPool
-from aiji.store import Ident
+from aiji.left_hand.actions import ActionExecutor, ActionPolicy, ApprovalManager, PolicyViolation, ToolCall
+from aiji.left_hand.actions.gui import parse_hotkey
+from aiji.right_hand.config import Route, Settings
+from aiji.brain.head import Head
+from aiji.hippocampus.memory import Memory
+from aiji.brain.pool import ModelPool
+from aiji.hippocampus.store import Ident
 
 TMP_ROOT = Path(__file__).resolve().parent.parent / ".tmp"
 TMP_ROOT.mkdir(mode=0o777, exist_ok=True)

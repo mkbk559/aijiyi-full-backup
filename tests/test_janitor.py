@@ -10,10 +10,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji import store
-from aiji.db import DB
-from aiji.janitor import Janitor, LEASE_KEY
-from aiji.store import FactDraft, Ident, add_fact
+from aiji.hippocampus import store
+from aiji.hippocampus.db import DB
+from aiji.hippocampus.janitor import Janitor, LEASE_KEY
+from aiji.hippocampus.store import FactDraft, Ident, add_fact
 
 
 def workdir(name: str) -> Path:
@@ -120,7 +120,7 @@ class TestJanitor(unittest.TestCase):
                           (i, i / 10.0))
         j = Janitor(db)
         j.run(now=1750000000.0)
-        from aiji.params import LINK_CAP as _cap
+        from aiji.right_hand.params import LINK_CAP as _cap
         n = db.read("SELECT COUNT(*) c FROM fact_link")[0]["c"]
         self.assertEqual(n, _cap)  # 封顶 LINK_CAP（实测调参后=6），保留权重最高的 N 条
         self.assertEqual(j.stats["links_capped"], 1)

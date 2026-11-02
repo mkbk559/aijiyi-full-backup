@@ -9,14 +9,14 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
-from aiji.being import BeingState, BeingStore
-from aiji.config import Settings
-from aiji.db import DB
-from aiji.head import Head
-from aiji.humanize import HumanPacer
-from aiji.memory import Memory
-from aiji.pool import PoolExhausted
-from aiji.store import Ident
+from aiji.endocrine.being import BeingState, BeingStore
+from aiji.right_hand.config import Settings
+from aiji.hippocampus.db import DB
+from aiji.brain.head import Head
+from aiji.brain.humanize import HumanPacer
+from aiji.hippocampus.memory import Memory
+from aiji.brain.pool import PoolExhausted
+from aiji.hippocampus.store import Ident
 
 ROOT = Path(__file__).resolve().parent.parent / ".tmp"
 
@@ -160,7 +160,7 @@ def test_head_injects_global_state_without_writing_user_turn():
     memory.pool = Pool()
     ident = Ident("qq", "owner", "default")
     try:
-        with mock.patch("aiji.head.time.time", return_value=noon()):
+        with mock.patch("aiji.brain.head.time.time", return_value=noon()):
             first = Head(memory).reply(
                 [{"role": "user", "content": "今天有点累"}],
                 ident,
@@ -172,7 +172,7 @@ def test_head_injects_global_state_without_writing_user_turn():
         assert "情绪：" in prompt
 
         replies_before = len(calls)
-        with mock.patch("aiji.head.time.time", return_value=noon() + 60):
+        with mock.patch("aiji.brain.head.time.time", return_value=noon() + 60):
             proactive = Head(memory).reply(
                 [{"role": "user", "content": "（现在没人说话，只有你自己。）"}],
                 ident,
@@ -212,7 +212,7 @@ def test_low_energy_skips_proactive_model_call():
     state.energy = 5
     memory.being.save(state, now=1000.0)
     try:
-        with mock.patch("aiji.head.time.time", return_value=noon()):
+        with mock.patch("aiji.brain.head.time.time", return_value=noon()):
             reply = Head(memory).reply(
                 [{"role": "user", "content": "（主动消息）"}],
                 Ident("qq", "owner", "default"),
@@ -244,7 +244,7 @@ def test_failed_proactive_does_not_send_fallback_text():
 
     memory.pool = Pool()
     try:
-        with mock.patch("aiji.head.time.time", return_value=noon()):
+        with mock.patch("aiji.brain.head.time.time", return_value=noon()):
             reply = Head(memory).reply(
                 [{"role": "user", "content": "（主动消息）"}],
                 Ident("qq", "owner", "default"),

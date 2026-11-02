@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji import params
+from aiji.right_hand import params
 
 
 def _report(tag: str) -> dict:

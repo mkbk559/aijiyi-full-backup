@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from aiji.song_service import SongError, SongService
-from aiji.voice_service import VoiceRegistry
+from aiji.heart.song_service import SongError, SongService
+from aiji.heart.voice_service import VoiceRegistry
 
 
 def _service(root: Path) -> SongService:

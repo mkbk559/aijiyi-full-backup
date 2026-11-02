@@ -40,7 +40,7 @@ def make_wav(path: str) -> str:
 
 def load_wav_16k(path: str):
     """读 wav → float32 numpy @16k（复用 real_engines 的重采样逻辑）。"""
-    from aiji.real_engines import _resample16k
+    from aiji.hippocampus.real_engines import _resample16k
 
     with wave.open(path, "rb") as w:
         sr = w.getframerate()

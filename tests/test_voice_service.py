@@ -10,7 +10,7 @@ import wave
 from pathlib import Path
 from unittest import mock
 
-from aiji.voice_service import VoiceError, VoiceRegistry
+from aiji.heart.voice_service import VoiceError, VoiceRegistry
 from tools.voice_reference_select import select_closest
 
 

@@ -10,7 +10,7 @@ import time
 import unittest
 from pathlib import Path
 
-from aiji.sticker_service import StickerService, StickerUpdateLoop
+from aiji.heart.sticker_service import StickerService, StickerUpdateLoop
 
 
 _PNG = b"\x89PNG\r\n\x1a\nonline-sticker"

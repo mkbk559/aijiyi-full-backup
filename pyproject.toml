@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = ["websockets>=12"]
 
 [project.scripts]
-aiji = "aiji.cli:main"
+aiji = "aiji.senses.cli:main"
 
 [project.optional-dependencies]
 im = ["octop-gateway>=1.0.3"]
@@ -21,4 +21,4 @@ include = ["aiji*"]
 exclude = ["bench*", "config*", "data*", "tests*", "tools*"]
 
 [tool.setuptools.package-data]
-aiji = ["web/*.html"]
+aiji = ["right_hand/web/*.html"]

@@ -23,9 +23,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from aiji import Memory  # noqa: E402
-from aiji.config import Settings  # noqa: E402
-from aiji.recall import score_fact  # noqa: E402
-from aiji.store import FactDraft, Ident, add_fact  # noqa: E402
+from aiji.right_hand.config import Settings  # noqa: E402
+from aiji.hippocampus.recall import score_fact  # noqa: E402
+from aiji.hippocampus.store import FactDraft, Ident, add_fact  # noqa: E402
 
 WX = Ident("wechat", "u1", "default")
 DY = Ident("douyin", "u1", "default")
@@ -128,7 +128,7 @@ def check_ranking(root: Path) -> dict:
 
 def _fact_obj(fid: int, predicate: str, obj: str, text: str, conf: float, ts: float,
               importance: float, hit_count: int = 0):
-    from aiji.store import Fact
+    from aiji.hippocampus.store import Fact
     return Fact(
         id=fid, platform="wechat", platform_user_id="u1", scope="default",
         subject="user", predicate=predicate, object=obj, text=text, confidence=conf,

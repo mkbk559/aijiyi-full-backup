@@ -69,8 +69,8 @@ def quiet_env() -> None:
 
 
 def make_memory(directory: Path, *, engines: str = "none", **overrides):
-    from aiji.config import Settings
-    from aiji.memory import Memory
+    from aiji.right_hand.config import Settings
+    from aiji.hippocampus.memory import Memory
 
     kwargs = dict(
         db_path=directory / "probe.db",
@@ -93,7 +93,7 @@ def make_memory(directory: Path, *, engines: str = "none", **overrides):
 
 
 def start_server(memory):
-    from aiji.server import make_server
+    from aiji.throat.server import make_server
 
     server = make_server(memory, "127.0.0.1", 0)
     threading.Thread(target=server.serve_forever, daemon=True).start()

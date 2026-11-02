@@ -9,23 +9,11 @@ import uuid
 from pathlib import Path
 
 from aiji import Memory
-from aiji.config import Settings
-from aiji.db import DB
-from aiji.life import (
-    ContextBudget,
-    DeclarativeEngine,
-    EndocrineEngine,
-    LifeCard,
-    load_life_card,
-    OfflineCompensation,
-    PersonalityKernel,
-    ProceduralEngine,
-    save_life_card,
-    SynapticDiffusion,
-    infer_event,
-)
-from aiji.store import Ident
-from aiji.head import Head
+from aiji.right_hand.config import Settings
+from aiji.hippocampus.db import DB
+from aiji.endocrine.life import ContextBudget, DeclarativeEngine, EndocrineEngine, LifeCard, load_life_card, OfflineCompensation, PersonalityKernel, ProceduralEngine, save_life_card, SynapticDiffusion, infer_event
+from aiji.hippocampus.store import Ident
+from aiji.brain.head import Head
 
 
 class TestPersonality(unittest.TestCase):

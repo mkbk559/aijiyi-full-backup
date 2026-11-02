@@ -9,8 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aiji.mcp_client import MCPRegistry, MCPToolDenied
-from aiji.mcp_research import MCPResearchLoop, MCPResearcher, classify_readme
+from aiji.left_hand.mcp_client import MCPRegistry, MCPToolDenied
+from aiji.left_hand.mcp_research import MCPResearchLoop, MCPResearcher, classify_readme
 
 HAS_MCP = importlib.util.find_spec("mcp") is not None
 

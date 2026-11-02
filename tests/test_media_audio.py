@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from aiji.media_audio import audio_bytes_from_url, transcribe_item_audio
-from aiji.net_guard import UrlGuardError
-from aiji.recognize import Item
+from aiji.hippocampus.media_audio import audio_bytes_from_url, transcribe_item_audio
+from aiji.throat.net_guard import UrlGuardError
+from aiji.hippocampus.recognize import Item
 
 
 class MediaAudioTest(unittest.TestCase):

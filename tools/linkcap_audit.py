@@ -15,9 +15,9 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji import store  # noqa: E402
-from aiji.db import DB
-from aiji.store import FactDraft, Ident, add_fact  # noqa: E402
+from aiji.hippocampus import store  # noqa: E402
+from aiji.hippocampus.db import DB
+from aiji.hippocampus.store import FactDraft, Ident, add_fact  # noqa: E402
 
 WORK = ROOT / ".tmp"
 WORK.mkdir(mode=0o777, exist_ok=True)

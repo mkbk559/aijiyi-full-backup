@@ -13,7 +13,7 @@ from tools.probe._harness import (  # noqa: E402
     Probe, cleanup, make_memory, quiet_env, workdir,
 )
 
-from aiji.recognize import Item, Recognizers  # noqa: E402
+from aiji.hippocampus.recognize import Item, Recognizers  # noqa: E402
 
 quiet_env()
 probe = Probe("identify")
@@ -82,7 +82,7 @@ try:
     from unittest import mock
 
     link = Recognizers(fetcher=lambda url: "<html><head><title>记忆系统 - 官方文档</title></head></html>")
-    with mock.patch("aiji.recognize.validate_public_http_url", lambda url: None):
+    with mock.patch("aiji.aiji.hippocampus.recognize.validate_public_http_url", lambda url: None):
         env = link.recognize(Item("link", "l1", url="https://example.test/a"))
     probe.case("link 抓 <title>", env.status == "ok" and "官方文档" in env.text, f"{env.text!r}")
 
@@ -115,7 +115,7 @@ try:
                f"{env.status} {env.meta.get('reason')}")
 
     # ---------- 5. 真实引擎（本机装了才跑） ----------
-    from aiji import real_engines as re
+    from aiji.hippocampus import real_engines as re
 
     probe.case("真实 OCR 引擎已安装（rapidocr）", re.HAS_OCR, f"HAS_OCR={re.HAS_OCR}")
     if re.HAS_OCR:

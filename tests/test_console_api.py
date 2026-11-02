@@ -15,11 +15,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from aiji import store
-from aiji.config import Settings
-from aiji.memory import Memory
-from aiji.server import make_server
-from aiji.store import FactDraft, Ident, add_fact
+from aiji.hippocampus import store
+from aiji.right_hand.config import Settings
+from aiji.hippocampus.memory import Memory
+from aiji.throat.server import make_server
+from aiji.hippocampus.store import FactDraft, Ident, add_fact
 
 TMP_ROOT = Path(__file__).resolve().parent.parent / ".tmp"
 TMP_ROOT.mkdir(mode=0o777, exist_ok=True)

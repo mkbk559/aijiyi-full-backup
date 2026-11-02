@@ -33,8 +33,8 @@ wav_path = WORK / "asr_test.wav"  # asr_smoke 生成：我叫陈明，住在深�
 wav_bytes = wav_path.read_bytes()
 
 # ---- 注入 Recognizers ----
-from aiji import real_engines  # noqa: E402
-from aiji.recognize import Item, Recognizers  # noqa: E402
+from aiji.hippocampus import real_engines  # noqa: E402
+from aiji.hippocampus.recognize import Item, Recognizers  # noqa: E402
 
 rec = Recognizers(ocr=lambda it: real_engines.ocr_image(it.extra["bytes"]),
                   asr=lambda it: real_engines.transcribe_wav_bytes(it.extra["bytes"]),

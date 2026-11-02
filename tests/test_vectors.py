@@ -9,18 +9,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from aiji.vectors import (
-    HybridIndex,
-    LLM_DIMS,
-    BruteForceIndex,
-    _parse_dims,
-    cosine,
-    hashing_embed,
-)
+from aiji.hippocampus.vectors import HybridIndex, LLM_DIMS, BruteForceIndex, _parse_dims, cosine, hashing_embed
 
 
 def mkdb(tag: str):
-    from aiji.db import DB
+    from aiji.hippocampus.db import DB
     p = Path(__file__).parent.parent / ".tmp" / f"vectors-{tag}.db"
     p.parent.mkdir(mode=0o777, exist_ok=True)
     if p.exists():

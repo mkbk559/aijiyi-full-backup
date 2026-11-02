@@ -9,11 +9,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji.db import DB
-from aiji.dispatch import Dispatcher
-from aiji.heart import Heart, OutboxEvent
-from aiji.proactive import Proactive
-from aiji.store import Ident
+from aiji.hippocampus.db import DB
+from aiji.heart.dispatch import Dispatcher
+from aiji.heart.heart import Heart, OutboxEvent
+from aiji.endocrine.proactive import Proactive
+from aiji.hippocampus.store import Ident
 
 
 def workdir(name: str) -> Path:

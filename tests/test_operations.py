@@ -7,9 +7,9 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
-from aiji import service_control
-from aiji.config import Settings
-from aiji.operations import catalog, read_config, save_config
+from aiji.right_hand import service_control
+from aiji.right_hand.config import Settings
+from aiji.right_hand.operations import catalog, read_config, save_config
 
 TMP_ROOT = Path(__file__).resolve().parent.parent / ".tmp"
 TMP_ROOT.mkdir(mode=0o777, exist_ok=True)

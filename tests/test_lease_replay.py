@@ -6,9 +6,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from aiji.db import DB
-from aiji.heart import Heart, OutboxEvent, PRI_MENTION
-from aiji.store import FactDraft, Ident, add_fact, facts_as_of
+from aiji.hippocampus.db import DB
+from aiji.heart.heart import Heart, OutboxEvent, PRI_MENTION
+from aiji.hippocampus.store import FactDraft, Ident, add_fact, facts_as_of
 
 ROOT = Path(__file__).resolve().parents[1]
 

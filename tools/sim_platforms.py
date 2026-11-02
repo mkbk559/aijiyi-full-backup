@@ -35,10 +35,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from aiji import Memory  # noqa: E402
-from aiji.extract import detect_correction  # noqa: E402
-from aiji.janitor import Janitor  # noqa: E402
-from aiji.store import (Ident, apply_correction, apply_feedback,  # noqa: E402
-                        last_injection_with_feedback)
+from aiji.hippocampus.extract import detect_correction  # noqa: E402
+from aiji.hippocampus.janitor import Janitor  # noqa: E402
+from aiji.hippocampus.store import Ident, apply_correction, apply_feedback, last_injection_with_feedback
 
 WORK = ROOT / ".tmp"
 WORK.mkdir(mode=0o777, exist_ok=True)  # 本环境 mkdtemp 不可用，统一 workdir()
@@ -307,10 +306,10 @@ class PromptInjector(VirtualUser):
 
 # ---------------------------------------------------------------- 模拟上下文（真 Heart 层驱动）
 
-from aiji.db import DB as _DB
-from aiji.heart import Heart, OutboxEvent as _OutboxEvent, PRI_INGEST as _PRI_INGEST
-from aiji.gate import check_reply as _gate_check
-from aiji.store import Ident as _Ident
+from aiji.hippocampus.db import DB as _DB
+from aiji.heart.heart import Heart, OutboxEvent as _OutboxEvent, PRI_INGEST as _PRI_INGEST
+from aiji.brain.gate import check_reply as _gate_check
+from aiji.hippocampus.store import Ident as _Ident
 
 
 class SimContext:
@@ -642,7 +641,7 @@ class SimContext:
 
         if has_arch:
             # ---- S4 archive_replay（bi-temporal 当时视角，2026-10-29 P2 落地后的场景证据）----
-            from aiji.store import facts_as_of as _as_of
+            from aiji.hippocampus.store import facts_as_of as _as_of
             arch_ident = Ident("qq", "u_arch", scope="群:摸鱼日报")
             # ① 现状正确：最后一次 supersede 胜出
             now_active = c.execute(
@@ -687,7 +686,7 @@ class SimContext:
             # ---- S6 长会话压缩（writer._maybe_summarize / _compact_session 场景证据）----
             # 话痨发 60 轮用户发言（60 rounds × tempo 3.0，每轮 ~60% 触达）→
             # summary_every=20 至少应产出 1 条摘要；turn_count 受 max_turns_per_session 约束
-            from aiji.store import turn_count as _tc, latest_summary as _ls
+            from aiji.hippocampus.store import turn_count as _tc, latest_summary as _ls
             chatty_ident = Ident("qq", "u_chatty", scope="群:摸鱼日报")
             n_turns = _tc(c, chatty_ident, "sim")
             n_user_turns = c.execute(

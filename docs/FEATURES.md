@@ -52,7 +52,7 @@
 
 - CLI：`serve`、`remember`、`ingest`、`recall`、`inject`、`feedback`、`style`、`media`、`accounts`、`stats`、`doctor`、`export`、`forget`、`archive`、`self-memory`、`quota`、`bench`。
 - 核心 HTTP：`/turns`、`/remember`、`/ingest`、`/media`、`/recall`、`/inject`、`/feedback`、`/flush`、`/style`、`/accounts`、`/stats`、`/being`、`/being/note`、`/being/event`、`/health`。
-- 控制台 API：记忆库/关系图/自我/调度器/模型/能力/近期对话/注入记录/主动状态/生命卡/审批/OneBot/文件工作区，以及语音、歌曲、社交、表情包与 MCP 接口。细节以 `aiji/server.py` 路由和参数为准。
+- 控制台 API：记忆库/关系图/自我/调度器/模型/能力/近期对话/注入记录/主动状态/生命卡/审批/OneBot/文件工作区，以及语音、歌曲、社交、表情包与 MCP 接口。细节以 `aiji/throat/server.py` 路由和参数为准。
 - 测试和诊断：`tests/` 的单元测试、`bench/` 性能与质量脚本、`tools/` 的引擎/现场/迁移/验收探针。探针是维护工具，不自动代表对应外部集成已上线。
 
 ## 当前限制

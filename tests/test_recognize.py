@@ -7,7 +7,7 @@ import time
 import unittest
 from concurrent.futures import TimeoutError as FutureTimeout
 
-from aiji.recognize import Item, Recognizers, _timed
+from aiji.hippocampus.recognize import Item, Recognizers, _timed
 
 
 def _recognition_threads() -> int:

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aiji.social_service import SocialService
+from aiji.heart.social_service import SocialService
 
 
 class SocialServiceTest(unittest.TestCase):

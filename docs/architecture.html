@@ -175,7 +175,7 @@
     </div>
   </div>
   <div class="row2">
-    <div id="behaviorHint"><b>开放接入</b>：QQ 只是其一，微信 / 抖音 / B站 / 任意外部网站都能接；<b>行为像儿童</b>：好奇盯着你看、爱眨眼、心跳呼吸更快、天真直白、爱模仿、记得快忘得快 —— 68 个模块全部常驻</div>
+    <div id="behaviorHint"><b>开放接入</b>：QQ 只是其一，微信 / 抖音 / B站 / 任意外部网站都能接；<b>行为像儿童</b>：好奇盯着你看、爱眨眼、心跳呼吸更快、天真直白、爱模仿、记得快忘得快 —— 68 个节点全部常驻（55 个模块 + 外部进程与数据）</div>
     <div id="chips"></div>
     <div class="legend">
       <span><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#7dd3fc" stroke-width="1.6"/></svg>调用</span>
@@ -211,198 +211,198 @@ const BANDS = [
 
 const NODES = [
 /* ── ① 入口 ── */
-{id:"qq", band:"entry", t:"消息平台入口", s:"QQ 已接入 · 微信/抖音/B站可接", f:"platform 开放 · aiji/bridge/",
+{id:"qq", band:"entry", t:"消息平台入口", s:"QQ 已接 · 微信/抖音/B站", f:"platform 开放 · aiji/throat/bridge/",
  d:"QQ 只是其中一个接口。身份字段 platform 开放（cli.py：平台如 wechat / douyin / cli），IM 白名单含 qq、wechat、wecom、douyin、telegram、discord、feishu、dingtalk。两条接入路径：QQ 走 NapCat/OneBot；微信/飞书等走 Octop 网关（负责 QQ/飞书/微信协议归一化）。B站有 /api/social/share/bilibili 分享接口；任何能发 HTTP 的外部网站或系统，都能经 OpenAI 兼容接口或网关 webhook 接入。",
  sym:["platform","wechat","douyin","bilibili"]},
-{id:"napcat", band:"entry", t:"NapCat / OneBot 11", s:"6099 · 接管本机 QQ", f:"（外部进程）",
+{id:"napcat", band:"entry", t:"NapCat / OneBot", s:"6099 · 接管本机 QQ", f:"（外部进程）",
  d:"用 OneBot 11 协议把本机 QQ 暴露出来。6099 端口在听表示注入层已就绪；它是「启动与结束」页依赖链的第一环。",
  sym:["6099","OneBot 11"]},
 {id:"astrbot", band:"entry", t:"AstrBot", s:"6185 · 消息宿主 / 插件", f:"（外部进程）",
  d:"消息处理与插件宿主，AIJiYi 的回复都经它送出。它的 OneBot 服务端在 6199，只有 QQ 登录并连上后才会出现 ESTABLISHED。",
  sym:["6185","6199"]},
-{id:"openai_cli", band:"entry", t:"任意 OpenAI 客户端", s:"IDE / IM 网关 / 自建前端", f:"（外部）",
+{id:"openai_cli", band:"entry", t:"OpenAI 客户端", s:"IDE / IM 网关 / 自建前端", f:"（外部）",
  d:"填 http://127.0.0.1:8787/v1 就是一次接入：/v1/models 做模型发现，/v1/chat/completions 支持普通 JSON 与 SSE 流式。桌宠、IDE、IM 网关不必各写一套。",
  sym:["/v1/models","/v1/chat/completions","SSE"]},
-{id:"console", band:"entry", t:"浏览器控制台", s:"127.0.0.1:8787/", f:"aiji/web/operations.html",
+{id:"console", band:"entry", t:"浏览器控制台", s:"127.0.0.1:8787/", f:"aiji/right_hand/web/operations.html",
  d:"4 个主入口：运行总览 / 全部功能 / 功能配置 / 启动与结束。页面状态全部来自实时接口，不使用演示数据；CORS 只放行 null 与本机 8787。",
  sym:["overview","features","settings","lifecycle"]},
-{id:"cli", band:"entry", t:"aiji CLI", s:"17 个子命令", f:"aiji/cli.py",
+{id:"cli", band:"entry", t:"aiji CLI", s:"17 个子命令", f:"aiji/senses/cli.py",
  d:"serve / remember / recall / ingest / inject / feedback / style / media / accounts / stats / doctor / export / bench / forget / archive / self-memory / quota。",
  sym:["doctor","forget","archive","quota"]},
-{id:"octop", band:"entry", t:"Octop Gateway", s:"另一条网关适配", f:"aiji/bridge/octop_gateway.py",
+{id:"octop", band:"entry", t:"Octop Gateway", s:"另一条网关适配", f:"aiji/throat/bridge/octop_gateway.py",
  d:"把网关消息翻译成 AIJiYi 的 inbound payload，再走同一个 HTTP 核心；不复制记忆逻辑。",
  sym:["inbound_payload"]},
 
 /* ── ② 接入层 ── */
-{id:"server", band:"ingress", t:"HTTP 服务", s:"REST + OpenAI 兼容 + 控制台", f:"aiji/server.py",
+{id:"server", band:"ingress", t:"HTTP 服务", s:"REST + OpenAI 兼容", f:"aiji/throat/server.py",
  d:"所有入口汇到这一个 ThreadingHTTPServer：身份三字段 (platform, platform_user_id, scope) 解析、API Key 鉴权（HMAC 比较）、CORS 白名单、SSE、/media 只回引用不回字节。探测记录 61 条路由全可达（2026-11-01）。",
  sym:["AijiHTTPServer","_Handler","make_server","parse_identity_hint"]},
-{id:"onebot", band:"ingress", t:"OneBot 桥", s:"收事件 + 主动调 action", f:"aiji/bridge/onebot.py",
+{id:"onebot", band:"ingress", t:"OneBot 桥", s:"收事件 + 主动调 action", f:"aiji/throat/bridge/onebot.py",
  d:"parse_event 把 OneBot 事件标准化成 Envelope；OneBotClient / OneBotBridge 负责发送、取头像、拉媒体。群里不带 @ 的消息也会入库（只学不抢话）。",
  sym:["parse_event","OneBotClient","OneBotBridge"]},
-{id:"octopb", band:"ingress", t:"网关桥", s:"inbound → 标准请求", f:"aiji/bridge/octop_gateway.py",
+{id:"octopb", band:"ingress", t:"网关桥", s:"inbound → 标准请求", f:"aiji/throat/bridge/octop_gateway.py",
  d:"AijiGatewayClient 把网关侧的消息换成 AIJiYi 请求；进程内直接跑，省一次网络往返。",
  sym:["AijiGatewayClient","make_processor"]},
-{id:"clib", band:"ingress", t:"CLI 入口", s:"argparse · 单进程", f:"aiji/cli.py",
+{id:"clib", band:"ingress", t:"CLI 入口", s:"argparse · 单进程", f:"aiji/senses/cli.py",
  d:"命令行是「不装服务也能用」的入口：直接打开同一个 Memory 门面，落同一个库。doctor 会告诉你缺哪把 key、哪条路由在场。",
  sym:["_memory","_ident","cmd_serve"]},
-{id:"netguard", band:"ingress", t:"URL 护栏", s:"公网放行 / 私网拦截", f:"aiji/net_guard.py",
+{id:"netguard", band:"ingress", t:"URL 护栏", s:"公网放行 / 私网拦截", f:"aiji/throat/net_guard.py",
  d:"双向作用，且没有域名白名单。所有用户可控的抓取先过这里：只要求 http(s)、端口 80/443、DNS 解析后排除私有/回环/链路本地/保留地址（防 SSRF）；任意公网域名都能通过——它同时是主动访问任意外部公网网站/API 的放行通道（点歌、表情包更新、网页抓取、MCP 搜索）。",
  sym:["validate_public_http_url","UrlGuardError"]},
 
 /* ── ③ 编排层 ── */
-{id:"head", band:"orch", t:"对话头", s:"Head.reply() · 无状态", f:"aiji/head.py",
+{id:"head", band:"orch", t:"对话头", s:"Head.reply() · 无状态", f:"aiji/brain/head.py",
  d:"一次对话的编排器：归一化消息 → 召回并注入记忆 → 角色边界与人格约束 → 模型池 → 出口闸门 → 拟人节奏 → 返回。不持有会话状态，也不绑定任何平台。",
  sym:["HeadReply","Head.reply","normalize_messages"]},
-{id:"debounce", band:"orch", t:"连发合并", s:"800ms 窗口", f:"aiji/debounce.py",
+{id:"debounce", band:"orch", t:"连发合并", s:"800ms 窗口", f:"aiji/brain/debounce.py",
  d:"同会话连发短句并成一次模型调用（Settings.debounce_ms）。没有它，用户打三行字就是三次模型调用、三条记忆。",
  sym:["ConversationDebouncer","merge_messages"]},
-{id:"pool", band:"orch", t:"模型池", s:"6 条默认路由 · 冷却 + 故障转移", f:"aiji/pool.py",
+{id:"pool", band:"orch", t:"模型池", s:"6 路由 · 冷却 + 故障转移", f:"aiji/brain/pool.py",
  d:"轮转、冷却、故障转移。本机两个积分制反代（workbuddy 8788、agent2api 3065）已实测连通，LLM 第二层/模型抽取/摘要/软嵌入全部真机验证过；公网免费池只在本地假 OpenAI 服务上验过。PoolExhausted 立即落规则兜底，写入不丢。",
  sym:["ModelPool","PoolExhausted","PoolResult"]},
-{id:"gate", band:"orch", t:"出口闸门", s:"人格 / 物理底线", f:"aiji/gate.py",
+{id:"gate", band:"orch", t:"出口闸门", s:"人格 / 物理底线", f:"aiji/brain/gate.py",
  d:"sanitize_reply + check_reply：越权、身份泄露、可执行代码在出门前被拦；拦完给一套体面的替代说法，而不是报错。",
  sym:["sanitize_reply","check_reply","GateResult"]},
-{id:"humanize", band:"orch", t:"拟人节奏", s:"首字延迟 + 打字停顿", f:"aiji/humanize.py",
+{id:"humanize", band:"orch", t:"拟人节奏", s:"首字延迟 + 打字停顿", f:"aiji/brain/humanize.py",
  d:"只给外部 IM 加延迟（IM_PLATFORMS 白名单）；对 API 调用者不加任何人为等待。",
  sym:["HumanPacer","IM_PLATFORMS"]},
-{id:"role", band:"orch", t:"角色边界", s:"IM 禁代码 / 禁物理动作", f:"aiji/role_boundary.py",
+{id:"role", band:"orch", t:"角色边界", s:"IM 禁代码 / 禁物理动作", f:"aiji/brain/role_boundary.py",
  d:"IM 角色空间里不许输出可运行代码、不许声称自己执行了物理动作；桌面平台保留工具能力。身份被追问时走 identity_repair。",
  sym:["prompt_block","refusal","identity_repair"]},
-{id:"persona", band:"orch", t:"人格底色", s:"风格块 · few-shot 故意留空", f:"aiji/persona.py",
+{id:"persona", band:"orch", t:"人格底色", s:"风格块 · few-shot 故意留空", f:"aiji/brain/persona.py",
  d:"只提供说话风格，不覆盖物理底线与记忆。可选 sunba（孙吧抽象话，只取短句/自嘲/阴阳/玩梗的语气，不取网暴）。few_shot 故意返回空——整句示例会让模型复读模板；学到的整句只作离线语料，改由 style_block 注入 traits 高层习惯，reminder 给本轮强规则（禁客服开场白/列点/复用句式）。素材在 data/persona/*.json。",
  sym:["style_block","learned_examples","reminder","few_shot"]},
-{id:"selfhood", band:"orch", t:"自我底线", s:"物理底线 · STYLE_RULES 禁客服腔", f:"aiji/selfhood.py",
+{id:"selfhood", band:"orch", t:"自我底线", s:"自我叙事 · 边界提醒", f:"aiji/brain/selfhood.py",
  d:"物理底线是硬的（floor_text，导入即 assert_floor_clean 自检，性格词混进来直接报错）；性格涌现、可被证据推翻。STYLE_RULES 是“像人不像客服”的表达约束：日常 1-3 句、先接情绪再说反应，禁 markdown/编号/分点/加粗、禁欢迎客套总结句、禁固定开场尾句与复用近期句式。",
  sym:["floor_text","STYLE_RULES","assert_floor_clean","system_prefix"]},
-{id:"quota", band:"orch", t:"主动配额", s:"反代积分 ÷ 单条单价", f:"aiji/quota.py",
+{id:"quota", band:"orch", t:"主动配额", s:"反代积分 ÷ 单条单价", f:"aiji/brain/quota.py",
  d:"allowed_24h = min(8, floor(剩余积分 × 0.8 ÷ 单条单价))。余额四个来源：配置 URL → 响应头 → data/credits.json → 静态/环境变量。两个反代都不吐余额，所以留了 aiji quota --set N 手填，并显示「填了多久」。",
  sym:["QuotaState","CreditProvider","parse_credits"]},
 
 /* ── ④ 记忆核心 ── */
-{id:"memory", band:"memory", t:"Memory 门面", s:"三层存储 + 一个闭环", f:"aiji/memory.py",
+{id:"memory", band:"memory", t:"Memory 门面", s:"三层存储 + 一个闭环", f:"aiji/hippocampus/memory.py",
  d:"turn / remember / ingest / exchange 写；recall 100ms 预算读；inject 出软引导块；feedback 回写命中与留痕。全部按 (platform, platform_user_id, scope) 隔离，跨平台串号是这里防的。",
  sym:["Memory.open","exchange","inject","feedback"]},
-{id:"recognize", band:"memory", t:"识别层", s:"OCR/ASR 文本化 · 不做复杂视觉", f:"aiji/recognize.py",
+{id:"recognize", band:"memory", t:"识别层", s:"OCR/ASR → 多模态", f:"aiji/hippocampus/recognize.py",
  d:"把 image/voice/emoji 等降维成 (text, meta, confidence)，之后与纯文本走同一条管线，不按类型分叉。图走 OCR、语音走 ASR、表情映射情绪标签——是文本化识别，不是多模态视觉理解（复杂视觉/视频明确不做）。缺引擎如实 unsupported，不编造文本。",
  sym:["Envelope","Item","Recognizers","KINDS"]},
-{id:"engines", band:"memory", t:"OCR · ASR 适配", s:"RapidOCR · FunASR · whisper", f:"aiji/real_engines.py",
+{id:"engines", band:"memory", t:"OCR · ASR 适配", s:"OCR · ASR · TTS 引擎", f:"aiji/hippocampus/real_engines.py",
  d:"RapidOCR 做图，FunASR paraformer-zh 做中文语音（14/14），faster-whisper tiny 回退。识别超时 45s（真引擎 2~10s 起）。",
  sym:["ocr_image","transcribe_wav_bytes","set_asr_model"]},
-{id:"audio", band:"memory", t:"媒体音频", s:"URL → bytes → WAV", f:"aiji/media_audio.py",
+{id:"audio", band:"memory", t:"媒体音频", s:"URL → bytes → WAV", f:"aiji/hippocampus/media_audio.py",
  d:"用户给的媒体 URL 下载后 ffmpeg 归一到 16k WAV 再进 ASR；下载前过 net_guard。图片走 bytes 分支——历史上只吃 url 导致生产 OCR 100% 空产出。",
  sym:["media_bytes_from_url","transcribe_item_audio"]},
-{id:"extract", band:"memory", t:"抽取层", s:"事实/关系/风格/口癖/摘要", f:"aiji/extract.py",
+{id:"extract", band:"memory", t:"抽取层", s:"事实/关系/风格/口癖/摘要", f:"aiji/hippocampus/extract.py",
  d:"模型抽取为主、启发式兜底。除事实/关系/画像外，自动学用户的 style：语气（口语化/正式）、长度（按字数判简短/适中/详细）、表情偏好、口癖（高频口头禅直接填词）——这是“喂黑话词典”的真实落点，无需人工维护词典。带 artifact 过滤，防止把自己的注入块当成用户事实再学一遍。",
  sym:["Extraction","build_messages","verbal_tic_hints","style"]},
-{id:"reflect", band:"memory", t:"反思 worker", s:"性格 trait 归纳", f:"aiji/reflect.py",
+{id:"reflect", band:"memory", t:"反思 worker", s:"性格 trait 归纳", f:"aiji/hippocampus/reflect.py",
  d:"从群聊互动里归纳「我长成了什么样」。单次调用、timeout 60s、按积压或空闲批处理；没有 assistant 发言就跳过，模型输出为空不写行。",
  sym:["Reflective","ReflectionWorker","_should_run"]},
-{id:"recall", band:"memory", t:"快召回", s:"100ms 硬预算 + 多信号排序", f:"aiji/recall.py",
+{id:"recall", band:"memory", t:"快召回", s:"100ms 预算 · 并行召回", f:"aiji/hippocampus/recall.py",
  d:"另开线程 + Future.result(timeout=remaining)，超时退化纯内存并标 degraded。排序是多信号：相关度、重要度、按属性类型的半衰期、置信度、反馈命中。",
  sym:["Recaller","score_fact","half_life_days","RecallResult"]},
-{id:"inject", band:"memory", t:"软引导注入", s:"只出文本块 · 硬字符预算", f:"aiji/inject.py",
+{id:"inject", band:"memory", t:"软引导注入", s:"只出文本块 · 硬字符预算", f:"aiji/hippocampus/inject.py",
  d:"选择性 + 来源标注 + 关系标签 + 档位；persona_touched=False、soft=True，硬字符预算，bench 断言 0 次越权、0 次超预算。写 injection 留痕，并在同事务里做读→强化。",
  sym:["Injector","Injection","InjectItem"]},
-{id:"store", band:"memory", t:"结构化存储", s:"冲突消解 / 关联 / 画像", f:"aiji/store.py",
+{id:"store", band:"memory", t:"结构化存储", s:"冲突消解 / 关联 / 画像", f:"aiji/hippocampus/store.py",
  d:"事实 ADD-only 优先：多值累积、单值才 supersede、否定 expire；valid_from/valid_to + fact_log 不删历史。关联只做 1 跳、每事实 ≤3 条边（防链接表爆炸）。",
  sym:["Ident","plan_reconciliation","link_facts","bump_usage"]},
-{id:"vectors", band:"memory", t:"语义索引", s:"hashing / LLM 软嵌入", f:"aiji/vectors.py",
+{id:"vectors", band:"memory", t:"语义索引", s:"hashing / LLM 软嵌入", f:"aiji/hippocampus/vectors.py",
  d:"默认 hash；HybridIndex = hashing + LLM 软嵌入，仍是暴力余弦。同义改写召回 4/5 vs 2/5；换真实 embedding 与近似索引还没做。",
  sym:["HybridIndex","NullIndex","hashing_embed"]},
-{id:"writer", band:"memory", t:"异步写", s:"微秒级入队", f:"aiji/writer.py",
+{id:"writer", band:"memory", t:"异步写", s:"微秒级入队", f:"aiji/hippocampus/writer.py",
  d:"调用方只往队列丢事件（µs 级），识别/抽取/落库全在 worker 线程。队列在内存里——进程被 kill 最多丢最后一个未处理事件（源码有 shortcut: 注释）。",
  sym:["Writer","Job","WriterStats"]},
-{id:"janitor", band:"memory", t:"代谢清理", s:"冻结 / 归档 / 淘汰", f:"aiji/janitor.py",
+{id:"janitor", band:"memory", t:"代谢清理", s:"冻结 / 归档 / 淘汰", f:"aiji/hippocampus/janitor.py",
  d:"低频 + 水位触发：过期事实冻结（不删只藏，查到即解冻）、turn 归档 90 天后才物理清、自我记忆淘汰、孤儿修复。",
- sym:["Janitor","archive_turns","freeze_facts"]},
-{id:"db", band:"memory", t:"SQLite 层", s:"schema v11 + FTS5", f:"aiji/db.py",
+ sym:["Janitor","run","_prune_archive"]},
+{id:"db", band:"memory", t:"SQLite 层", s:"schema v11 + FTS5", f:"aiji/hippocampus/db.py",
  d:"按线程连接、写事务全局串行（一把锁）、版本迁移。fact_fts 用 FTS5，迁移后必须 rebuild，否则三字片段查不到。",
  sym:["DB","migrate","fact_fts"]},
 
 /* ── ⑤ 人格 / 生命 ── */
-{id:"being", band:"life", t:"生命状态", s:"能量 / 心情 / 私密小本子", f:"aiji/being.py",
+{id:"being", band:"life", t:"生命状态", s:"能量 / 心情 / 私密小本子", f:"aiji/endocrine/being.py",
  d:"全局角色状态：能量、情绪残留、私密笔记、事件。实体写在 SQLite（being_state / being_event / being_note），注入块会带一句状态。",
  sym:["BeingStore","BeingState","LifeActivity"]},
-{id:"lifecard", band:"life", t:"生命卡七引擎", s:"实际 3 个在链路上", f:"aiji/life.py",
+{id:"lifecard", band:"life", t:"生命卡七引擎", s:"实际 3 个在链路上", f:"aiji/endocrine/life.py",
  d:"七个引擎里真正接进链路的是内分泌、离线补偿与 endo_factor；Declarative / Procedural / SynapticDiffusion / PersonalityKernel.apply_delta 的调用方只有测试。",
  sym:["LifeCard","EndocrineEngine","OfflineCompensation"]},
-{id:"lifeloop", band:"life", t:"生活循环", s:"有界后台推进", f:"aiji/life_loop.py",
+{id:"lifeloop", band:"life", t:"生活循环", s:"有界后台推进", f:"aiji/endocrine/life_loop.py",
  d:"按 tick 推进生命卡与能量，有上下界、可停；模拟 40 轮才稳定，24 轮时历史行不足会断言失败。",
  sym:["LifeLoop"]},
-{id:"checkup", band:"life", t:"成精体检", s:"四层确定性判定", f:"aiji/being_checkup.py",
+{id:"checkup", band:"life", t:"成精体检", s:"四层确定性判定", f:"aiji/endocrine/being_checkup.py",
  d:"不调模型，纯确定性检查：四层给证据。配套 bench_self_test 跑 27 个探针、6 个指标带门槛（hit@5 1.0 / leak 0）。",
  sym:["BeingCheckup"]},
-{id:"proactive", band:"life", t:"主动搭话", s:"配额 + 能量双闸", f:"aiji/proactive.py",
+{id:"proactive", band:"life", t:"主动搭话", s:"配额 + 能量双闸", f:"aiji/endocrine/proactive.py",
  d:"can_proactive 要 energy≥20 且 social≥15，再过配额闸门；每次发送记账，按天计数。历史实测：能量长期 0.01，主动被永久阻断。",
- sym:["Proactive","proactive_spend"]},
-{id:"presence", band:"life", t:"存在感广播", s:"8789 · 呼吸般的广播", f:"aiji/presence.py",
+ sym:["Proactive","tick","note_event"]},
+{id:"presence", band:"life", t:"存在感广播", s:"8789 · 呼吸般的广播", f:"aiji/endocrine/presence.py",
  d:"把各入口的交互状态广播出去，供前端同步；随 AIJiYi 一起启动，像呼吸一样持续，只有它不在线时才检查 8789 是否被占用。",
  sym:["PresenceHub","PresenceServer"]},
-{id:"sense", band:"life", t:"桌面感知", s:"截屏 / OCR / 窗口标题", f:"aiji/desktop_sense.py",
+{id:"sense", band:"life", t:"桌面感知", s:"截屏 / OCR / 窗口标题", f:"aiji/endocrine/desktop_sense.py",
  d:"受控桌面工具的眼睛：活动窗口标题、截屏、对屏幕做 OCR。只在审批通过的动作链路里被调用。",
  sym:["grab_screen","window_titles","look"]},
 
 /* ── ⑥ 出站 / 心脏 ── */
-{id:"heart", band:"life", t:"心脏层", s:"outbox · CAS 领取", f:"aiji/heart.py",
+{id:"heart", band:"life", t:"心脏层", s:"outbox · CAS 领取", f:"aiji/heart/heart.py",
  d:"实体态发件箱：outbox 消费、CAS 领取、出站入队；SendThrottled 让限流变成可见事件而不是静默丢失。生产库 outbox/send_queue 目前 0 行——发送实际由 AstrBot 插件完成。",
  sym:["Heart","OutboxEvent","SendThrottled"]},
-{id:"dispatch", band:"out", t:"发送调度", s:"send_queue + 限流退避", f:"aiji/dispatch.py",
+{id:"dispatch", band:"out", t:"发送调度", s:"send_queue + 限流退避", f:"aiji/heart/dispatch.py",
  d:"独立线程扫 send_queue，限流感知退避；与心脏层配对，解决「平台每分钟只能发 5 条」被拒 22 次那类问题。",
  sym:["Dispatcher"]},
-{id:"social", band:"out", t:"QQ 空间", s:"说说 / 评论 / 签名 / 分享", f:"aiji/social_service.py",
+{id:"social", band:"out", t:"QQ 空间", s:"说说 / 评论 / 签名 / 分享", f:"aiji/heart/social_service.py",
  d:"走 NapCat 扩展的 onebot action：发说说、评论、自动选最新说说评论、改头像签名、分享网易云与 B 站链接。媒体路径限制在社交目录/表情包目录，/api/social/* 受 API Key 保护。",
  sym:["SocialService","SocialError"]},
-{id:"song", band:"out", t:"点歌管线", s:"网易云曲库 · 分离→RVC→语音条", f:"aiji/song_service.py",
+{id:"song", band:"out", t:"点歌管线", s:"点歌 · 唱歌/RVC/翻唱", f:"aiji/heart/song_service.py",
  d:"完整唱歌链路。① 曲库匹配：lookup 只搜不唱——纯数字按网易云 id、文字走网易云搜索接口（music.163.com/api/search/get/web），也支持 http(s) 直链下载与 data/music 本地文件；下载前过 URL 护栏。② 处理：ffmpeg 截取片段（默认 60s）→ audio-separator（UVR-MDX-NET-Voc_FT.onnx）分离人声与伴奏 → RVC 把人声换成目标声线（mode=song）→ 混音（人声+伴奏，alimiter 限幅）→ 生成带淡入淡出的 MP3 语音条，经 OneBot 发群。data/songs 下 jobs/cache/work 三段，提交后轮询进度；提交要求 profile 已配好 RVC。",
  sym:["SongService","SongJob","lookup","_search_netease","_separate","_process"]},
-{id:"sticker", band:"out", t:"表情包", s:"本地库 + 受控更新", f:"aiji/sticker_service.py",
+{id:"sticker", band:"out", t:"表情包", s:"本地库 + 受控更新", f:"aiji/heart/sticker_service.py",
  d:"只读本地 manifest.json；在线更新必须过 URL 校验、图片签名、大小上限、原子写、并发锁，并且按 mood 归文件夹。",
  sym:["StickerService","StickerUpdateLoop"]},
-{id:"voice", band:"out", t:"声线 TTS", s:"5 种 TTS · RVC 换声 · 自动回退", f:"aiji/voice_service.py",
+{id:"voice", band:"out", t:"声线 TTS", s:"5 家 TTS + RVC 复刻", f:"aiji/heart/voice_service.py",
  d:"统一语音门面，provider 细节藏在一个接口后。TTS 五种：edge（默认 zh-CN-XiaoxiaoNeural）、gptsovits（GPT-SoVITS，需参考音）、cosyvoice、openai、http；SAPI 离线回退。后处理两种：RVC 本地命令（rvc_convert.py，rmvpe）或 HTTP 换声（纯字节 b64，历史 Seed-VC）。客户端做峰值归一（>0.98 压到 0.95）防削波；定制声线不可用即回退 edge 并在 last_fallback 留痕。现有 dafeiyu（大肥鱼）profile：edge 晓伊打底 + RVC 换声。",
  sym:["VoiceRegistry","VoiceProfile","SynthesisResult","convert_audio","_limit_peak"]},
 
 /* ── ⑦ 工具 / 研究 ── */
-{id:"t_schema", band:"tools", t:"工具定义", s:"OpenAI tools", f:"aiji/actions/schema.py",
+{id:"t_schema", band:"tools", t:"工具定义", s:"OpenAI tools", f:"aiji/left_hand/actions/schema.py",
  d:"把可用动作写成 OpenAI Function Calling 定义（OPENAI_TOOLS），模型只能从这里挑。",
  sym:["OPENAI_TOOLS","ToolCall"]},
-{id:"t_policy", band:"tools", t:"执行策略", s:"工作区边界 / 黑名单", f:"aiji/actions/policy.py",
+{id:"t_policy", band:"tools", t:"执行策略", s:"工作区边界 / 黑名单", f:"aiji/left_hand/actions/policy.py",
  d:"工作区边界、敏感文件、危险命令黑名单。它管「允许碰什么」，不管「谁点的头」。",
  sym:["ActionPolicy","PolicyViolation"]},
-{id:"t_approval", band:"tools", t:"人工审批", s:"挂起等允许 / 拒绝", f:"aiji/actions/approval.py",
+{id:"t_approval", band:"tools", t:"人工审批", s:"挂起等允许 / 拒绝", f:"aiji/left_hand/actions/approval.py",
  d:"人在回路：请求挂起，控制台明确允许或拒绝才继续执行，超时按拒绝；审批本身也是一条可审计记录。",
  sym:["Approval","ApprovalManager"]},
-{id:"t_exec", band:"tools", t:"执行器", s:"文件 / 终端", f:"aiji/actions/executor.py",
+{id:"t_exec", band:"tools", t:"执行器", s:"文件 / 终端", f:"aiji/left_hand/actions/executor.py",
  d:"真正动手的那层：文件读写、终端命令。每个动作先过 policy，再等 approval，最后才执行，返回 ToolResult。",
  sym:["ActionExecutor","ToolResult"]},
-{id:"t_gui", band:"tools", t:"桌面自动化", s:"截屏 / 鼠标 / 键盘", f:"aiji/actions/gui.py",
+{id:"t_gui", band:"tools", t:"桌面自动化", s:"截屏 / 鼠标 / 键盘", f:"aiji/left_hand/actions/gui.py",
  d:"Windows 桌面自动化，调用前必须经过 ActionExecutor 的审批；IM 角色空间整条工具链直接禁用。",
  sym:["execute_desktop","_screenshot","_hotkey"]},
-{id:"t_mcp", band:"tools", t:"MCP 客户端", s:"全网公开搜索 · 无域名白名单", f:"aiji/mcp_client.py",
+{id:"t_mcp", band:"tools", t:"MCP 客户端", s:"全功能工具面 · 外部服务", f:"aiji/left_hand/mcp_client.py",
  d:"只连 config/mcp_servers.json 登记的服务，工具须在 allowed_tools 且 read_only，否则 MCPToolDenied。duckduckgo 是全网公开搜索（search/fetch_content/expand_link），DuckDuckGo 索引整个公开网络——任意公网网站都能搜，没有域名白名单；fetch 服务抓网页受 robots.txt 约束。护栏只挡内网：仅 http(s)、80/443，解析后排除私有/回环/保留地址，不限制任何公网域名。模型需要时才调，不默认每次都搜。",
  sym:["MCPRegistry","call_sync","MCPToolDenied"]},
-{id:"t_research", band:"tools", t:"MCP 研究", s:"GitHub 发现 + 人审", f:"aiji/mcp_research.py",
+{id:"t_research", band:"tools", t:"MCP 研究", s:"GitHub 发现 + 人审", f:"aiji/left_hand/mcp_research.py",
  d:"受控 GitHub 发现：读 README 分类、抽安装提示、判 Windows 兼容，产出候选清单给人审，不自己装上就跑。",
  sym:["MCPResearcher","GitHubClient","MCPResearchLoop"]},
 
 /* ── ⑧ 运维 / 控制台 ── */
-{id:"web", band:"ops", t:"控制台前端", s:"4 视图 · 零依赖单文件", f:"aiji/web/operations.html",
+{id:"web", band:"ops", t:"控制台前端", s:"4 视图 · 零依赖单文件", f:"aiji/right_hand/web/operations.html",
  d:"运行总览（5 段依赖链 + 实时记录 + 能力卡片）、全部功能（按身份上下文取数、可搜索）、功能配置（脏值计数 / 恢复本组默认 / 保存并重启）、启动与结束（实测依赖链 + watchdog + 日志尾部）。不引外部 CDN。",
  sym:["#view-overview","#view-features","#view-settings","#view-lifecycle"]},
-{id:"admin", band:"ops", t:"只读数据面", s:"JSON 快照", f:"aiji/admin.py",
+{id:"admin", band:"ops", t:"只读数据面", s:"JSON 快照", f:"aiji/right_hand/admin.py",
  d:"把散在内核表里的状态整理成 UI 可直接消费的 JSON：记忆库、记忆星图、调度、模型、注入、主动、能力清单。只读，不写库。",
  sym:["memory_library","memory_graph","scheduler_snapshot","models_snapshot"]},
-{id:"operations", band:"ops", t:"配置面", s:"校验 + 功能目录", f:"aiji/operations.py",
+{id:"operations", band:"ops", t:"配置面", s:"校验 + 功能目录", f:"aiji/right_hand/operations.py",
  d:"读写非密钥运行时配置，非法值直接 400；catalog 是「全部功能」页的目录来源，read_config 会多返回 defaults 好让「恢复本组默认」有依据。",
  sym:["read_config","save_config","catalog"]},
-{id:"service", band:"ops", t:"服务生命周期", s:"5 项依赖链实测", f:"aiji/service_control.py",
+{id:"service", band:"ops", t:"服务生命周期", s:"5 项依赖链实测", f:"aiji/right_hand/service_control.py",
  d:"按端口/进程/连接实测 NapCat 6099 → OneBot 6199 → AstrBot 6185 → AIJiYi 8787 → presence 8789，给出 state（ready/partial/stopped）、pid、blocked 卡点、desired 期望态、watchdog 计划任务与日志尾部。",
  sym:["snapshot","prerequisites","watchdog","_resolve_processes"]},
-{id:"params", band:"ops", t:"参数表", s:"可调数字只在这里", f:"aiji/params.py",
+{id:"params", band:"ops", t:"参数表", s:"可调数字只在这里", f:"aiji/right_hand/params.py",
  d:"阶段 0 固化的集中参数表：所有可调数字只允许出现在这里，snapshot() 顺带告诉你这个值来自哪里（默认值还是配置文件）。",
  sym:["snapshot","_source_of"]},
-{id:"config", band:"ops", t:"配置与路由", s:"Settings + Route", f:"aiji/config.py",
+{id:"config", band:"ops", t:"配置与路由", s:"Settings + Route", f:"aiji/right_hand/config.py",
  d:"db_path、budget_ms=100、workers=2、top_k=8、vector=hash、摘要/压缩阈值、onebot、social、sticker、routes。密钥一律从环境变量读，仓库里不落任何 key。",
  sym:["Settings","Route","DEFAULT_ROUTES"]},
 
@@ -429,7 +429,7 @@ const NODES = [
  d:"表情包 manifest、MCP 研究读 README、QQ 空间动作。凡是用户可控的 URL 都先过 net_guard，路径限制在本地白名单目录。",
  sym:["raw.githubusercontent.com","qzone"]},
 {id:"d_db", band:"data", t:"SQLite 库", s:"24 张业务表 · schema v11", f:"data/aiji.db",
- d:"只读实测（2026-11-02）：事实 21,365、轮次 24,817、归档 13,719、事实日志 23,469、媒体 7,639、风格 1,918、反思 1,843、trait 1,511、注入 1,512、账户 722；而 heart/outbox/send_queue/write_queue 全 0 行。库文件约 50 MB。",
+ d:"只读实测（2026-11-03）：事实 21,431、轮次 24,966、归档 13,719、事实日志 23,542、媒体 7,660、风格 1,923、反思 1,850、trait 1,521、注入 1,533、账户 723；heart_state 8 行（outbox/send_queue/write_queue 仍全 0）。库文件约 50 MB。",
  sym:["fact","turn","injection","fact_log","turn_archive"]}
 ];
 
@@ -1170,7 +1170,7 @@ function overview(){
     <button class="close" id="dclose" aria-label="关闭">×</button>
     <div class="bandtag">成人的身体，儿童的行为</div>
     <h2>AIJiYi：一具行为像儿童的完整身体</h2>
-    <p>框架是成人完整的——68 个模块、9 个人体系统全部常驻，不做阶段解锁；但它的<b>行为表现像儿童</b>：你移动鼠标，它的眼睛会好奇地跟着转、时不时眨眼，心跳和呼吸比成人快，身体轻轻摇摆，点它还会开心地一跳。</p>
+    <p>框架是成人完整的——68 个节点、9 个人体系统全部常驻，不做阶段解锁；但它的<b>行为表现像儿童</b>：你移动鼠标，它的眼睛会好奇地跟着转、时不时眨眼，心跳和呼吸比成人快，身体轻轻摇摆，点它还会开心地一跳。</p>
     <h3>开放接入：QQ 只是一个接口</h3>
     <p style="margin:5px 0">身份字段 <b>platform 开放</b>，不绑定单一平台。QQ 走 NapCat/OneBot；微信/飞书等走 Octop 网关；抖音、企微、telegram、discord、钉钉等在 IM 白名单内；B站有分享接口。任何能发 HTTP 的外部网站或系统，经 OpenAI 兼容接口或网关 webhook 即可接入；主动访问外部公网网站，经 URL 护栏校验后放行。</p>
     <h3>唱歌与语音：两层链路</h3>
@@ -1211,8 +1211,8 @@ function overview(){
     </div>
     <h3>关键数字（只读实测）</h3>
     <div class="hint">
-      事实 21,365 · 轮次 24,817 · 归档 13,719 · 注入 1,512 · 事实日志 23,469<br>
-      heart / outbox / send_queue / write_queue：<b>全 0 行</b>（发送实际由 AstrBot 插件完成）
+      事实 21,431 · 轮次 24,966 · 归档 13,719 · 注入 1,533 · 事实日志 23,542<br>
+      heart_state 8 行 / outbox、send_queue、write_queue <b>全 0 行</b>（发送实际由 AstrBot 插件完成）
     </div>`;
   drawer.classList.add("open");
   drawer.querySelector("#dclose").onclick = ()=>{ drawer.classList.remove("open"); };
@@ -1235,7 +1235,7 @@ window.addEventListener("hashchange", ()=>{
 
 /* 顶栏统计 */
 const statsEl = document.getElementById("stats");
-[["aiji/ 模块","55"],["schema","v11"],["业务表","24"],["单测","478"],["测试文件","43"],["bench","9"]]
+[["aiji/ 模块","55"],["schema","v11"],["业务表","24"],["单测","449"],["测试文件","43"],["bench","9"]]
   .forEach(([a,b])=>{
     const d = document.createElement("div");
     d.className = "stat"; d.innerHTML = `${a} <b>${b}</b>`;

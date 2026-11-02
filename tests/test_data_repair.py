@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aiji.db import DB
-from aiji.store import FactDraft, Ident, add_fact, add_media, add_turn, ensure_account
+from aiji.hippocampus.db import DB
+from aiji.hippocampus.store import FactDraft, Ident, add_fact, add_media, add_turn, ensure_account
 from tools.repair_data import (
     backfill_account_labels,
     cleanup_test_identities,

@@ -12,10 +12,10 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji.db import DB
-from aiji.gate import check_reply
-from aiji.heart import Heart, OutboxEvent, LEASE_SECONDS
-from aiji.store import Ident
+from aiji.hippocampus.db import DB
+from aiji.brain.gate import check_reply
+from aiji.heart.heart import Heart, OutboxEvent, LEASE_SECONDS
+from aiji.hippocampus.store import Ident
 
 
 def workdir(name: str) -> Path:
@@ -162,7 +162,7 @@ class TestOutbox(unittest.TestCase):
         ident = Ident("qq", "u1")
         eid = h.enqueue(ident, OutboxEvent(kind="comment", text="x"))
         # 连续失败 5 次（attempts 0→5），每次推进 fake time 越过退避
-        from aiji import heart as heart_mod
+        from aiji.heart import heart as heart_mod
         real = heart_mod.time.time
         heart_mod.time.time = lambda: FakeTime.t
         try:
@@ -192,7 +192,7 @@ class TestOutbox(unittest.TestCase):
 
 class TestDispatch(unittest.TestCase):
     def test_rate_limit_wait_does_not_consume_delivery_attempts(self):
-        from aiji.heart import SendThrottled
+        from aiji.heart.heart import SendThrottled
 
         p = workdir("throttle") / "h.db"
         if p.exists():
@@ -230,7 +230,7 @@ class TestDispatch(unittest.TestCase):
         self.assertEqual(h.dispatch(), 1)  # 第一次发送失败 → pending+退避
         row = db.read("SELECT status FROM send_queue")[0]
         self.assertEqual(row["status"], "pending")  # 失败退回 pending，等下次扫描
-        from aiji import heart as heart_mod
+        from aiji.heart import heart as heart_mod
         # 时间推进越过退避再扫
         real = heart_mod.time.time
         heart_mod.time.time = lambda: real() + 301

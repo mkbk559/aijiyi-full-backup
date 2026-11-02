@@ -7,10 +7,10 @@ import unittest
 import uuid
 from pathlib import Path
 
-from aiji.being_checkup import BeingCheckup
-from aiji.config import Settings
-from aiji.memory import Memory
-from aiji.store import FactDraft, Ident, add_fact
+from aiji.endocrine.being_checkup import BeingCheckup
+from aiji.right_hand.config import Settings
+from aiji.hippocampus.memory import Memory
+from aiji.hippocampus.store import FactDraft, Ident, add_fact
 
 
 class FakePool:

@@ -18,7 +18,7 @@
 - **识别层**把任意输入降维成 `Envelope(text, meta, confidence, status)`，之后走**同一条**反思管线（不按类型分叉）
 - 身份主键 **`(platform, platform_user_id)`**；`scope` 是命名空间；平台特有字段进 `extra`(JSON 文本)
 - 媒体只存**可重新获取的引用** + 识别结果（`media` 表无任何 BLOB 列）
-- 入口：`aiji/__init__.py`（门面 `Memory`）、`aiji/cli.py`、`aiji/server.py`
+- 入口：`aiji/__init__.py`（门面 `Memory`）、`aiji/senses/cli.py`、`aiji/throat/server.py`
 - 核心模块：`db.py`（schema v11 + 迁移）、`store.py`（身份/事实/画像/风格/媒体/摘要/注入日志/检索/冲突消解/关联/淘汰）、
   `recognize.py`（识别层）、`extract.py`（反思：事实/知识/关系/风格/摘要 + 启发式兜底）、
   `recall.py`（硬预算召回）、`inject.py`（软引导注入）、`writer.py`（异步写）、`pool.py`（模型池）、
@@ -226,7 +226,7 @@ python bench/demo_loop.py                                       # 端到端：�
   - **结论**：`aiji/` 包 **0 个死模块**（43 个模块都有真实 import 方）；4.6 GB 垃圾全是文件系统残留，不是代码。
   - 清理后全量 **478 条单测仍 OK**（`...\031800-aiji-suite-after-cleanup-740e12`，sha256 `076d8a00…`）。
 - 2026-11-02 **主动配额改为"反代积分折算"（用户口径）+ 自我记忆进注入块**：
-  - `aiji/quota.py`：`allowed_24h = min(8, floor(剩余积分×0.8 ÷ 单条单价))`；积分取不到就退回 3/天。
+  - `aiji/brain/quota.py`：`allowed_24h = min(8, floor(剩余积分×0.8 ÷ 单条单价))`；积分取不到就退回 3/天。
     来源四级：配置 URL → 响应头 → `data/credits.json` → 静态/`AIJI_CREDITS`。
   - 接线：`head.py` 主动闸门 + `Memory.proactive_spend` + `Proactive(quota_provider=)` + `aiji quota [--set N]`。
   - **真网关实测**：单价 0.08/条（从 agent2api `/v1/models` 的 `credits` 字段读到）；
@@ -333,7 +333,7 @@ python bench/demo_loop.py                                       # 端到端：�
   桌面平台保留工具能力。
   验证：主项目 `409` 项完成（`408` 通过、`1` 跳过）；AstrBot 插件 `38/38`
   通过；真实公网图库冒烟因读取超时失败，旧图库不受影响。
-- 2026-10-31 **QQ 空间与扩展声线落地**：新增 `aiji/social_service.py`，通过
+- 2026-10-31 **QQ 空间与扩展声线落地**：新增 `aiji/heart/social_service.py`，通过
   NapCat 扩展 OneBot action 执行发说说、评论/自动选最新说说评论、头像、签名、
   网易云音乐分享和 B 站链接分享；`/api/social/*` 受 `AIJI_API_KEY` 保护。
   媒体路径限制在本地社交目录/表情包目录，表情包仍只读本地 `manifest.json`。
@@ -466,7 +466,7 @@ python bench/demo_loop.py                                       # 端到端：�
     摘要哈希复用、事实键、`rank_mode` RRF 开关、弃答档位、自检 bench、显式遗忘、自我记忆。
     新 CLI：`aiji forget/archive/self-memory`。
     **拆不掉的两条实测**：弃答门默认关（excluded #63）、RRF 单路候选零差异（#64）。
-    **主动配额已接线**（`aiji/quota.py`）：额度 = 反代剩余积分 ÷ 单条单价，2026-11-02 续做；
+    **主动配额已接线**（`aiji/brain/quota.py`）：额度 = 反代剩余积分 ÷ 单条单价，2026-11-02 续做；
     两个反代都不吐余额（#65），所以余额用 `aiji quota --set N` 手填 + 按单价折算 + 显示"填了多久"。
     `self_memory` 已进注入块（≤2 条、需与查询相关）。
     待办：冻结线 0.5 要等库龄过 90 天用 `bench/bench_decay_baseline.py` 重测再定。

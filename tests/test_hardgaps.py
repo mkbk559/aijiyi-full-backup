@@ -8,10 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji.db import DB
-from aiji.heart import Heart, OutboxEvent
-from aiji.store import (FactDraft, Ident, add_fact, apply_correction,
-                        apply_feedback, log_injection, last_injection_with_feedback)
+from aiji.hippocampus.db import DB
+from aiji.heart.heart import Heart, OutboxEvent
+from aiji.hippocampus.store import FactDraft, Ident, add_fact, apply_correction, apply_feedback, log_injection, last_injection_with_feedback
 
 
 def workdir(name: str) -> Path:
@@ -41,7 +40,7 @@ class TestCitedScope(unittest.TestCase):
         return fid_city, fid_name, fid_hobby
 
     def test_cited_precise_scope(self):
-        from aiji import params
+        from aiji.right_hand import params
         db = mkdb("cited")
         fid_city, fid_name, fid_hobby = self._seed(db)
         # 用户纠正居住地：cited 只有 fid_city
@@ -59,7 +58,7 @@ class TestCitedScope(unittest.TestCase):
         self.assertTrue(all(v[1] == "active" for v in rows.values()))  # 不删行
 
     def test_no_cited_fallback_halved(self):
-        from aiji import params
+        from aiji.right_hand import params
         db = mkdb("fallback")
         fid_city, fid_name, fid_hobby = self._seed(db)
         # 无 cited：按 predicate_hint 降级定位，幅度减半（×FALLBACK）
@@ -135,11 +134,11 @@ class TestSoftDeleteReadPaths(unittest.TestCase):
         with db.tx() as c:
             c.execute("UPDATE fact SET status='deleted' WHERE id=?", (fid,))
         # 读路径 1：search_facts（FTS 四级降级）
-        from aiji.store import search_facts
+        from aiji.hippocampus.store import search_facts
         hits = search_facts(db.conn(), IDENT, "杭州")
         self.assertTrue(all(h.id != fid for h in hits), f"search_facts 泄漏: {[(h.id, h.text) for h in hits]}")
         # 读路径 2：inject 按 id 回查（kinds 映射）
-        from aiji.inject import Injector
+        from aiji.hippocampus.inject import Injector
         rows = db.read("SELECT id, kind, confidence FROM fact WHERE id IN (?) AND status='active'", (fid,))
         self.assertEqual(len(rows), 0)
         # 读路径 3：recall 主链路
@@ -179,7 +178,7 @@ class TestFloorSlope(unittest.TestCase):
     def test_recovery_after_floor(self):
         """可回升（2026-10-29 复盘）：触地板后正向确认 ×1.25 拉回，封顶 0.95。
         "到底但能回升"才是绿；恒定 0.15 = 锁死红。"""
-        from aiji import params
+        from aiji.right_hand import params
         db = mkdb("recover")
         with db.tx() as c:
             fid, _ = add_fact(c, IDENT, FactDraft("user", "居住地", "杭州", "用户住在杭州", 0.9))
@@ -213,7 +212,7 @@ class TestReplayIdempotent(unittest.TestCase):
     """P1：event_log 回放幂等 + 收敛（崩溃恢复语义）。"""
 
     def _mk(self, name):
-        from aiji.heart import Heart, OutboxEvent
+        from aiji.heart.heart import Heart, OutboxEvent
         db = mkdb(f"replay_{name}")
         h = Heart(db)
         a = Ident("qq", "u_a")
@@ -240,7 +239,7 @@ class TestReplayIdempotent(unittest.TestCase):
 
     def test_replay_converges_with_new_events(self):
         """收敛：回放后新事件追加，再次回放 = 旧事件 + 新事件（正序、无重复）。"""
-        from aiji.heart import Heart, OutboxEvent
+        from aiji.heart.heart import Heart, OutboxEvent
         db, h, a = self._mk("conv")
         old = h.replay_recent(a, limit=100)
         h.enqueue(a, OutboxEvent(kind="comment", text="new1"))
@@ -256,7 +255,7 @@ class TestAggregateSoftDelete(unittest.TestCase):
     """P0 聚合路径补充：统计/聚合也不得把软删行算进 active。"""
 
     def test_fact_stats_excludes_deleted(self):
-        from aiji.store import stats as fact_stats
+        from aiji.hippocampus.store import stats as fact_stats
         db = mkdb("agg")
         with db.tx() as c:
             fid, _ = add_fact(c, IDENT, FactDraft("user", "居住地", "杭州", "用户住在杭州", 0.9))

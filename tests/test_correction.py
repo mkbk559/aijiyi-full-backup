@@ -8,10 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji.db import DB
-from aiji.extract import detect_correction
-from aiji.heart import Heart, OutboxEvent
-from aiji.store import FactDraft, Ident, add_fact, apply_feedback
+from aiji.hippocampus.db import DB
+from aiji.hippocampus.extract import detect_correction
+from aiji.heart.heart import Heart, OutboxEvent
+from aiji.hippocampus.store import FactDraft, Ident, add_fact, apply_feedback
 
 
 def workdir(name: str) -> Path:
@@ -53,7 +53,7 @@ class TestDetectCorrection(unittest.TestCase):
 
 class TestNegativeFeedback(unittest.TestCase):
     def test_downgrade_with_floor(self):
-        from aiji import params
+        from aiji.right_hand import params
         db = mkdb("down")
         with db.tx() as c:
             fid, _ = add_fact(c, IDENT, FactDraft("user", "居住地", "杭州", "用户住在杭州", 0.9))

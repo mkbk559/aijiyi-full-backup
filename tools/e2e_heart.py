@@ -12,10 +12,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.stdout = __import__("io").TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-from aiji.db import DB
-from aiji.gate import check_reply
-from aiji.heart import Heart, OutboxEvent
-from aiji.store import Ident
+from aiji.hippocampus.db import DB
+from aiji.brain.gate import check_reply
+from aiji.heart.heart import Heart, OutboxEvent
+from aiji.hippocampus.store import Ident
 
 WORK = ROOT / ".tmp" / "e2e_heart"
 WORK.mkdir(mode=0o777, parents=True, exist_ok=True)

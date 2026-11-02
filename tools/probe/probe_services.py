@@ -21,7 +21,7 @@ def env(name: str, default: str = "") -> str:
 
 try:
     # ================= 1. 声音：声线注册表 + 就绪判断 =================
-    from aiji.voice_service import VoiceError, VoiceRegistry
+    from aiji.heart.voice_service import VoiceError, VoiceRegistry
 
     voices_dir = base / "voices"
     voices_dir.mkdir(mode=0o777)
@@ -46,9 +46,9 @@ try:
     probe.case("未知声线合成抛 VoiceError(profile_not_found)", raised)
 
     # ================= 2. 点歌/社交/图库：未配置时的诚实降级 =================
-    from aiji.song_service import SongError, SongService
-    from aiji.social_service import SocialError, SocialService
-    from aiji.sticker_service import StickerError, StickerService
+    from aiji.heart.song_service import SongError, SongService
+    from aiji.heart.social_service import SocialError, SocialService
+    from aiji.heart.sticker_service import StickerError, StickerService
 
     songs = SongService(registry, data_root=base)
     probe.case("点歌服务：ready() 反映外部依赖",
@@ -93,7 +93,7 @@ try:
     probe.case("图库：环回地址导入被拒（SSRF 防线）", raised)
 
     # ================= 3. MCP：白名单与只读声明 =================
-    from aiji.mcp_client import MCPRegistry
+    from aiji.left_hand.mcp_client import MCPRegistry
 
     mcp = MCPRegistry(Path("config/mcp_servers.json"))
     snap = mcp.snapshot()
@@ -113,8 +113,8 @@ try:
     probe.case("MCP 非白名单工具被拒", raised)
 
     # ================= 4. 受控电脑操作：策略 + 审批 =================
-    from aiji.actions import ActionExecutor, ActionPolicy, ApprovalManager, ToolCall
-    from aiji.actions.policy import PolicyViolation
+    from aiji.left_hand.actions import ActionExecutor, ActionPolicy, ApprovalManager, ToolCall
+    from aiji.left_hand.actions.policy import PolicyViolation
 
     ws = base / "ws"
     ws.mkdir(mode=0o777)
@@ -175,8 +175,8 @@ try:
                 f"ok={approved_result.ok} approved={approved_result.approved}")
 
     # ================= 5. 出口闸门 / 角色边界 =================
-    from aiji import role_boundary
-    from aiji.gate import check_reply, sanitize_reply
+    from aiji.brain import role_boundary
+    from aiji.brain.gate import check_reply, sanitize_reply
 
     bad = check_reply("我的密码是 123456")
     probe.case("闸门：凭据转述被拦", not bad.ok, f"ok={bad.ok} reason={getattr(bad, 'reason', '')}")
@@ -193,8 +193,8 @@ try:
                 "鱼的身体" not in role_boundary.prompt_block())
 
     # ================= 6. 拟人节奏 / 连发合并 =================
-    from aiji.debounce import ConversationDebouncer, merge_messages
-    from aiji.humanize import HumanPacer
+    from aiji.brain.debounce import ConversationDebouncer, merge_messages
+    from aiji.brain.humanize import HumanPacer
 
     pacer = HumanPacer(min_ms=600, max_ms=4500, typing_min_ms=100, typing_max_ms=1500)
     delay = pacer.plan_ms("在吗" * 60, "qq")
@@ -234,7 +234,7 @@ try:
                 f"n={len(merged) if isinstance(merged, list) else '?'}")
 
     # ================= 7. 存在感广播 =================
-    from aiji.presence import PresenceHub
+    from aiji.endocrine.presence import PresenceHub
 
     hub = PresenceHub()
     hub.publish({"state": "thinking"})
@@ -242,7 +242,7 @@ try:
     probe.case("存在感：广播后可读快照", bool(snap), f"snapshot={str(snap)[:80]}")
 
     # ================= 8. 语音后端探测（真实依赖） =================
-    from aiji import real_engines as re
+    from aiji.hippocampus import real_engines as re
     probe.case("本机 ASR：FunASR/whisper 至少一个可用", re.HAS_FUNASR or re.HAS_ASR,
                f"funasr={re.HAS_FUNASR} whisper={re.HAS_ASR}")
 finally:

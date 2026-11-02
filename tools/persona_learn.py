@@ -20,8 +20,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 from load_keys import bridge  # noqa: E402
 
-from aiji.config import Settings  # noqa: E402
-from aiji.pool import ModelPool  # noqa: E402
+from aiji.right_hand.config import Settings  # noqa: E402
+from aiji.brain.pool import ModelPool  # noqa: E402
 
 DEFAULT_CORPUS = ROOT / ".tmp" / "tieba_forum.json"
 BAD = (

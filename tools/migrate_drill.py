@@ -22,8 +22,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji.db import DB, SCHEMA_VERSION  # noqa: E402
-from aiji.store import Ident, search_facts  # noqa: E402
+from aiji.hippocampus.db import DB, SCHEMA_VERSION  # noqa: E402
+from aiji.hippocampus.store import Ident, search_facts  # noqa: E402
 
 
 def counts(path: Path) -> dict[str, int]:

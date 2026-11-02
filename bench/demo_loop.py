@@ -12,7 +12,7 @@ import time
 sys.path.insert(0, r"D:\AIJiYi")
 
 from aiji import Memory  # noqa: E402
-from aiji.config import Settings  # noqa: E402
+from aiji.right_hand.config import Settings  # noqa: E402
 
 DB = pathlib.Path(r"D:\AIJiYi\.tmp\v3demo.db")
 for s in ("", "-wal", "-shm"):

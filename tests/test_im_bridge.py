@@ -7,7 +7,7 @@ import unittest
 from dataclasses import dataclass, field
 from typing import Any
 
-from aiji.bridge.octop_gateway import AijiGatewayClient, inbound_payload, make_processor
+from aiji.throat.bridge.octop_gateway import AijiGatewayClient, inbound_payload, make_processor
 
 
 @dataclass

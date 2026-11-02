@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from aiji import params  # noqa: E402
+from aiji.right_hand import params  # noqa: E402
 
 DAY = 86400.0
 

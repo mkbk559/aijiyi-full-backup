@@ -20,11 +20,11 @@ from typing import ClassVar
 from unittest import mock
 
 from aiji import Memory
-from aiji.config import Settings
-from aiji.pool import PoolExhausted
-from aiji.server import _sampling_params, make_server, parse_identity_hint
-from aiji.social_service import SocialService
-from aiji.store import FactDraft, Ident, add_fact
+from aiji.right_hand.config import Settings
+from aiji.brain.pool import PoolExhausted
+from aiji.throat.server import _sampling_params, make_server, parse_identity_hint
+from aiji.heart.social_service import SocialService
+from aiji.hippocampus.store import FactDraft, Ident, add_fact
 
 TMP_ROOT = Path(__file__).resolve().parent.parent / ".tmp"
 TMP_ROOT.mkdir(mode=0o777, exist_ok=True)
