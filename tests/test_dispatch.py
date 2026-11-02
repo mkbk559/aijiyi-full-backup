@@ -52,16 +52,33 @@ class TestDispatcher(unittest.TestCase):
         h.enqueue(ident, OutboxEvent(kind="comment", text="x"))
         h.pump()
         # 适配器报 remaining=0 → 平台整体推迟 30s
-        d = Dispatcher(h, rate_info=lambda p: {"remaining": 0, "reset_at": time.time() + 60})
+        quota = {"remaining": 0, "reset_at": time.time() + 60}
+        d = Dispatcher(h, rate_info=lambda p: dict(quota))
         n = d._tick()
         self.assertEqual(n, 0)  # 被限流拦下
         row = db.read("SELECT status, next_retry_at FROM send_queue")[0]
         self.assertEqual(row["status"], "pending")
         self.assertGreater(row["next_retry_at"], time.time())
-        # remaining 恢复 → 正常发送
-        d2 = Dispatcher(h, rate_info=lambda p: {"remaining": 5, "reset_at": 0})
-        self.assertEqual(d2._tick(), 1)
+        # remaining 恢复 → 同一实例把推迟的行回拉并发出（2026-11-03：回拉记忆是实例级状态，
+        # 只有"上一轮真被平台级限流"的平台恢复才回拉，见 _blocked）
+        quota.update({"remaining": 5, "reset_at": 0})
+        self.assertEqual(d._tick(), 1)
         self.assertEqual(h.stats["sent"], 1)
+
+    def test_single_message_throttle_survives_new_dispatcher(self):
+        """单条消息被 SendThrottled 推迟后，新的 Dispatcher 不能把推迟抹掉（否则每秒 429 热循环）。"""
+        db = mkdb("throttle")
+        h = Heart(db, handler=lambda i, e: "r", sender=lambda i, t, p: True)
+        h.enqueue(Ident("qq", "u1"), OutboxEvent(kind="mention", text="x"))
+        h.pump()
+        future = time.time() + 30
+        with db.tx() as c:
+            c.execute("UPDATE send_queue SET status='pending', next_retry_at=?, attempts=0",
+                      (future,))
+        d = Dispatcher(h)   # 无 rate_info，平台从未被平台级限流压住
+        self.assertEqual(d._tick(), 0, "推迟中的行不该被回拉")
+        row = db.read("SELECT next_retry_at FROM send_queue")[0]
+        self.assertGreaterEqual(float(row["next_retry_at"]), future - 0.001)
 
     def test_thread_smoke(self):
         db = mkdb("thread")

@@ -284,7 +284,10 @@ class Memory:
             "group_id": scope.split(":", 1)[1] if group else None,
             "user_id": ident.platform_user_id,
         }
-        ok = self.onebot_client.send(event, text)
+        # 2026-11-03：走结构化发送结果，按"重试/限流/致命"分类处理（见 aiji/heart/sender.py）
+        from aiji.heart import sender as send_classify
+        outcome = self.onebot_client.send_ex(event, text)
+        ok = send_classify.raise_for(outcome)
         if not ok and group:
             with self._qq_rate_lock:
                 recent = self._qq_sent_at.get(scope, [])

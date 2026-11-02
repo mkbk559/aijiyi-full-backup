@@ -348,7 +348,7 @@ const NODES = [
  d:"实体态发件箱：outbox 消费、CAS 领取、出站入队；SendThrottled 让限流变成可见事件而不是静默丢失。生产库 outbox/send_queue 目前 0 行——发送实际由 AstrBot 插件完成。",
  sym:["Heart","OutboxEvent","SendThrottled"]},
 {id:"dispatch", band:"out", t:"发送调度", s:"send_queue + 限流退避", f:"aiji/heart/dispatch.py",
- d:"独立线程扫 send_queue，限流感知退避；与心脏层配对，解决「平台每分钟只能发 5 条」被拒 22 次那类问题。注意：本仓库只负责把消息落到 send_queue，真正调用平台 API 投递的是外部 AstrBot 插件（走 HTTP），插件不在本仓库。",
+ d:"独立线程扫 send_queue，限流感知退避；与心脏层配对，解决「平台每分钟只能发 5 条」被拒 22 次那类问题。投递本身在本仓库内完成：Heart.dispatch 领租约 → Memory._heart_send → OneBot /send_*_msg（NapCat）→ 按 retcode 分类：可重试退避、频控推迟、1401/1403 等确定性失败直接进死信。AstrBot 插件是另一条客户端路径，它自己发消息、只把记忆读写走 HTTP。",
  sym:["Dispatcher"]},
 {id:"social", band:"out", t:"QQ 空间", s:"说说 / 评论 / 签名 / 分享", f:"aiji/heart/social_service.py",
  d:"走 NapCat 扩展的 onebot action：发说说、评论、自动选最新说说评论、改头像签名、分享网易云与 B 站链接。媒体路径限制在社交目录/表情包目录，/api/social/* 受 API Key 保护。",

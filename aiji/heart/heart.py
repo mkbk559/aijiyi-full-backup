@@ -47,6 +47,19 @@ class SendThrottled(Exception):
         super().__init__("send rate limit reached")
         self.retry_at = float(retry_at)
 
+
+class SendFatal(Exception):
+    """这一条**再试也不会成功**（token 失效、参数非法、目标不存在）——直接进死信，别耗重试。
+
+    2026-11-03：以前所有失败都走同一档指数退避，1401(token) 这种确定性失败要白试到
+    MAX_ATTEMPTS 才进 dead；现在由 sender 分好类抛上来，dispatch 立刻标 dead。
+    """
+
+    def __init__(self, reason: str = "", retcode: int | None = None):
+        super().__init__(reason or "send failed permanently")
+        self.reason = str(reason)
+        self.retcode = retcode
+
 class Heart:
     def __init__(self, db: DB, handler: Callable[[Ident, OutboxEvent], str | None] | None = None,
                  sender: Callable[[Ident, str, dict[str, Any]], bool] | None = None,
@@ -329,12 +342,16 @@ class Heart:
             payload = json.loads(row["payload"])
             ok = True
             throttled_until = None
+            fatal = None
             if self.sender is not None:
                 try:
                     ok = bool(self.sender(ident, payload.get("text", ""), payload))
                 except SendThrottled as exc:
                     ok = False
                     throttled_until = exc.retry_at
+                except SendFatal as exc:
+                    ok = False
+                    fatal = exc
             with self.db.tx() as c:
                 if throttled_until is not None:
                     c.execute(
@@ -346,6 +363,19 @@ class Heart:
                     c.execute("UPDATE send_queue SET status='sent', lease_until=NULL, owner=NULL"
                               " WHERE id=?", (row["id"],))
                     self.stats["sent"] += 1
+                elif fatal is not None:
+                    # 确定性失败：不重试，直接死信（留 payload 供人工排查/补发）
+                    c.execute("UPDATE send_queue SET status='dead', lease_until=NULL, owner=NULL"
+                              " WHERE id=?", (row["id"],))
+                    c.execute(
+                        "INSERT INTO event_log (platform, platform_user_id, scope, kind, payload, ts)"
+                        " VALUES (?,?,?,?,?,?)",
+                        (row["platform"], row["platform_user_id"], row["scope"], "send_fatal",
+                         json.dumps({"queue_id": row["id"], "reason": fatal.reason,
+                                     "retcode": fatal.retcode}, ensure_ascii=False), t),
+                    )
+                    self.stats["dead"] = self.stats.get("dead", 0) + 1
+                    self.stats["fatal"] = self.stats.get("fatal", 0) + 1
                 else:
                     attempts = int(row["attempts"]) + 1
                     if attempts >= MAX_ATTEMPTS:

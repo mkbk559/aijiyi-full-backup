@@ -69,6 +69,15 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **缺口③「心脏层接管发送」：先纠错，再补真缺的那块**。
+  **纠错**：`Memory` 早就给 `Heart` 注入了 `sender=self._heart_send` → 真调 OneBot `/send_*_msg`，
+  "本仓库只落 send_queue、投递在 AstrBot 插件"这句话**是错的**（架构图已改正）。
+  **真缺口**是失败不分类：`retcode=1401`（token 失效）/1404（目标不存在）/HTTP 401 也要白试到
+  MAX_ATTEMPTS 才进死信。本轮加 `SendOutcome`/`send_ex`、`aiji/heart/sender.py::classify`（OK/RETRY/THROTTLE/FATAL）、
+  `SendFatal` → 立即 `dead` + `event_log` 留痕。顺手修掉 `Dispatcher._tick` 把单条限流推迟当"平台已恢复"
+  抹掉的 **429 热循环 bug**（改用 `_blocked` 实例记忆）。证据：`docs/agent/evidence/gap-closure-2026-11-03/EVIDENCE-heart-send.md`。
+  全量 **478/478 全绿**。**未验**：真实 NapCat/QQ 的一次发送（只对假 OneBot 验了分类与落点）。
+
 - 2026-11-03 **缺口②「used_ids 反馈闭环」已端到端证出来（代码本来就通，之前没人证过）**：
   `tests/test_feedback_loop.py` 3 条真 HTTP 用例：响应带 `aiji.injection_id/used_ids` → `POST /feedback` →
   `updated≥1`、被引用 fact 的 `hit_count` 增长、`injection.feedback` 写上、未知 fact id 不炸。全量 **467/467 全绿**。

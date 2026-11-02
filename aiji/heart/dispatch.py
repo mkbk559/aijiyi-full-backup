@@ -33,6 +33,10 @@ class Dispatcher:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.stats = {"sent": 0, "throttled": 0, "cancelled": 0}
+        # 2026-11-03：记住"上一轮被平台级限流压住的平台"，只有它们恢复才回拉推迟行。
+        # 否则单条消息的 SendThrottled 推迟会被下一轮 _tick 当成"平台已恢复"抹掉，
+        # 退化成每秒重发一次的 429 热循环。
+        self._blocked: set[str] = set()
 
     # ---- 撤回（1.2 轮2补：主动可撤回，未发送的消息 cancel） ----
 
@@ -103,14 +107,15 @@ class Dispatcher:
             if backoff > 0:
                 blocked.add(r["platform"])
                 self.stats["throttled"] += 1
-            else:
-                # 平台已恢复：回拉因限流被推迟的行（30s 推迟只该在受限期间生效）
+            elif r["platform"] in self._blocked:
+                # 只有"上一轮真的被平台级限流"且现在恢复的平台，才回拉被推迟的行
                 with self.db.tx() as c:
                     c.execute(
                         "UPDATE send_queue SET next_retry_at=? WHERE platform=?"
                         " AND status='pending' AND next_retry_at>? AND attempts=0",
                         (t, r["platform"], t),
                     )
+        self._blocked = set(blocked)
         if blocked:
             # 受限平台的待发行整批推迟
             with self.db.tx() as c:

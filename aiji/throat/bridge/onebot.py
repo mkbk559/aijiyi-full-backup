@@ -12,6 +12,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from typing import Any, Callable
 
 _CQ_AT = re.compile(r"\[CQ:at,qq=([^,\]]+)[^\]]*\]")
@@ -32,6 +33,16 @@ class OneBotCallError(RuntimeError):
         self.action = action
         self.retcode = retcode
         self.status = status
+
+
+@dataclass(frozen=True)
+class SendOutcome:
+    """一次发送的**结构化**结果（2026-11-03）：以前 `send()` 只回 bool，分不清"重试有用"和"重试无用"。"""
+
+    ok: bool
+    retcode: int | None = None
+    http_status: int | None = None
+    message: str = ""
 
 
 def _parse_message(message: Any, self_id: str) -> tuple[str, bool]:
@@ -140,6 +151,45 @@ class OneBotClient:
             return str(body.get("status") or "").lower() == "ok" and int(body.get("retcode", 0)) == 0
         except (urllib.error.URLError, TimeoutError, ValueError, TypeError):
             return False
+
+    def _default_post_ex(self, url: str, payload: dict[str, Any],
+                         headers: dict[str, str]) -> SendOutcome:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        request = urllib.request.Request(url, data=data, method="POST", headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
+                raw = response.read().decode("utf-8", "replace") or "{}"
+                body = json.loads(raw)
+            retcode = int(body.get("retcode", 0) or 0)
+            ok = str(body.get("status") or "").lower() == "ok" and retcode == 0
+            return SendOutcome(ok=ok, retcode=retcode, http_status=200,
+                               message=str(body.get("message") or body.get("wording") or "")[:200])
+        except urllib.error.HTTPError as exc:
+            return SendOutcome(ok=False, retcode=None, http_status=int(exc.code),
+                               message=f"HTTP {exc.code}")
+        except (urllib.error.URLError, TimeoutError) as exc:
+            return SendOutcome(ok=False, retcode=None, http_status=None,
+                               message=type(exc).__name__)
+        except (ValueError, TypeError) as exc:
+            return SendOutcome(ok=False, retcode=None, http_status=200,
+                               message=f"bad response: {type(exc).__name__}")
+
+    def send_ex(self, event: dict[str, Any], text: str) -> SendOutcome:
+        """发一条消息，返回结构化结果（成功/重试/限流/致命 由调用方分类）。"""
+        group = event.get("message_type") == "group"
+        endpoint = "/send_group_msg" if group else "/send_private_msg"
+        payload = {
+            ("group_id" if group else "user_id"):
+                event.get("group_id") if group else event.get("user_id"),
+            "message": [{"type": "text", "data": {"text": str(text)}}],
+        }
+        headers = {"Content-Type": "application/json"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        if self._post is not None:
+            ok = bool(self._post(f"{self.base_url}{endpoint}", payload, headers))
+            return SendOutcome(ok=ok, retcode=0 if ok else -1, http_status=200 if ok else None)
+        return self._default_post_ex(f"{self.base_url}{endpoint}", payload, headers)
 
     def send(self, event: dict[str, Any], text: str) -> bool:
         group = event.get("message_type") == "group"
