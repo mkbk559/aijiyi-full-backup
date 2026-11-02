@@ -12,6 +12,7 @@ aiji = "aiji.senses.cli:main"
 im = ["octop-gateway>=1.0.3"]
 voice = ["edge-tts>=7"]
 mcp = ["mcp>=2.1"]
+dev = ["hypothesis>=6", "ruff>=0.6"]
 
 [tool.uv]
 package = true
