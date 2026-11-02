@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -13,7 +12,6 @@ sys.path.insert(0, str(ROOT))
 sys.stdout = __import__("io").TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 from aiji.hippocampus.db import DB
-from aiji.brain.gate import check_reply
 from aiji.heart.heart import Heart, OutboxEvent
 from aiji.hippocampus.store import Ident
 

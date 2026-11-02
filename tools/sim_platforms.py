@@ -26,7 +26,6 @@ import os
 import random
 import sys
 import time
-from collections import deque
 from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -306,10 +305,7 @@ class PromptInjector(VirtualUser):
 
 # ---------------------------------------------------------------- 模拟上下文（真 Heart 层驱动）
 
-from aiji.hippocampus.db import DB as _DB
-from aiji.heart.heart import Heart, OutboxEvent as _OutboxEvent, PRI_INGEST as _PRI_INGEST
-from aiji.brain.gate import check_reply as _gate_check
-from aiji.hippocampus.store import Ident as _Ident
+from aiji.heart.heart import Heart, OutboxEvent as _OutboxEvent
 
 
 class SimContext:
@@ -333,7 +329,7 @@ class SimContext:
     # ---- 头（生成）：由 Heart.pump 调用 ----
 
     def _handler(self, ident, ev):
-        user = self._user_of(ident)
+        user = self._user_of(ident)  # noqa: F841 后面同名的会被覆盖，这里只为触发校验
         kind = ev.kind
         if kind == "watch":
             # 方案 1.8：纯采集直写 ingest，不走头（不生成响应）
@@ -396,7 +392,7 @@ class SimContext:
     # ---- 嘴（发送）：由 Heart.dispatch 调用 ----
 
     def _sender(self, ident, text, payload):
-        user = self._user_of(ident)
+        user = self._user_of(ident)  # noqa: F841 后面同名的会被覆盖，这里只为触发校验
         # scope 响应节流（方案 1.11 #2）：滚动 60s 窗口内任何同文本不重发
         key = (ident.platform, str(ident.scope))
         now = time.monotonic()

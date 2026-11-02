@@ -69,6 +69,21 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **更正：RVC 不慢，是我跑错了环境。** 这台机器有 **RTX 3050 Laptop (4 GB)**，
+  真正的 RVC 运行时是 `voice-engine/rvc/.venv`（Python 3.12 + torch 2.7.1+**cu128**，`torchfcpe` 也在），
+  `data/voices/dafeiyu/profile.json` 一直指向它；我之前拿 `voice-engine/.venv`（torch **cpu**，我自己装的）
+  量出来的 RTF 1.6~2.1 不算数。GPU 实测（`tools/archcheck/rvc_gpu_bench.py`）：
+  1.5 s 素材 **384 ms**（RTF 0.26）、6 s 素材 **503 ms**（RTF 0.08），CLI 端到端 0.65~0.83 s。
+  → **不换引擎**；`rvc_convert.py`/`rvc_daemon.ps1` 改为优先选 GPU 环境并默认 `--device cuda`；
+  `VOICE_MAX_CONVERT_SECONDS` 15 → **60**（只在退回 CPU 时才真会触发）。
+- 2026-11-03 **磁盘体检：15.28 GB → 10.68 GB（释放 4.61 GB）**，见
+  `docs/agent/evidence/disk-usage-2026-11-03.md`。删的是：`rvc/assets/pymss_weights` 1.45 GB（零引用）、
+  `rvc/logs` 训练残留 0.79 GB、`.tmp`（我的浏览器 profile + hypothesis 产物）0.95 GB、
+  我为跑基准另装的 CPU venv 1.21 GB、`data/voices/.work`。删完重启守护验证：`/health` ok、
+  转换输出 142 124 字节与清理前一致、热调用 0.65~0.83 s。
+  剩下的大件都是**必需的**：`rvc/.venv` 7.03 GB（里面 torch cu128 5.53 GB）、`rvc/assets` 2.09 GB、
+  `data/voices` 1.23 GB（声线训练集）。
+
 - 2026-11-03 **语音引擎决策：不换 SVC，改"按场景分开"**。
   实测（`docs/agent/evidence/voice-engine-decision-2026-11-03.md`）：RVC 常驻后 1.5 s 素材 **2 892 ms**、
   6 s 素材 **9 519 ms**（RTF 1.60）；换 F0 方法只差 4%（rmvpe 3 264 vs pm 3 129 ms）→ **瓶颈是模型推理，不是 F0**；

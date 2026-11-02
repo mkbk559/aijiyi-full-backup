@@ -7,7 +7,6 @@ import os
 import socket
 import sqlite3
 import sys
-import time
 import urllib.error
 import urllib.parse
 import urllib.request

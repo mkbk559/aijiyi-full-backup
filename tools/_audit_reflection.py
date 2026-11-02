@@ -4,7 +4,6 @@ from __future__ import annotations
 import pathlib
 import sqlite3
 import sys
-import time
 
 sys.stdout.reconfigure(encoding="utf-8")
 DB = pathlib.Path(r"D:\AIJiYi\data\aiji.db")

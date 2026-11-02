@@ -1,5 +1,4 @@
 """死文件审计：找出仓库里没人引用的模块/脚本/文档，输出候选清单（不删，只报）。"""
-import ast
 import re
 from collections import defaultdict
 from pathlib import Path

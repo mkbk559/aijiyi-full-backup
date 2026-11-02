@@ -23,12 +23,19 @@
 param(
     [switch]$Stop,
     [int]$Port = 18601,
-    [int]$WaitSeconds = 180
+    [int]$WaitSeconds = 180,
+    [ValidateSet('auto', 'cuda', 'cpu')]
+    [string]$Device = 'auto'
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$python = Join-Path $root 'voice-engine\.venv\Scripts\python.exe'
+# 优先 GPU 环境（voice-engine/rvc/.venv：Python 3.12 + torch cu128，实测 6 s 素材 503 ms）；
+# 没有才退回 CPU 环境（同样的活要 9 519 ms，差 19 倍）。可用 -Device 强制覆盖。
+$gpuPy = Join-Path $root 'voice-engine\rvc\.venv\Scripts\python.exe'
+$cpuPy = Join-Path $root 'voice-engine\.venv\Scripts\python.exe'
+if (Test-Path $gpuPy) { $python = $gpuPy; $device = 'cuda' }
+else { $python = $cpuPy; $device = 'cpu' }
 $server = Join-Path $root 'tools\rvc_server.py'
 $logDir = Join-Path $root 'logs'
 $logFile = Join-Path $logDir 'rvc-server.log'
@@ -52,6 +59,8 @@ function Invoke-Local {
     }
     return Invoke-WebRequest @args
 }
+
+if ($Device -ne 'auto') { $device = $Device }
 
 function Get-Health {
     try {
@@ -96,7 +105,7 @@ if (Test-Path $logFile) {
 # 被管道捕获的调用方会一直挂着（实测十几分钟不返回）。
 # 改成让服务自己写日志（tools/rvc_server.py --log），父进程只管 launch 完就走。
 Start-Process -FilePath $python `
-    -ArgumentList @($server, '--port', "$Port", '--log', $logFile) `
+    -ArgumentList @($server, '--port', "$Port", '--log', $logFile, '--device', $device) `
     -WorkingDirectory $root -WindowStyle Hidden | Out-Null
 
 $deadline = (Get-Date).AddSeconds($WaitSeconds)

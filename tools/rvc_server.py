@@ -5,12 +5,17 @@
 （载入 0.6 s + F0 4~6 s + 合成 3.5 s + 进程与 import 开销）。
 本服务把 `VC` 对象留在内存里，模型只载一次，之后每次只做 F0 + 合成。
 
-必须用 RVC 自己的 venv 跑（torch 在 `voice-engine/.venv`，主 venv 没有）：
+必须用 RVC 自己的 venv 跑，**并且要那个带 CUDA 的**（`voice-engine/rvc/.venv`，
+Python 3.12 + torch 2.7.1+cu128）。同一颗素材实测：CPU 环境（`voice-engine/.venv`）
+1.5 s 素材 2 892 ms / 6 s 素材 9 519 ms；GPU 环境 **384 ms / 503 ms**（RTF 0.26 / 0.08）。
+选错解释器就是 7~19 倍差距。
 
-    voice-engine\\.venv\\Scripts\\python.exe tools\\rvc_server.py --port 18601
+    voice-engine/rvc/.venv/Scripts/python.exe tools/rvc_server.py --port 18601 --device cuda
+
+（`tools/rvc_convert.py --via auto` 和 `tools/rvc_daemon.ps1` 都会自己挑 GPU 环境。）
 
 接口（HTTP + JSON，只绑 127.0.0.1）：
-    GET  /health          -> {"ok":true,"model":"dafeiyu.pth","device":"cpu","loaded_ms":...}
+    GET  /health          -> {"ok":true,"model":"dafeiyu.pth","device":"cuda","loaded_ms":...}
     POST /convert         -> {"in":"a.wav","out":"b.wav","pitch":0,"index_rate":0.75,
                               "f0_method":"rmvpe","protect":0.33,"rms_mix_rate":1.0}
                              返回 {"ok":true,"ms":812.4,"out":"b.wav","sr":40000}
@@ -56,7 +61,7 @@ def _hint_for_text(text: str) -> str:
     low = text.lower()
     if "torchfcpe" in low:
         return ("该 F0 方法要 torchfcpe：uv pip install --python "
-                "voice-engine\\.venv\\Scripts\\python.exe torchfcpe；"
+                "voice-engine\\rvc\\.venv\\Scripts\\python.exe torchfcpe；"
                 "不改也行，用默认的 rmvpe（CPU 上两者总耗时差不多）")
     if "hubert" in low and ("no such file" in low or "not found" in low):
         return "缺 hubert 权重：检查 voice-engine/rvc/assets/hubert 是否存在"

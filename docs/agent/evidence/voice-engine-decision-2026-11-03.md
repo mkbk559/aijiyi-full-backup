@@ -1,5 +1,27 @@
 # 语音引擎决策：换什么、多久（2026-11-03）
 
+> ## ⚠️ 本文 §一/§二 的"CPU 上 RTF 1.6~2.1、必须上 GPU"是**错的测量**，不要引用。
+> 我一开始用 `voice-engine/.venv`（torch 2.15.0+**cpu**，我自己装的）跑基准，
+> 而这台机器其实有 **RTX 3050 Laptop (4 GB)**，真正的 RVC 运行时是
+> `voice-engine/rvc/.venv`（Python 3.12 + torch 2.7.1+**cu128**，且 `torchfcpe` 也在），
+> `data/voices/dafeiyu/profile.json` 一直指向的就是它。
+> 换到 GPU 环境重测（`tools/archcheck/rvc_gpu_bench.py` → `results/rvc_gpu_bench.json`）：
+>
+> | 素材 | CPU 环境（错的那个） | **GPU 环境（真的）** | 倍数 |
+> |---|---|---|---|
+> | 1.5 s | 2 892 ms（RTF 2.12） | **384 ms（RTF 0.26）** | 7.5× |
+> | 6.0 s | 9 519 ms（RTF 1.60） | **503 ms（RTF 0.08）** | 19× |
+> | CLI 端到端（`--via server`，第 2/3/4 次） | 5 133 ms | **0.83 / 0.65 / 0.68 s** | ~7× |
+> | 守护冷启动 | 40.8 s | 22.8 s（`loaded_ms` 11.0~13.6 s） | — |
+>
+> **结论更正：不用换引擎，RVC 在这台机器上已经是实时的（RTF 0.08~0.26）。**
+> 之前"延迟太高"的真因是**跑错了环境**（CPU torch）+ 常驻服务没起。
+> 已修：`tools/rvc_convert.py` 的 `_pick_python()` 与 `tools/rvc_daemon.ps1` 都优先选
+> `voice-engine/rvc/.venv` 并默认 `--device cuda`；`VOICE_MAX_CONVERT_SECONDS` 从 15 s 放开到 60 s
+> （GPU 下 60 s 素材≈3 s，这个上限只在退回 CPU 时才真会咬人）。
+> §三 里 1/3/4/5 条改动仍有效；§二 的"要换单段克隆 TTS"降级为**可选**（只有当你想让语音条也用
+> 大肥鱼音色、且能接受再下一套模型时才考虑），不再是延迟上的必需。
+
 用户问"这个引擎延迟太高了，换什么"。这里给实测数字 + 结论 + 已经落地的改动。
 **结论先说：不换 SVC 引擎；把"TTS + RVC"两段式改成按场景分开走。**
 

@@ -15,7 +15,7 @@ from tools.probe._harness import (  # noqa: E402
 
 from aiji.brain import selfhood
 from aiji.hippocampus import store  # noqa: E402
-from aiji.endocrine.being import ACTIVITIES, BeingStore  # noqa: E402
+from aiji.endocrine.being import BeingStore  # noqa: E402
 from aiji.endocrine.being_checkup import BeingCheckup  # noqa: E402
 from aiji.hippocampus.db import DB  # noqa: E402
 from aiji.endocrine.life import LifeCard, load_life_card, save_life_card  # noqa: E402

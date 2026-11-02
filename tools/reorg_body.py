@@ -201,7 +201,7 @@ def rewrite_imports(file: Path, write: bool = True) -> list[str]:
             if not old_mod.startswith("aiji"):
                 continue
             aliases = [(a.name, a.asname) for a in node.names]
-            mod_names = [n for n, _ in aliases]
+            [n for n, _ in aliases]  # 只为触发校验
             # from aiji import store —— 成员可能既含被搬走的子模块，也含包级符号
             if old_mod == "aiji":
                 mod_aliases, plain_aliases = [], []

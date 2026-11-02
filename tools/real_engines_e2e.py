@@ -3,7 +3,6 @@
 import io
 import json
 import sys
-import time
 from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -17,7 +16,6 @@ if db.exists():
     db.unlink()
 
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
-import wave  # noqa: E402
 
 # ---- 造真实输入：图（含待记忆事实）+ 音频（复用 asr_smoke 的 TTS 产物）----
 font_path = r"C:\Windows\Fonts\msyh.ttc"

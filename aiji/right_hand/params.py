@@ -59,10 +59,10 @@ EPISODIC_HALF_LIFE_DAYS = 14.0 # 先验：情景记忆快衰减（"上次被群�
 RECALL_DECAY_MODE = "stability" # 2026-11-03：新近度口径。stability=FSRS-5 幂律曲线(用事实自己存的 stability，随引用增长) / half_life=旧的指数衰减(不看用没用过)
 
 # 换声（RVC）时长护栏：语音条超过这个秒数就不换声，直接用 TTS 原声。
-# 依据：CPU 上实测 RTF≈1.6~2.1（1.5s 素材 2.9s、6s 素材 9.5s），见
-# docs/agent/evidence/gap-closure-2026-11-03/EVIDENCE-rvc-resident.md；profile 里可覆盖。
-# 点歌/翻唱（mode="song"）不受此限，那是离线任务。
-VOICE_MAX_CONVERT_SECONDS = 15.0
+# 2026-11-03 实测：GPU 环境（voice-engine/rvc/.venv, torch cu128）6 s 素材 503 ms（RTF 0.08）、
+# 1.5 s 素材 384 ms；CPU 环境（voice-engine/.venv）同样素材 9 519 / 2 892 ms（RTF 1.6~2.1）。
+# 所以这个上限只在"退回 CPU 跑"时才真的会触发；GPU 下 60 s 素材约 3 s，没必要拦。
+VOICE_MAX_CONVERT_SECONDS = 60.0
                                # 默认 fsrs：bench/bench_memory_quality.py 的 6 条排序不变量在两种口径下都过（见证据文档）
 
 # ---- 反思 Worker：aiji/reflect.py（性格涌现，2026-10-29 新增）----

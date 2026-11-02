@@ -33,7 +33,23 @@ RVC = ROOT / "voice-engine" / "rvc"
 MODEL = RVC / "assets" / "weights" / "dafeiyu.pth"
 INDEX = RVC / "assets" / "indices" / "dafeiyu_added_IVF948_Flat_nprobe_1_dafeiyu_v2.index"
 SERVER = os.environ.get("AIJI_RVC_SERVER") or "http://127.0.0.1:18601"
-RVC_PY = ROOT / "voice-engine" / ".venv" / "Scripts" / "python.exe"
+
+
+def _pick_python() -> Path:
+    """优先用 GPU 环境：`voice-engine/rvc/.venv`（Python 3.12 + torch cu128）。
+
+    2026-11-03 实测同一颗 1.5 s 素材：CPU 环境 2 892 ms，GPU 环境 **384 ms**（RTF 0.26）；
+    6 s 素材 9 519 ms → **503 ms**（RTF 0.08）。选错解释器就是 7~19 倍差距。
+    """
+    gpu = ROOT / "voice-engine" / "rvc" / ".venv" / "Scripts" / "python.exe"
+    if gpu.exists():
+        return gpu
+    return ROOT / "voice-engine" / ".venv" / "Scripts" / "python.exe"
+
+
+RVC_PY = _pick_python()
+# 选中的是不是那个带 CUDA 的环境（决定 --device 默认值）
+_GPU_VENV = RVC_PY == ROOT / "voice-engine" / "rvc" / ".venv" / "Scripts" / "python.exe"
 
 
 # ---- 常驻服务客户端 ----
@@ -51,6 +67,13 @@ def health(url: str | None = None, timeout: float = 3.0) -> dict | None:
         return None
 
 
+def _default_device() -> str:
+    """GPU 环境就点名 cuda，别让 RVC 自己猜（它默认 cpu，等于白扔 7 倍速度）。"""
+    if os.environ.get("AIJI_RVC_DEVICE"):
+        return os.environ["AIJI_RVC_DEVICE"]
+    return "cuda" if _GPU_VENV else "cpu"
+
+
 def autostart(url: str | None = None, wait_s: float = 90.0) -> bool:
     """拉一个 detached 的服务进程，并等到 /health 可用。"""
     if not RVC_PY.exists():
@@ -61,7 +84,8 @@ def autostart(url: str | None = None, wait_s: float = 90.0) -> bool:
         flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     try:
         subprocess.Popen(
-            [str(RVC_PY), str(ROOT / "tools" / "rvc_server.py"), "--port", port],
+            [str(RVC_PY), str(ROOT / "tools" / "rvc_server.py"), "--port", port,
+             "--device", _default_device()],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=flags, close_fds=True,
         )
