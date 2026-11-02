@@ -69,6 +69,15 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **缺口④「FSRS-5 衰减」：其实早就实现了，缺的是"排序没接它"**。
+  核对：`fact.stability/difficulty`（schema v11）、`store.retrievability()`（`R=(1+F·t/S)^-0.5`，F=19/81）、
+  `bump_usage()`（被引用就涨 stability）全都在——但 `recall.score_fact` 的排序新近度一直用**按类型写死的半衰期**，
+  跟"用没用过"无关。改法：`params.RECALL_DECAY_MODE="stability"`，`recall._recency_for_fact` 读 `fact.stability`。
+  **我第一版另写了 `aiji/hippocampus/fsrs.py`，发现与 `store.retrievability` 重复，已删除**（不留第二份曲线）。
+  证据：`docs/agent/evidence/gap-closure-2026-11-03/EVIDENCE-fsrs-decay.md`
+  （365 天旧事实：half_life 0.0147 → stability 0.4964；**真库 400 条里只有 1 条被引用过**，故当前数据上排序几乎不变）。
+  全量 **484/484 全绿**，bench_memory_quality 6/6 仍 ok。
+
 - 2026-11-03 **缺口③「心脏层接管发送」：先纠错，再补真缺的那块**。
   **纠错**：`Memory` 早就给 `Heart` 注入了 `sender=self._heart_send` → 真调 OneBot `/send_*_msg`，
   "本仓库只落 send_queue、投递在 AstrBot 插件"这句话**是错的**（架构图已改正）。

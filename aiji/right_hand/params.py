@@ -56,6 +56,8 @@ RECALL_CHAT_TAKE = 3           # 先验：锚点之外抽 k 条注入（防复�
 RECALL_LINK_HOPS = 2           # 来自方案（差序联想）：图遍历最多 2 跳（防上下文爆炸）
 RECALL_LINK_BUDGET = 6         # 先验：联想扩展命中预算（1 跳 + 2 跳合计上限）
 EPISODIC_HALF_LIFE_DAYS = 14.0 # 先验：情景记忆快衰减（"上次被群友嘲笑"类，鲜活但易忘）
+RECALL_DECAY_MODE = "stability" # 2026-11-03：新近度口径。stability=FSRS-5 幂律曲线(用事实自己存的 stability，随引用增长) / half_life=旧的指数衰减(不看用没用过)
+                               # 默认 fsrs：bench/bench_memory_quality.py 的 6 条排序不变量在两种口径下都过（见证据文档）
 
 # ---- 反思 Worker：aiji/reflect.py（性格涌现，2026-10-29 新增）----
 REFLECT_EVERY_TURNS = 30       # 先验：攒够 30 条新对话才反思一次（太勤=性格抖动，太懒=学不到）

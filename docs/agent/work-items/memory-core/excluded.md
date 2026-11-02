@@ -587,3 +587,23 @@
 89. **不成立：验证脚本放在 `.tmp/` 就算留档**。`.tmp/` 会被清理（本次一次清掉 218 MB），
     写进 `.tmp` 的判据脚本和结果等于没留。
     → 现在判据全部入库在 `tools/archcheck/`（见其 README），结果落 `tools/archcheck/results/`（gitignore）。
+
+## 90. 「FSRS-5 要移植」——不成立，项目里早有（2026-11-03）
+
+以为 recall 的时间衰减是纯指数、需要引入 FSRS。核对后发现 `fact.stability`（schema v11）+
+`store.retrievability()` + `bump_usage()` 就是 FSRS-5 的状态量与曲线，只是 **recall 排序没读它**。
+第一版另写的 `aiji/hippocampus/fsrs.py` 与 `store.retrievability` 重复，已删除（不留第二份曲线）。
+真正剩下的待办：`S'=f(S,D,R)` 完整迭代 + 把 `difficulty` 接进公式（当前数据量下测不出差别，故未做）。
+
+## 91. 「心脏层不发货」——不成立（2026-11-03）
+
+以为 `send_queue` 只是落库、投递在外部 AstrBot 插件。核对后发现 `Memory` 早就给 `Heart` 注入
+`sender=self._heart_send`，直接打 OneBot `/send_*_msg`。真缺口是**失败不分类**（1401 token 失效也会
+重试到 MAX_ATTEMPTS 才进死信）。
+教训：下结论前先 grep 注入点（`Heart(` / `sender=`），别从"表里 0 行"推断"没实现"。
+
+## 92. 「used_ids 反馈闭环没做」——不成立（2026-11-03）
+
+插件 `main.py:2670` 早就读 `aiji.injection_id`/`used_ids` 并 POST `/feedback`，服务端也接好了。
+缺的只是端到端证明（`tests/test_feedback_loop.py`，3 条真 HTTP 用例）。另一个坑：正向反馈且事实从未
+被下调过时**不写 `fact_log`**，只有 `hit_count+1`——拿 fact_log 数量判断"生效没"会误判。

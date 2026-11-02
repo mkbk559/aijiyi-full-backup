@@ -299,7 +299,7 @@ const NODES = [
  d:"从群聊互动里归纳「我长成了什么样」。单次调用、timeout 60s、按积压或空闲批处理；没有 assistant 发言就跳过，模型输出为空不写行。",
  sym:["Reflective","ReflectionWorker","_should_run"]},
 {id:"recall", band:"memory", t:"快召回", s:"100ms 预算 · 并行召回", f:"aiji/hippocampus/recall.py",
- d:"另开线程 + Future.result(timeout=remaining)，超时退化纯内存并标 degraded。排序是多信号：相关度、重要度、按属性类型的半衰期、置信度、反馈命中。",
+ d:"另开线程 + Future.result(timeout=remaining)，超时退化纯内存并标 degraded。排序是多信号：相关度、重要度、新近度、置信度、反馈命中。新近度默认走 FSRS-5 曲线 `R=(1+F·t/S)^-0.5`，S 用事实自己存的 stability（被引用就涨），所以「常被想起的旧事实」比「从没人提的旧事实」掉得慢；想回旧的指数衰减把 `RECALL_DECAY_MODE` 设成 half_life。",
  sym:["Recaller","score_fact","half_life_days","RecallResult"]},
 {id:"inject", band:"memory", t:"软引导注入", s:"只出文本块 · 硬字符预算", f:"aiji/hippocampus/inject.py",
  d:"选择性 + 来源标注 + 关系标签 + 档位；persona_touched=False、soft=True，硬字符预算，bench 断言 0 次越权、0 次超预算。写 injection 留痕，并在同事务里做读→强化。",

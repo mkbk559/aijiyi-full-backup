@@ -100,13 +100,33 @@ def half_life_days(f: Fact) -> float:
     return _HALF_LIFE_DAYS.get(f.predicate, _DEFAULT_HALF_LIFE_DAYS)
 
 
-def score_fact(f: Fact, rank: int, now: float, rel: float = 0.0) -> float:
+def _recency_for_fact(f: Fact, age_s: float, decay_mode: str | None = None) -> float:
+    """按衰减口径算新近度。
+
+    - `stability`（默认）：FSRS-5 幂律曲线，用**事实自己存的 stability**——`bump_usage` 每被引用
+      一次就把它涨一点（封顶 `STABILITY_MAX_DAYS`），解冻再 ×1.2。于是"常被想起的旧事实"掉得比
+      "从没人提的旧事实"慢，这正是 FSRS 的核心效应。
+    - `half_life`：旧口径，指数衰减，半衰期只由事实类型决定，跟用没用过无关（保留用于对照/回退）。
+    """
+    mode = str(decay_mode or params.RECALL_DECAY_MODE or "half_life").lower()
+    if mode == "stability":
+        s = max(0.5, float(getattr(f, "stability", 0) or params.STABILITY_INIT_DAYS))
+        days = max(age_s, 0.0) / 86400.0
+        return float((1.0 + params.FSRS_F * days / s) ** -0.5)
+    return _recency(age_s, half_life_days(f) * 86400)
+
+
+def score_fact(f: Fact, rank: int, now: float, rel: float = 0.0,
+               decay_mode: str | None = None) -> float:
     """多信号打分（mem0 v3 的多信号 + Graphiti 的时间衰减）：
 
     0.55 相关度 + 0.20 重要度 + 0.15 新近度（按属性类型的半衰期）+ 0.10 置信度，
     再用反馈命中（hit_count）与重复提及（mentions）做温和加成。
+
+    2026-11-03：新近度现在用事实自己存的 `stability`（FSRS-5 曲线），切换见 `params.RECALL_DECAY_MODE`。
+    默认口径由 `params.RECALL_DECAY_MODE` 决定。
     """
-    recency = _recency(now - f.updated_at, half_life_days(f) * 86400)
+    recency = _recency_for_fact(f, now - f.updated_at, decay_mode)
     base = 0.55 * rel + 0.20 * f.importance + 0.15 * recency + 0.10 * f.confidence
     boost = (
         1.0
