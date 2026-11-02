@@ -69,6 +69,13 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **缺口②「used_ids 反馈闭环」已端到端证出来（代码本来就通，之前没人证过）**：
+  `tests/test_feedback_loop.py` 3 条真 HTTP 用例：响应带 `aiji.injection_id/used_ids` → `POST /feedback` →
+  `updated≥1`、被引用 fact 的 `hit_count` 增长、`injection.feedback` 写上、未知 fact id 不炸。全量 **467/467 全绿**。
+  **留痕口径**：正向反馈且未下调过的 fact **不写 `fact_log`**，只 `hit_count+1`——别拿 fact_log 数量判断有没有生效。
+  边界：插件侧"用户夸一句触发 /feedback"的触发点在 AstrBot 对话流程里，需要真实 QQ 消息，本轮未实测。
+  证据：`docs/agent/evidence/gap-closure-2026-11-03/EVIDENCE-used-ids-loop.md`。
+
 - 2026-11-03 **缺口①「回复长度硬上限」已落地（原来超长是整条丢弃，且 QQ 200 字上限声明了没人用）**：
   生成侧 `max_tokens` 夹到 `MAX_REPLY_TOKENS=400`（池子不收就不塞），出口侧新增 `gate.fit_reply` 按平台裁字符
   （IM 200 / 其它 500，切句末、不劈 emoji ZWJ 与 CQ 码），三条出口路径（head / heart / proactive）统一
