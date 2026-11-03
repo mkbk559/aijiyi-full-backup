@@ -1056,3 +1056,30 @@ A/B 实测（`.tmp/ab_finish_body.py`，证据归档 224221-ab-finish-body-rst�
 同一个坑修了一处，别的出口没同步。
 **教训**：给"早退路径"打补丁时，把所有早退出口列一遍；`_send/_send_html/_unauthorized`
 这类统一出口才是该动手的地方。
+
+## 138. 运行时 SQL 审计：碰身份表的 36 条语句全部带 platform（2026-11-03）
+
+静态工具（#135）看不见运行时拼出来的 WHERE 条件，所以挂了 `set_trace_callback`，
+跑一个纯单身份的业务流程（写 11 + 读 11 个接口）把真正执行的 SQL 抓下来
+（`tests/test_identity_sql_runtime.py`，证据归档 225315-runtime-sql-audit）：
+
+```
+总语句数: 56 / 碰身份表: 36 / 带 platform: 36 / 违规: 0
+```
+
+第一版报的 18 条"违规"全是设计使然，别当 bug 去改：
+
+- 建库时的 schema 回填（`UPDATE fact SET valid_from=…`）——一次性全局整形
+- `store.stats()` 的 14 条 `COUNT(*)`——它报的是**全库规模**，按身份的那个键叫
+  `facts_active_<platform>`。已用 `test_store_stats_is_intentionally_global` 钉死语义。
+  **注意**：`stats()` 只按 platform 分，不区分 user/scope；要多用户维度的计数得另写。
+
+## 139. 控制台按钮路径靠契约测试守（2026-11-03）
+
+`operations.html` 里 32 个 `fetch` 路径全部对着 `server.py` 的路由做了机械核对
+（`tests/test_console_contract.py`）。第 11 轮是靠真机点出 `/api/turns` 不存在的，
+现在静态就能拦住。关键一条：检查器自己也要有牙
+（`test_checker_actually_catches_dead_paths`），否则"永远绿"的测试等于没写。
+
+同一个坑的通用教训：**写"禁止某模式"的测试时，必须同时写一条"检查器能抓到该模式"
+的自测**，否则改坏了也没人知道。
