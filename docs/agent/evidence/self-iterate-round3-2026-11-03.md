@@ -61,6 +61,22 @@ ConnectionResetError: [WinError 10054] 远程主机强迫关闭了一个现有�
 - 真机：服务重启后 `/api/operations/features`、`/api/capabilities`、`/api/self` 均 200；
   `data/aiji.db-wal` 从 46.18 MB → 3.93 MB（janitor TRUNCATE 生效）
 
+### 补：`handle_error` 的真机验证（15:58）
+
+不只是"单测过了"：重启服务后**真的**用 `SO_LINGER=0` 发了 3 个 RST 的 POST
+（声明 `Content-Length: 1000000` 只发 100 字节就带 RST 关闭），这正是老版本刷出
+17 KB traceback 的场景：
+
+```
+log: console.err.log baseline: 81
+growth bytes: 0 in console.err.log
+traceback count in whole file: 0
+10054 mention count: 0
+```
+
+日志零增长、无 traceback。对照老版本 `console.err.20261103-152735.log`（17 KB 全是 10054）。
+
+
 ## 五、下一轮候选
 
 1. `left_hand/actions/executor.py` 50%、`throat/bridge/octop_gateway.py` 53% 是现在最低的两块；

@@ -24,7 +24,10 @@ _DANGEROUS = (
     (re.compile(r"\bgit\s+reset\s+--hard\b", re.I), "destructive git reset"),
     (re.compile(r"\bgit\s+clean\s+-[a-z]*f", re.I), "destructive git clean"),
     (re.compile(r"\bgit\s+checkout\s+--\s+", re.I), "destructive git checkout"),
-    (re.compile(r"\bRemove-Item\b.*\b-Recurse\b", re.I), "recursive PowerShell delete"),
+    # `\b-Recurse` 永远匹配不上：`-` 是非单词字符，前面是空格时没有单词边界。
+    # 实测 `Remove-Item -Recurse C:\x`（最自然的写法）**漏拦**，等于这条黑名单失效。
+    (re.compile(r"\bRemove-Item\b.*?-(?:[A-Za-z]*[Rr]e[Cc]urse)", re.I),
+     "recursive PowerShell delete"),
     (re.compile(r"(?:curl|wget|iwr|Invoke-WebRequest).*\|\s*(?:sh|bash|pwsh|powershell)", re.I),
      "remote script execution"),
     (re.compile(r"\b(?:Invoke-Expression|iex)\b", re.I), "dynamic code execution"),
