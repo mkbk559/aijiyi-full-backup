@@ -76,15 +76,69 @@ def _hint_for(exc: BaseException) -> str:
     return _hint_for_text(f"{type(exc).__name__}: {exc}")
 
 
+def split_wav(path: str, chunk_seconds: float) -> list[str]:
+    """把 wav 切成 ≤chunk_seconds 的小段（同目录临时文件，调用方负责删）。
+
+    只处理 PCM wav（语音条/点歌素材都是）。切不开就返回原文件一条，
+    让调用方退回"整段推理"的老路径。
+    """
+    import wave
+
+    if chunk_seconds <= 0:
+        return [path]
+    with wave.open(str(path), "rb") as src:
+        frames = src.getnframes()
+        rate = src.getframerate() or 1
+        params = src.getparams()
+        per_chunk = int(chunk_seconds * rate)
+        if frames <= per_chunk or per_chunk <= 0:
+            return [path]
+        total = (frames + per_chunk - 1) // per_chunk
+        out: list[str] = []
+        base = Path(path)
+        for i in range(total):
+            data = src.readframes(per_chunk)
+            if not data:
+                break
+            part = base.with_name(f"{base.stem}.part{i:03d}{base.suffix}")
+            with wave.open(str(part), "wb") as dst:
+                dst.setparams(params)
+                dst.writeframes(data)
+            out.append(str(part))
+        return out
+
+
+def merge_wav(parts: list[Path], dst: Path) -> None:
+    """按第一段的参数把若干 wav 顺序拼成一个。"""
+    import wave
+
+    with wave.open(str(parts[0]), "rb") as first:
+        params = first.getparams()
+        payload = [first.readframes(first.getnframes())]
+    for part in parts[1:]:
+        with wave.open(str(part), "rb") as fh:
+            if fh.getparams()[:3] != params[:3]:
+                raise ValueError(
+                    f"chunk params mismatch: {fh.getparams()[:3]} != {params[:3]}")
+            payload.append(fh.readframes(fh.getnframes()))
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(dst), "wb") as out:
+        out.setparams(params)
+        for chunk in payload:
+            out.writeframes(chunk)
+
+
 class Engine:
     """把 RVC 的 VC 对象包成"载一次、反复用"。单线程推理（torch CPU 上并发只会更慢）。"""
 
     def __init__(self, model: Path, index: Path | None, device: str = "cpu",
-                 half: bool | None = None):
+                 half: bool | None = None, chunk_seconds: float = 10.0):
         self.model = Path(model)
         self.index = str(index) if index else None
         self.device = device
         self.half = half
+        self.chunk_seconds = float(chunk_seconds)
+        self.last_split_error: str | None = None
         self.is_half = False
         self.loaded_ms = 0.0
         self.lock = threading.Lock()
@@ -117,6 +171,30 @@ class Engine:
         self.is_half = bool(getattr(config, "is_half", False))
         from infer.vc.modules import VC  # noqa: E402
 
+        # faiss 索引每次调用都会被 infer/vc/pipeline.py 重新 read_index（111 MB 的 IVF），
+        # 一个来回就是几百毫秒。进程内缓存一份：索引是只读的，命中直接复用。
+        self.index_load_ms = None
+        try:
+            from infer.vc import pipeline as _pipeline  # noqa: E402
+
+            self._index_cache: dict[str, Any] = {}
+            _orig_read_index = _pipeline.faiss.read_index
+
+            def _cached_read_index(path: Any, *args: Any, **kwargs: Any) -> Any:
+                key = str(path)
+                hit = self._index_cache.get(key)
+                if hit is not None:
+                    return hit
+                started = time.perf_counter()
+                loaded = _orig_read_index(path, *args, **kwargs)
+                self._index_cache[key] = loaded
+                self.index_load_ms = round((time.perf_counter() - started) * 1000.0, 1)
+                return loaded
+
+            _pipeline.faiss.read_index = _cached_read_index
+        except Exception:  # noqa: BLE001 - 缓存不上就算了，不能因此起不来
+            self._index_cache = {}
+
         vc = VC(config)
         vc.get_vc(self.model.name)
         self.vc = vc
@@ -124,11 +202,53 @@ class Engine:
 
     def convert(self, src: str, dst: str, *, pitch: int = 0, index_rate: float = 0.75,
                 f0_method: str = "rmvpe", protect: float = 0.33,
-                rms_mix_rate: float = 1.0, speaker_id: int = 0) -> dict[str, Any]:
+                rms_mix_rate: float = 1.0, speaker_id: int = 0,
+                chunk_seconds: float | None = None) -> dict[str, Any]:
         from infer.cli import write_audio  # noqa: E402
 
+        chunk = self.chunk_seconds if chunk_seconds is None else float(chunk_seconds)
         t0 = time.perf_counter()
         with self.lock:
+            # 长素材一次性推理会把 4 GB 显存打满（实测 30 s → 23.8 s、RTF 0.79），
+            # 切成 ≤chunk 秒的小段分别推理再拼回来，耗时近似线性、显存恒定。
+            try:
+                pieces = split_wav(str(src), chunk)
+            except Exception as exc:  # noqa: BLE001 - 分不开就按原文件整段跑
+                pieces = []
+                self.last_split_error = _short_error(exc)
+            if len(pieces) > 1:
+                outs: list[Path] = []
+                try:
+                    for i, piece in enumerate(pieces):
+                        status, result = self.vc.vc_single(
+                            int(speaker_id), str(piece), int(pitch), str(f0_method),
+                            self.index, float(index_rate), 0.0, float(rms_mix_rate),
+                            float(protect),
+                        )
+                        if not result or result[0] is None or result[1] is None:
+                            text = str(status)
+                            return {"ok": False, "error": _short_error_text(text),
+                                    "hint": _hint_for_text(text), "f0_method": str(f0_method),
+                                    "chunk": i + 1, "chunks": len(pieces),
+                                    "status_code": 400 if "torchfcpe" in text.lower() else 500}
+                        part = Path(piece).with_suffix(".out.wav")
+                        write_audio(part, result[1], result[0], "wav")
+                        outs.append(part)
+                    merge_wav(outs, Path(dst))
+                    sr = int(result[0])
+                    self.calls += 1
+                    return {"ok": True, "ms": round((time.perf_counter() - t0) * 1000.0, 1),
+                            "out": str(dst), "sr": sr, "status": str(status),
+                            "chunks": len(pieces),
+                            "chunk_seconds": chunk}
+                except Exception as exc:  # noqa: BLE001
+                    return {"ok": False, "error": _short_error(exc), "hint": _hint_for(exc),
+                            "f0_method": str(f0_method), "chunks": len(pieces)}
+                finally:
+                    for piece in pieces:
+                        Path(piece).unlink(missing_ok=True)
+                    for part in outs:
+                        part.unlink(missing_ok=True)
             try:
                 status, result = self.vc.vc_single(
                     int(speaker_id), str(src), int(pitch), str(f0_method),
@@ -149,7 +269,8 @@ class Engine:
             write_audio(Path(dst), result[1], result[0], "wav")
             self.calls += 1
         return {"ok": True, "ms": round((time.perf_counter() - t0) * 1000.0, 1),
-                "out": str(dst), "sr": int(result[0]), "status": str(status)}
+                "out": str(dst), "sr": int(result[0]), "status": str(status),
+                "chunks": 1}
 
 
 def make_handler(engine: Engine, stop: threading.Event):
@@ -172,7 +293,9 @@ def make_handler(engine: Engine, stop: threading.Event):
                 self._send(200, {"ok": True, "model": engine.model.name,
                                  "device": engine.device,
                                  "loaded_ms": round(engine.loaded_ms, 1),
-                                 "calls": engine.calls, "is_half": engine.is_half})
+                                 "calls": engine.calls, "is_half": engine.is_half,
+                                 "chunk_seconds": engine.chunk_seconds,
+                                 "index_load_ms": engine.index_load_ms})
                 return
             self._send(404, {"ok": False, "error": "not found"})
 
@@ -204,6 +327,9 @@ def make_handler(engine: Engine, stop: threading.Event):
                     protect=float(body.get("protect") or 0.33),
                     rms_mix_rate=float(body.get("rms_mix_rate") or 1.0),
                     speaker_id=int(body.get("speaker_id") or 0),
+                    # 单次覆盖分块长度（0 = 整段推理，基准脚本用来对比）
+                    chunk_seconds=(float(body["chunk_seconds"])
+                                   if body.get("chunk_seconds") is not None else None),
                 )
                 self._send(int(out.get("status_code") or (200 if out.get("ok") else 500)), out)
             except Exception as exc:  # noqa: BLE001
@@ -222,6 +348,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--log", default="", help="把 stdout/stderr 写进这个文件（守护脚本用）")
     ap.add_argument("--half", default=None, choices=["1", "0"],
                     help="半精度：cuda 下默认 1（4 GB 卡必须），cpu 下无意义")
+    ap.add_argument("--chunk-seconds", type=float,
+                    default=float(os.environ.get("AIJI_RVC_CHUNK_SECONDS") or 10.0),
+                    help="长素材按这个长度切段推理再拼接（0 = 不切）")
     args = ap.parse_args(argv)
 
     if args.log:
@@ -236,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
 
     half = None if args.half is None else (args.half == "1")
     engine = Engine(Path(args.model), Path(args.index) if args.index else None,
-                    args.device, half)
+                    args.device, half, args.chunk_seconds)
     print(json.dumps({"ok": True, "listening": f"http://{args.host}:{args.port}",
                       "model": engine.model.name,
                       "loaded_ms": round(engine.loaded_ms, 1)}, ensure_ascii=False), flush=True)
