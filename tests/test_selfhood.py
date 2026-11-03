@@ -222,9 +222,21 @@ class TestReflectParse(unittest.TestCase):
             with self.subTest(item=item):
                 self.assertIsNone(_clean_trait(item))
 
+    def test_clean_trait_rejects_adult_tone_on_write(self):
+        """写侧护栏：清空的 trait 表不能被反思从群聊语料重新灌满（2026-11-03）。"""
+        cases = [
+            {"name": "语气", "value": "对话中喜欢调侃对方或自嘲，营造轻松氛围", "evidence": 5},
+            {"name": "接梗", "value": "对方抛梗就顺着接并自嘲反击", "evidence": 3},
+            {"name": "呼应", "value": "被问时先用吐槽开场", "evidence": 2},
+            {"name": "防守", "value": "面对质疑常用反问句回怼", "evidence": 2},
+        ]
+        for item in cases:
+            with self.subTest(item=item):
+                self.assertIsNone(_clean_trait(item))
+
     def test_clean_trait_accepts_tendency(self):
-        got = _clean_trait({"name": "爱吐槽", "value": "常用反问吐槽", "evidence": 3})
-        self.assertEqual(got, ("爱吐槽", "常用反问吐槽", 3))
+        got = _clean_trait({"name": "爱安静", "value": "累的时候话变少", "evidence": 3})
+        self.assertEqual(got, ("爱安静", "累的时候话变少", 3))
 
     def test_clean_trait_caps_evidence(self):
         self.assertEqual(_clean_trait({"name": "a", "value": "b", "evidence": 999})[2], 20)
@@ -259,15 +271,15 @@ class TestReflective(unittest.TestCase):
 
     def test_reflect_creates_traits(self):
         self._turns(40)
-        payload = json.dumps({"traits": [{"name": "爱吐槽", "value": "常用反问吐槽", "evidence": 3}],
-                              "summary": "这段相处里我爱上了吐槽"}, ensure_ascii=False)
+        payload = json.dumps({"traits": [{"name": "爱安静", "value": "累的时候话变少", "evidence": 3}],
+                              "summary": "这段相处里我变得更安静了"}, ensure_ascii=False)
         pool = FakePool(payload)
         r = Reflective(self.db, pool, every_turns=30)
         out = r.tick(self.ident, "s1")
         self.assertIsNotNone(out)
         self.assertEqual(out["deltas"][0]["action"], "new")
         snap = store.trait_snapshot(self.db.conn(), self.ident)
-        self.assertEqual(snap[0]["name"], "爱吐槽")
+        self.assertEqual(snap[0]["name"], "爱安静")
         # 提示词里必须带底线 + "不是写人设"的约束
         joined = json.dumps(pool.calls[0], ensure_ascii=False)
         self.assertIn("不是写人设", joined)
@@ -275,7 +287,7 @@ class TestReflective(unittest.TestCase):
 
     def test_reflect_idempotent_cursor(self):
         self._turns(40)
-        payload = json.dumps({"traits": [{"name": "爱吐槽", "value": "反问", "evidence": 1}]},
+        payload = json.dumps({"traits": [{"name": "爱安静", "value": "累的时候话变少", "evidence": 1}]},
                              ensure_ascii=False)
         pool = FakePool(payload)
         r = Reflective(self.db, pool, every_turns=30, min_interval_s=0)
@@ -291,7 +303,7 @@ class TestReflective(unittest.TestCase):
 
     def test_reflect_force_reruns(self):
         self._turns(40)
-        payload = json.dumps({"traits": [{"name": "爱吐槽", "value": "反问", "evidence": 1}]},
+        payload = json.dumps({"traits": [{"name": "爱安静", "value": "累的时候话变少", "evidence": 1}]},
                              ensure_ascii=False)
         r = Reflective(self.db, FakePool(payload), every_turns=30, min_interval_s=0)
         r.tick(self.ident, "s1")

@@ -49,6 +49,14 @@ _BANNED_TRAIT_MARKERS = (
     "自称", "称呼", "主人", "鱼", "泡泡", "咕噜", "鱼缸", "鳍", "鳃",
     "emoji", "表情结尾",
 )
+# 写侧护栏（2026-11-03 补）：库里 1521 条 trait 刚被全量清空，源头就是这些"成年语感"
+# 和旧人格意象。注入侧有 `selfhood.kid_safe_traits()` 兜底，但只挡注入不挡写入的话，
+# 反思会从群聊语料（孙吧风味）把同样的东西重新学回来，而且满 10 岁会整批解锁。
+_ADULT_TONE_MARKERS = (
+    "调侃", "自嘲", "损对方", "损人", "阴阳", "抬杠", "毒舌", "抽象", "玩梗",
+    "嘴臭", "刻薄", "挖苦", "冷嘲", "脏话", "骂人", "羞辱", "装傻", "油滑",
+    "吐槽", "回怼", "怼", "反讽", "冷笑", "杠精",
+)
 
 
 def _parse(raw: str) -> dict[str, Any]:
@@ -77,6 +85,8 @@ def _clean_trait(item: Any) -> tuple[str, str, int] | None:
         return None
     combined = f"{name} {value}".lower()
     if any(marker in combined for marker in _BANNED_TRAIT_MARKERS):
+        return None
+    if any(marker in combined for marker in _ADULT_TONE_MARKERS):
         return None
     try:
         ev = max(1, int(item.get("evidence") or 1))

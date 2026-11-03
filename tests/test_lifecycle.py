@@ -99,16 +99,16 @@ class TestReflectionWorker(unittest.TestCase):
         try:
             with db.tx() as conn:
                 for role, text in (
-                    ("user", "你说话怎么这么爱吐槽"),
-                    ("assistant", "不然呢，难道要我给你唱摇篮曲？"),
-                    ("user", "你这反问句又来了"),
-                    ("assistant", "被你发现了，看来我确实有点爱反问。"),
+                    ("user", "你说话怎么这么慢"),
+                    ("assistant", "我在想嘛，别催我"),
+                    ("user", "你每次都这么慢"),
+                    ("assistant", "嗯，我慢一点但会想清楚。"),
                 ):
                     store.add_turn(conn, ident, "s1", role, text)
 
             payload = json.dumps({
-                "traits": [{"name": "爱反问", "value": "常用反问吐槽", "evidence": 2}],
-                "summary": "我习惯用反问接话",
+                "traits": [{"name": "说话慢", "value": "回答前会想一会儿", "evidence": 2}],
+                "summary": "我说话慢一点，会先想",
             }, ensure_ascii=False)
             pool = FakePool(payload)
             reflective = Reflective(db, pool, every_turns=2, min_interval_s=0)
@@ -126,7 +126,7 @@ class TestReflectionWorker(unittest.TestCase):
                     time.sleep(0.02)
                 traits = store.trait_snapshot(db.conn(), ident)
                 self.assertTrue(traits, traits)
-                self.assertEqual(traits[0]["name"], "爱反问")
+                self.assertEqual(traits[0]["name"], "说话慢")
             finally:
                 worker.stop()
         finally:
