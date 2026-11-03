@@ -69,6 +69,20 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **全项目体检**，见 `docs/agent/evidence/project-audit-2026-11-03.md`。
+  实测口径：`coverage`（492 用例全绿）**总覆盖 81%**（9 243 语句 / 漏 1 774）；
+  **`senses/cli.py` 285 语句 0%、`endocrine/desktop_sense.py` 80 语句 0%**；
+  弱项 `persona` 33%、`actions/gui` 33%、`real_engines` 41%、`executor` 50%、`media_audio` 52%、
+  `octop_gateway` 53%。HTTP 面 **58 条精确路由（30 GET + 28 POST）**，原 `http_smoke.py` 只覆盖 8 条
+  → 新增 `tools/archcheck/route_smoke.py` 全量打一遍：**0 个 500**，GET 全 200+JSON，
+  唯一 5xx 是 `/v1/gateway/onebot` 503（桥未配置，预期）。
+  发现并修掉 2 个真 bug：①`POST /v1/voices/use` 空 body 会静默切换声线（控制台标为必填参数）
+  → 改 400 `profile_required`；②`being_checkup.live_probe` 用 `tempfile.mkdtemp()`，
+  本机 0o700 删不掉 → `%TEMP%` 残留 **33 个**目录（8.1 MB，最早 11-01），改到 `data/temp` 并清理。
+  还测出两条"同步重活"接口：`/api/being/checkup/live` **33.8 s**、`/api/stickers/update` **27.3 s**，
+  都把 HTTP 线程占住（待改 202+后台）。数据面：24 966 turns / 1 350 summaries /
+  7 662 media（**2 001 未识别 = 26%**）/ 723 accounts / 队列 0 积压 / 6 条模型路由可用。
+
 - 2026-11-03 **语音链路真机重测（第二轮）**，见 `docs/agent/evidence/voice-real-retest-2026-11-03.md`。
   全部在 `voice-engine/rvc/.venv` + RTX 3050 4 GB 上重跑：
   fp16 5 s 444 ms / 13 s 682 ms / **30 s 23 799 ms（断崖，显存 3 954/4 096）**；

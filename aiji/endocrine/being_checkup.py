@@ -19,6 +19,7 @@ from aiji.brain.humanize import HumanPacer
 from aiji.endocrine.life import EndocrineEngine
 from aiji.hippocampus.memory import Memory
 from aiji.hippocampus.reflect import _clean_trait
+from aiji.skeleton.paths import DATA
 
 
 def _check(
@@ -248,7 +249,12 @@ class BeingCheckup:
     ) -> dict[str, Any]:
         """Run real model probes against a throwaway DB clone; never write source data."""
         target = store.Ident.coerce(ident)
-        temp_root = Path(tempfile.mkdtemp(prefix="aiji-being-checkup-"))
+        # 别用默认的 tempfile.mkdtemp()：它建的是 0o700 目录，本机沙箱/ACL 环境下
+        # 事后删不掉，实测在 %TEMP% 里留下了 33 个 aiji-being-checkup-* 目录（8.1 MB）。
+        # 统一落在仓库内 data/temp（0o777，可删，已 gitignore）。
+        temp_base = DATA / "temp"
+        temp_base.mkdir(parents=True, exist_ok=True)
+        temp_root = Path(tempfile.mkdtemp(prefix="being-checkup-", dir=str(temp_base)))
         probe_path = temp_root / "probe.db"
         source = sqlite3.connect(Path(self.memory.settings.db_path))
         dest = sqlite3.connect(probe_path)

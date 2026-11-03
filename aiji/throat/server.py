@@ -681,7 +681,15 @@ class _Handler(BaseHTTPRequestHandler):
                     code, payload = self._audio_error(exc)
                     return self._send(code, payload)
             if path == "/v1/voices/use":
-                profile_id = str(body.get("profile") or body.get("id") or "")
+                profile_id = str(body.get("profile") or body.get("id") or "").strip()
+                if not profile_id:
+                    # 空 body 以前会静默切到默认声线（控制台 operations.html 把 profile
+                    # 定义为必填）。改状态的动作不该在没人说要切谁的时候发生。
+                    return self._send(400, {
+                        "code": "profile_required",
+                        "message": "voice profile id is required "
+                                   "(GET /v1/voices lists them)",
+                    })
                 try:
                     self.voice.set_active(profile_id)
                     return self._send(200, self.voice.snapshot())
