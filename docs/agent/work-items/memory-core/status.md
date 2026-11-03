@@ -852,3 +852,32 @@ WS 服务端把"连上就断"记成握手失败。改法：先读 netstat（无�
 **结论**：`ready 3/5` 完全由 QQ 客户端损坏引起，**不是** AIJiYi/AstrBot 的问题。
 **人工恢复**：重装一次 QQ（官方安装包，账号数据在 `Documents\Tencent Files`，不受影响）→
 双击 `启动AIJiYi.bat`（自动注入 NapCat 并拉起整套）→ 首次登录扫码一次。
+
+## 2026-11-03 12:30–14:20 · 成长引擎 v2 + 审计 10 项全清
+
+**用户定稿**：「成长绝对不能靠真实时间，事件全部按照真实时间，主动性也要按真实时间，
+成长就按学习阶段来，小学/初中/高中/大学/工作，学习到哪成长到哪」+「全部修改，顺序你决定」。
+
+**成长 v2**（设计 `docs/agent/design/growth-v2-2026-11-03.md`，v1 已标作废）：
+阶段 = f(学分)；学分只结算"上次之后新增的学习证据"（事实 1 / 反思 2 / 性格 5 / 新会话 3 /
+每 10 轮 1 / 每篇学到的帖子 2），门槛 1200 / 4000 / 9000 / 16000；年龄退化为阶段内插值。
+账本 `data/persona/growth.json` schema 2，**跟随库**（`<db 目录>/persona/growth.json`）+ `db_path` 守卫，
+`bind_path()` 保证 head 与 persona 文案读同一本账。真实状态：xp 0.0 / 小学 / 离初中 1200。
+真机：小学档 9/9 clean 平均 38.8 字；初中档 9/9 clean 平均 54.7 字。
+
+**审计 10 项**（逐条证据 `docs/agent/evidence/audit-fixes-2026-11-03.md`）：
+①成长靠时间→学分账本 ②换人格失忆→新 persona 继承状态与最近事件 ③慢接口→异步/过期缓存
+④media 2008 行死数据→`aiji media-gc` ⑤歌曲队列崩溃→`_persist` 自愈 ⑥CLI 0% 覆盖→19 条用例
+⑦体积→回收 ≈484 MB（备份 300.8→115 MB、%TEMP% 331 目录→0、10 个一次性脚本归档）
+⑧14 份老文档加"鱼设已废弃"横幅 ⑨临时目录泄漏→`tests/_tempdir.py` ⑩成长边界→v2 取消时间上限。
+
+**验证**：两条独立路径同数——`run_suite.py` → `ran=568 ok=568 errors=0 failures=0`
+（归档 2026-11-03/140654-suite-final-primary-175e22）；`unittest discover`（不走覆盖率壳）
+→ `cases 568 ok 568 bad 0` + `Ran 568 tests / OK`（归档 …/141202-suite-final-secondary-9d42a2）。
+两次全量跑完生产账本 xp 前后都是 0.0（账本隔离验收）。`ruff check` 全过，
+`console_check` 9 bands / 68 nodes / 57 routes / html 24 636 B，`route_smoke` 中
+`stickers/update` 从 27 s → 46 ms。
+
+**顺带修掉的两个"假绿"**：`test_completed_job_survives_service_restart` 以前靠 `_persist`
+崩溃打死工作线程才通过；`test_link_title` 依赖真实 DNS（本机网络抖一下就红），
+现在 SSRF 守卫支持注入 resolver（excluded #101–#103）。
