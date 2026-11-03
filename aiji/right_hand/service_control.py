@@ -232,9 +232,12 @@ def snapshot() -> dict:
         try:
             listening = _listening(port)
             connections = _port_state(port)[1]
+            # onebot 看的是"有没有 QQ 真连上来"（ESTABLISHED 计数），不是端口在听。
+            # 这一句以前在 try 外面：netstat 探不通（OSError）时会冒出去，
+            # 让整个 /api/operations/services 面板 500。
+            linked = bool(_established(port)) if key == "onebot" else listening
         except OSError:
-            listening, connections = False, 0
-        linked = bool(_established(port)) if key == "onebot" else listening
+            listening, connections, linked = False, 0, False
         running = linked if key == "onebot" else listening
         pid = _port_state(port)[2] if (listening or connections) else None
         if pid:

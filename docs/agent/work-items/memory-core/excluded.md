@@ -1106,3 +1106,35 @@ A/B 实测（`.tmp/ab_finish_body.py`，证据归档 224221-ab-finish-body-rst�
 （不是扁平的 `{"error": "code"}`）。
 **规则**：写"响应形状"断言前，先跑一个探测脚本把真实 JSON 打出来
 （`.tmp/probe_routes.py` 就是这么来的），别按记忆写。
+
+## 142. `snapshot()` 里有一句在 try 外面，够让服务面板 500（2026-11-03 修复）
+
+`service_control.snapshot()` 的 onebot 分支把 `_established(port)` 写在
+`try/except OSError` **外面**，而它内部照样走 `_port_state → _netstat_rows`。
+`_run` 自己吞掉 `OSError`，所以平时看不出来；但只要探针抛一次，整个
+`/api/operations/services` 就是 500，控制台服务面板白屏。
+**检查点**：给一段逻辑加 try 时，看它的**兄弟语句**——同一份探针结果被算了两次
+（`connections = _port_state(port)[1]` 与 `_established(port)`），第二次往往漏在 try 外。
+
+## 143. 写 URL 守卫用例前先确认 error code 的**名字**（2026-11-03）
+
+`net_guard` 的实际码是 `private_url`、`port_not_allowed`，不是凭印象写的
+`private_address` / `dns_private`。而且 `http://localhost:8787` 会先撞**端口**规则，
+不是私网规则 —— 想测私网拦截得用无端口的 `http://localhost/x`。
+另外链接识别的 DNS 解析必须用注入的 `resolver`：
+真实 DNS 抖一下，同一用例就从 `ok` 变 `error`（本仓 2026-11-03 就踩过）。
+
+## 144. 测试创建的文件落在哪，取决于 Settings 的默认根（2026-11-03）
+
+`Settings.action_root` 默认是 cwd。给控制台工作区写用例时没管它，
+`/api/fs/write` 就在**仓库根**真写出了 `notes/a.txt`，还误提交了一次。
+**规则**：任何会落盘的端到端用例，先把 `action_root`/`db_path` 之类根路径指到
+`make_tmp(self, …)`，并且**预先建目录**（根不存在时 `POST /api/shell` 会拿到
+`code=-1`、`GET /api/fs?path=.` 会 404、写 `.` 会写出一个名为 `workspace` 的**文件**）。
+
+## 145. 线程池里的"瞬时"任务也会超时（2026-11-03）
+
+识别层用共享的 4 线程 `ThreadPoolExecutor`，用例里把 `timeout_s` 设成 0.2 秒，
+单跑通过、整包 suite 满负载时 `empty` 抖成 `timeout`（v48 唯一那条 failure）。
+**规则**：线程池里的调用要按"最坏排队时间"给预算（这层给 2 秒），
+要专门测超时就自己造一个短预算实例，别让正常用例背这个风险。
