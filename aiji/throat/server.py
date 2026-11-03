@@ -551,11 +551,15 @@ class _Handler(BaseHTTPRequestHandler):
         elif path == "/api/mcp":
             registry = getattr(self.memory, "mcp_registry", None)
             research = getattr(self.memory, "mcp_research_loop", None)
-            if registry is None or research is None:
+            if registry is None:
                 return self._send(503, {"error": "mcp_unavailable"})
+            # 研究循环是可选的（AIJI_MCP_RESEARCH_LOOP=0 时本来就不跑）。
+            # 以前这里把"没有研究循环"也当成不可用，于是关掉研究循环后
+            # 控制台的「MCP 研究」面板整块 503 —— 可有可无的东西不该拖垮整页。
             self._send(200, {
                 "registry": registry.snapshot(),
-                "research": research.snapshot(),
+                "research": research.snapshot() if research is not None else None,
+                "research_enabled": research is not None,
             })
         elif path == "/api/recent-turns":
             self._send(200, admin.recent_turns_snapshot(
@@ -1546,7 +1550,13 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
         memory.life_loop = LifeLoop(
             memory.being, poll_seconds=poll_seconds).start()
         srv.life_loop = memory.life_loop
-    if memory.settings.sticker_update:
+    # `settings.sticker_update` 是配置里的意愿；`AIJI_STICKER_UPDATE=0` 是运维/测试的
+    # 临时开关（跟 AIJI_LIFE_LOOP、AIJI_MCP_RESEARCH_LOOP 同一层语义）。
+    # 只有配置开关时，测试没法在不起 jsdelivr 请求的前提下 boot 一个服务。
+    sticker_enabled = bool(memory.settings.sticker_update) and os.environ.get(
+        "AIJI_STICKER_UPDATE", "1").strip().lower() not in (
+            "0", "false", "off", "no")
+    if sticker_enabled:
         sticker_loop = StickerUpdateLoop(
             stickers,
             initial_delay_s=memory.settings.sticker_update_initial_s,
@@ -1580,16 +1590,26 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
         )
         memory.mcp_registry = mcp_registry
         memory.mcp_researcher = mcp_researcher
-        memory.mcp_research_loop = mcp_loop
         srv.mcp_registry = mcp_registry
-        srv.mcp_research_loop = mcp_loop
         if os.environ.get("AIJI_MCP_RESEARCH_LOOP", "1").strip().lower() not in (
             "0", "false", "off", "no",
         ):
             mcp_loop.start()
-    except (MCPConfigError, OSError, ValueError):
+            memory.mcp_research_loop = mcp_loop
+            srv.mcp_research_loop = mcp_loop
+        else:
+            # 关掉时不把"没跑起来的循环对象"挂到 server 上：
+            # 以前 srv.mcp_research_loop 总是有值，`/api/mcp/research` 与自检看起来
+            # 像是"研究循环在跑"，实际一次都没跑过。
+            memory.mcp_research_loop = None
+            srv.mcp_research_loop = None
+    except (MCPConfigError, OSError, ValueError) as exc:
+        # 别静默：注册表/研究循环没起来时，`/api/mcp` 与 `/api/mcp/research`
+        # 会各自变成 503，没有这一行就只剩"为什么是 503"。
+        logger.warning("MCP 注册表/研究循环没有起来：%s", exc)
         memory.mcp_registry = None
         memory.mcp_research_loop = None
+        srv.mcp_research_loop = None
     return srv
 
 

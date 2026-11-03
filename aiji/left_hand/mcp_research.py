@@ -546,9 +546,14 @@ class MCPResearchLoop:
         return max(0.0, last + self.interval_s - current)
 
     def _run(self) -> None:
+        # 首轮必须等 initial_delay_s。
+        # 以前这里直接进 while，而 `due_delay()` 在"从没跑过"时返回 **0.0**，
+        # 于是服务一启动就立刻搜 GitHub + 抓 20 个 README：`initial_delay_s`
+        # 只出现在 snapshot 里、从没被用过（配置形同虚设，启动瞬间一串外网请求）。
+        first_wait = max(self.initial_delay_s, self.due_delay())
+        if self._stop.wait(first_wait):
+            return
         while not self._stop.is_set():
-            if self._stop.wait(self.due_delay()):
-                return
             try:
                 self.trigger_and_wait(timeout_s=300.0)
             except Exception as exc:  # noqa: BLE001
@@ -561,6 +566,10 @@ class MCPResearchLoop:
                                self.stats["consecutive_errors"], delay / 60.0, exc)
                 if self._stop.wait(delay):
                     return
+                continue
+            # 跑完按"上次落盘时间 + interval"排下一次；拿不到时间就用 interval
+            if self._stop.wait(self.due_delay() or self.interval_s):
+                return
 
 
 __all__ = [

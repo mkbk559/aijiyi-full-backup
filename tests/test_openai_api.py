@@ -740,38 +740,71 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         self.assertEqual(payload["added"], 3)
 
     def test_server_runs_bounded_life_loop(self):
-        loop = getattr(self.server, "life_loop", None)
-        self.assertIsNotNone(loop)
-        snapshot = loop.snapshot()
-        self.assertTrue(snapshot["running"])
-        self.assertGreaterEqual(snapshot["poll_seconds"], 5.0)
+        # 默认不启动（见 tests/__init__.py：套件必须自带隔离、不上外网）
+        self.assertIsNone(getattr(self.server, "life_loop", None))
+        with mock.patch.dict(os.environ, {
+            "AIJI_LIFE_LOOP": "1",
+            "AIJI_LIFE_LOOP_POLL": "1",       # 想试"小于下限"是否被兜底
+        }):
+            server = make_server(self.memory, "127.0.0.1", 0)
+        try:
+            loop = getattr(server, "life_loop", None)
+            self.assertIsNotNone(loop, "显式开启时必须启动")
+            snapshot = loop.snapshot()
+            self.assertTrue(snapshot["running"])
+            self.assertGreaterEqual(snapshot["poll_seconds"], 5.0)
+        finally:
+            server.server_close()
 
     def test_mcp_registry_and_manual_research_endpoint(self):
         registry = getattr(self.server, "mcp_registry", None)
-        research_loop = getattr(self.server, "mcp_research_loop", None)
-        self.assertIsNotNone(registry)
-        self.assertIsNotNone(research_loop)
+        self.assertIsNotNone(registry, "注册表不依赖任何开关，默认就该在")
+        self.assertIsNone(getattr(self.server, "mcp_research_loop", None),
+                          "研究循环默认关闭（套件不上外网）")
 
         with urllib.request.urlopen(self.base + "/api/mcp", timeout=10) as response:
             payload = json.loads(response.read())
         names = {item["name"] for item in payload["registry"]["servers"]}
         self.assertIn("fetch", names)
         self.assertIn("duckduckgo", names)
-        self.assertIn("research", payload)
+        # 研究循环关着，面板照样能渲染（以前这里是 503 mcp_unavailable）
+        self.assertFalse(payload["research_enabled"])
+        self.assertIsNone(payload["research"])
 
-        with mock.patch.object(
-            research_loop, "trigger", return_value=True,
-        ) as trigger:
-            request = urllib.request.Request(
-                self.base + "/api/mcp/research",
-                data=b"{}",
-                method="POST",
-                headers={"Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(request, timeout=10) as response:
-                queued = json.loads(response.read())
-        self.assertTrue(queued["queued"])
-        trigger.assert_called_once_with()
+        # 手动触发那条路要"研究循环存在"才有意义：显式开启 + 首轮延迟拉到天边，
+        # 保证只验证接口，不让它在测试里真去搜 GitHub。
+        with mock.patch.dict(os.environ, {
+            "AIJI_MCP_RESEARCH_LOOP": "1",
+            "AIJI_MCP_RESEARCH_INITIAL": "86400",
+        }):
+            server = make_server(self.memory, "127.0.0.1", 0)
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            research_loop = getattr(server, "mcp_research_loop", None)
+            self.assertIsNotNone(research_loop)
+            with mock.patch.object(
+                research_loop, "trigger", return_value=True,
+            ) as trigger:
+                request = urllib.request.Request(
+                    base + "/api/mcp/research",
+                    data=b"{}",
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    queued = json.loads(response.read())
+            self.assertTrue(queued["queued"])
+            trigger.assert_called_once_with()
+
+            with urllib.request.urlopen(base + "/api/mcp", timeout=10) as response:
+                enabled = json.loads(response.read())
+            self.assertTrue(enabled["research_enabled"])
+            self.assertTrue(enabled["research"]["running"],
+                            "开了开关就得真的在跑")
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_stream_true_uses_openai_sse_chunks(self):
         body = {

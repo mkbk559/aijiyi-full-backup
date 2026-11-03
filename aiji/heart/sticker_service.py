@@ -71,10 +71,19 @@ def _mood(value: Any) -> str:
     return re.sub(r"[^a-z0-9_-]+", "-", raw).strip("-")[:40] or "misc"
 
 
-def _safe_filename(value: str) -> str:
+def _safe_filename(value: str, *, require_suffix: bool = True) -> str:
+    """洗成安全的文件名。
+
+    `require_suffix=False` 是给**远程 feed** 用的：feed 里的 `file` 常常没有扩展名
+    （或者扩展名是错的），调用方拿到字节后会用魔术字节补上。
+    以前这里无条件要求后缀，于是"按 `_image_suffix` 补后缀"那段永远走不到
+    （死代码），而且一条 `{"file": "图"}` 就能让整轮更新抛错。
+    """
     name = Path(str(value or "")).name.strip()
     name = re.sub(r"[^\w.-]+", "-", name, flags=re.UNICODE).strip(".-")
-    if not name or Path(name).suffix.lower() not in _IMAGE_SUFFIXES:
+    if not name:
+        raise StickerError("invalid_sticker_filename", f"invalid sticker file: {value}")
+    if require_suffix and Path(name).suffix.lower() not in _IMAGE_SUFFIXES:
         raise StickerError("invalid_sticker_filename", f"invalid sticker file: {value}")
     return name[:160]
 
@@ -183,7 +192,8 @@ class StickerService:
             for raw in raw_items[:self.max_items]:
                 if not isinstance(raw, dict):
                     continue
-                filename = _safe_filename(str(raw.get("file") or ""))
+                filename = _safe_filename(
+                    str(raw.get("file") or ""), require_suffix=False)
                 image_url = str(raw.get("url") or "").strip()
                 if not image_url:
                     image_url = urllib.parse.urljoin(
@@ -204,7 +214,8 @@ class StickerService:
                     continue
                 detected = _image_suffix(data)
                 if Path(filename).suffix.lower() not in _IMAGE_SUFFIXES:
-                    filename = f"{Path(filename).stem}{detected}"
+                    # 后缀缺失或是非图片后缀：按魔术字节补正，别丢这条图
+                    filename = _safe_filename(f"{Path(filename).stem}{detected}")
                 digest = hashlib.sha256(data).hexdigest()
                 target = self.directory / filename
                 changed = not target.is_file() or hashlib.sha256(

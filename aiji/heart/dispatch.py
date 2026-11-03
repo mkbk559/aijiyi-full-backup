@@ -9,6 +9,7 @@ Heart.dispatch 是单次扫描；本模块把它变成常驻线程（触发三�
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Any, Callable
@@ -16,6 +17,9 @@ from typing import Any, Callable
 from aiji.right_hand import params
 from aiji.heart.heart import Heart
 from aiji.hippocampus.store import Ident
+
+logger = logging.getLogger(__name__)
+_rate_warned = False
 
 
 class Dispatcher:
@@ -58,7 +62,13 @@ class Dispatcher:
             return 0.0
         try:
             info = self.rate_info(platform)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 适配器的 rate_info 是可选实现
+            # 不抛：发送线程不能因为一个可选的限流接口就死掉。
+            # 但也不能一声不响——失效等于**完全不做退避**，会被平台打到更狠。
+            global _rate_warned
+            if not _rate_warned:
+                _rate_warned = True
+                logger.warning("rate_info() 失效，退避降级为固定指数退避：%s", exc)
             return 0.0
         if not info or int(info.get("remaining", 1)) > 0:
             return 0.0

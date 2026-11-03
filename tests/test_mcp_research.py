@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import time
 import tempfile
 import unittest
 from pathlib import Path
@@ -131,6 +132,62 @@ class TestMCPResearch(unittest.TestCase):
                 json.dumps({"created_at": 9000}), encoding="utf-8")
             self.assertEqual(loop.due_delay(now=10000), 2600)
             self.assertEqual(loop.due_delay(now=13000), 0)
+
+    def test_loop_honours_initial_delay_before_first_run(self):
+        """首轮延迟是真的要等。
+
+        2026-11-04 之前 `_run()` 直接进 while，`due_delay()` 在"从没跑过"时返回 0，
+        于是 `initial_delay_s` 只躺在 snapshot 里、服务一启动就立刻搜 GitHub +
+        抓 20 个 README（整包测试里出现过 549 行外网请求）。
+        """
+        calls: list[float] = []
+
+        class CountingResearcher:
+            def snapshot(self):
+                return {"latest": {}}
+
+            def run_once(self):
+                calls.append(1.0)
+                return {"created_at": 0, "discovered": 0,
+                        "eligible": 0, "summary": "noop"}
+
+        loop = MCPResearchLoop(
+            CountingResearcher(), initial_delay_s=30, interval_s=3600)
+        loop.start()
+        try:
+            loop._stop.wait(0.5)          # 睡够 0.5s（wait 只是在等，不会自己置位）
+            self.assertEqual(calls, [], "首轮延迟内不许真去研究")
+            self.assertEqual(loop.snapshot()["runs"], 0)
+            self.assertEqual(loop.snapshot()["initial_delay_s"], 30.0)
+        finally:
+            loop.stop()
+        self.assertFalse(loop.snapshot()["running"])
+
+    def test_loop_runs_once_the_delay_elapses(self):
+        calls: list[float] = []
+
+        class CountingResearcher:
+            def snapshot(self):
+                return {"latest": {}}
+
+            def run_once(self):
+                calls.append(1.0)
+                return {"created_at": time.time(), "discovered": 0,
+                        "eligible": 0, "summary": "noop"}
+
+        loop = MCPResearchLoop(
+            CountingResearcher(), initial_delay_s=5, interval_s=3600)
+        # 构造器把首轮延迟钳到 ≥5s；用例里直接改小，别让套件白等 5 秒
+        loop.initial_delay_s = 0.2
+        loop.start()
+        try:
+            for _ in range(120):
+                if calls:
+                    break
+                loop._stop.wait(0.1)
+        finally:
+            loop.stop()
+        self.assertEqual(len(calls), 1, "延迟过了就该跑一次")
 
     def test_readme_risk_classifier_blocks_write_and_shell_tools(self):
         safe = classify_readme(

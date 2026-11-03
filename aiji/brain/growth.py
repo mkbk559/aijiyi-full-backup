@@ -33,7 +33,9 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -59,6 +61,10 @@ WEIGHTS: dict[str, float] = {
     "learn": 2.0,
 }
 COUNTABLE = ("fact", "reflection", "trait", "session", "turn", "learn")
+
+
+# 同进程内多人格副本并发写账本时把写入串起来（跨进程靠唯一临时名 + replace 重试）
+_SAVE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -348,10 +354,34 @@ class Growth:
         return data
 
     def save(self, data: dict[str, Any]) -> None:
+        """原子写账本。
+
+        以前是固定临时名 `growth.tmp` + 直接 replace，**没有锁也没有重试**：
+        同一个进程里三个人格副本（`/api/being/checkup/live` 的探针就是 3 线程各克隆一份库）
+        会同时写，Windows 上直接撞
+        `PermissionError: [WinError 32] 另一个程序正在使用此文件`，
+        探针于是把异常当成"回复"返回，体检报告就显示模型答非所问。
+        现在：临时名带 pid + uuid（跨进程不撞），写与替换在进程内加锁，
+        replace 遇到占用重试几次（跨进程的那一小段窗口）。
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", "utf-8")
-        tmp.replace(self.path)
+        payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+        tmp = self.path.with_name(
+            f".{self.path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+        with _SAVE_LOCK:
+            tmp.write_text(payload, "utf-8")
+            for attempt in range(6):
+                try:
+                    os.replace(tmp, self.path)
+                    return
+                except OSError:
+                    if attempt == 5:
+                        try:
+                            tmp.unlink()
+                        except OSError:
+                            pass
+                        raise
+                    time.sleep(0.02 * (attempt + 1))
 
     def _now(self) -> float:
         return time.time() if self.now is None else float(self.now)

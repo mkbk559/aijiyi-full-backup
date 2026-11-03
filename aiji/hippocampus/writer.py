@@ -99,6 +99,8 @@ class WriterStats:
     summaries: int = 0
     summaries_reused: int = 0  # 同哈希复用（没花模型调用）的摘要数
     summary_model: int = 0
+    # 模型摘要失败/输出不合法而退回本地启发式压缩的次数（<=> 摘要质量下降，要能看见）
+    summary_fallback: int = 0
     evicted: int = 0
     last_error: str = ""
     last_route: str = ""
@@ -529,7 +531,9 @@ class Writer:
                     self.stats.summary_model += 1
                     return text[:600], "model"
             except (PoolExhausted, ValueError, TypeError, KeyError, AttributeError):
-                pass
+                # 退回启发式压缩：摘要质量会降一档，所以计数（snapshot 里能看见），
+                # 别无声无息地降级
+                self.stats.summary_fallback += 1
         return heuristic_summary(clean), "heuristic"
 
     def _index_fact(self, fact_id: int) -> None:
@@ -562,6 +566,7 @@ class Writer:
             "unrecognized": self.stats.unrecognized,
             "summaries": self.stats.summaries,
             "summary_model": self.stats.summary_model,
+            "summary_fallback": self.stats.summary_fallback,
             "evicted": self.stats.evicted,
             "queue_depth": self._q.qsize(),
             "pending": self._pending,

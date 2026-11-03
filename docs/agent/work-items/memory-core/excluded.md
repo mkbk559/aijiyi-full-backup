@@ -1166,3 +1166,39 @@ A/B 实测（`.tmp/ab_finish_body.py`，证据归档 224221-ab-finish-body-rst�
 处理：**不弱化断言**，改为让失败自带信息——先断言 `memory.preferred_name(ident) == "玛卡巴卡"`
 （区分"数据没写进去"与"回复不对"），并把整个 `report` 塞进断言消息。
 下次再红时一眼能看出是哪一环降级。
+
+## 152. 测试套件偷偷上外网：`make_server()` 的三个常驻循环默认全开（2026-11-04 第 22 轮）
+
+`suite_v51/v52/v53` 日志里分别有 **527 / 441 / 549** 行
+`HTTP Request: GET https://raw.githubusercontent.com/...` —— 套件在跑真实的 GitHub 搜索 + 抓 README。
+根因：`make_server()` 里 `LifeLoop` / `MCPResearchLoop` / `StickerUpdateLoop` 全是 opt-out 默认开，
+测试 boot 服务就把它们拉起来，整包跑 5–7 分钟足够越过首轮延迟。
+修法：`tests/__init__.py::HERMETIC_DEFAULTS` 三个开关设 0；要测循环的用例显式 patch 回来。
+守卫：`tests/test_suite_hermetic.py`。v54 起外网请求 **0**。
+
+## 153. `MCPResearchLoop.initial_delay_s` 是死的：服务一启动就搜 GitHub
+
+`_run()` 里 `wait(self.due_delay())`，而 `due_delay()` 在"从没跑过"（`latest.created_at == 0`）时返回
+**0.0**，于是启动瞬间就 `trigger_and_wait()`：搜 GitHub + 抓 20 个 README。
+`initial_delay_s` 只出现在 `snapshot()` 里，从没参与调度——所以"60 秒后才研究"这个说法是假的。
+修法：首轮 `wait(max(initial_delay_s, due_delay()))`，之后按 `due_delay() or interval_s` 排。
+用例：`test_mcp_research.py::test_loop_honours_initial_delay_before_first_run`。
+**教训**：配置项写进 `snapshot()` 不等于生效；凡是"延迟/间隔"参数，必须有测试证明它真的被等待。
+
+## 154. `/api/mcp` 把"研究循环可选"当成"整个 MCP 不可用"
+
+老逻辑：注册表或研究循环缺一个就 503 `mcp_unavailable`。于是 `AIJI_MCP_RESEARCH_LOOP=0`
+一开，控制台「MCP 研究」面板整块 503——一个可选组件拖垮整页。
+现在：注册表在就 200，`research` 为 `null`、`research_enabled: false`；
+`srv.mcp_research_loop` 在关闭时也不再挂一个"没 start 的对象"（自检曾据此以为它在跑）。
+
+## 155. `AIJI_STICKER_UPDATE` 曾经不存在
+
+我一直以为表情包更新循环吃环境变量，实际它只看 `Settings.sticker_update`（默认 True）。
+现在 `make_server` 里统一成"配置意愿且 `AIJI_STICKER_UPDATE` 不为 0"，
+跟 `AIJI_LIFE_LOOP`、`AIJI_MCP_RESEARCH_LOOP` 同一层语义，测试才能在不发 jsdelivr 请求的前提下 boot 服务。
+
+## 156. MCP 启动失败原来静默
+
+`except (MCPConfigError, OSError, ValueError):` 之后只是把两个属性置 None，
+于是表现成"面板 503"、没任何日志。现在 `logger.warning("MCP 注册表/研究循环没有起来：%s")`。

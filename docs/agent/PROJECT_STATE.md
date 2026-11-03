@@ -35,7 +35,7 @@
 
 ```bash
 cd D:\AIJiYi
-python -m unittest discover -s tests -t .                       # 2026-11-04：1128 tests, OK（整包覆盖率 93%，见下方"当前数字"）
+python -m unittest discover -s tests -t .                       # 2026-11-04：1207 tests, OK（整包覆盖率 93%，见下方"当前数字"）
 python -m unittest tests.test_console_workspace                 # 期望：Ran 4 tests, OK（桌宠/工作区/终端/资源）
 python bench/bench_recall.py --facts 5000 --platforms 4         # 期望：ok=true，p99 < 100ms
 python bench/bench_http.py   --facts 5000 --clients 4 --rounds 10
@@ -800,6 +800,16 @@ python bench/demo_loop.py                                       # 端到端：�
   127.0.0.1 客户端）。任何本机网页或本地 HTML 因此都能读接口数据——与"任何本地进程本来就能
   curl"同一威胁级别，但**不要**把服务绑到 `0.0.0.0`，也不要给它加公网反代。
 - ~~**`data/pet_state.json` 两个写入方**~~：桌宠已于 2026-11-03 整体删除，这条风险随之消失。
+
+## 2026-11-04 第 22 轮补充：套件自带隔离
+
+- `run_suite.py` 之外直接 `python -m unittest ...` 也**不再上外网**：`tests/__init__.py::HERMETIC_DEFAULTS`
+  把 `AIJI_LIFE_LOOP` / `AIJI_MCP_RESEARCH_LOOP` / `AIJI_STICKER_UPDATE` 默认设 0。
+- 证据：suite 日志里的真实 HTTP 请求数 v51 527 / v52 441 / v53 549 → **v54 0**。
+  数法：`Select-String -Path tools\archcheck\results\suite_v54.log -Pattern 'HTTP Request:'`。
+- 要测循环本身：在用例里 `mock.patch.dict(os.environ, {...})` 再 `make_server()`，
+  例见 `tests/test_openai_api.py::test_server_runs_bounded_life_loop`。
+- 守卫：`tests/test_suite_hermetic.py`。
 
 ## 2026-11-04 当前数字（自我迭代第 12–19 轮后的状态）
 
