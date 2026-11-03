@@ -27,7 +27,7 @@ SERVICES = (
     ("onebot", "QQ 反向连接", 6199, "AstrBot 的 OneBot 服务端；QQ 登录并连上后才会出现 ESTABLISHED。"),
     ("astrbot", "AstrBot", 6185, "消息处理与插件宿主，AIJiYi 的回复都经它送出。"),
     ("aiji", "AIJiYi", 8787, "记忆与模型核心；本页面由它提供。"),
-    ("presence", "实时状态", 8789, "状态广播，供桌宠与前端同步。"),
+    ("presence", "实时状态", 8789, "WebSocket 状态广播，供前端与控制台实时同步。"),
 )
 PORTS = tuple((key, name, port) for key, name, port, _ in SERVICES)
 # Ports whose server treats a bare TCP connect as a failed WebSocket handshake.

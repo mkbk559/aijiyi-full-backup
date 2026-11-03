@@ -26,11 +26,21 @@ TMP_ROOT.mkdir(mode=0o777, exist_ok=True)
 
 class TestConsoleNavigation(unittest.TestCase):
     def test_operations_views_have_navigation(self):
+        """控制台导航必须和架构图的九大系统一一对应（2026-11-03 重构）。
+
+        页面由 tools/console_build.py 从 architecture 的 nodes.json 生成，
+        导航在浏览器里运行时创建，所以这里校验生成进去的数据块。
+        """
         html = (Path(__file__).resolve().parent.parent / "aiji" / "right_hand" / "web" / "operations.html").read_text("utf-8")
-        views = set(re.findall(r'<section class="view[^\"]*" id="view-([\w-]+)"', html))
-        nav = set(re.findall(r'<button[^>]*data-view="([\w-]+)"', html))
-        self.assertEqual(views, nav)
-        self.assertEqual(views, {"overview", "features", "settings", "lifecycle"})
+        systems = re.findall(r'\{"id": "(\w+)", "nav": "([^"]+)"', html)
+        ids = [sid for sid, _nav in systems]
+        # 前 9 个是身体系统，后面是运维视图（配置 / 生命周期）
+        self.assertEqual(ids[:9], ["entry", "ingress", "orch", "memory", "life",
+                                   "out", "tools", "ops", "data"])
+        self.assertEqual(ids[9:], ["settings", "lifecycle"])
+        # 每个系统都带节点和面板，不能有空壳页
+        for entry in re.findall(r'\{"id": "(\w+)", "nav"[^}]*"panels": \[', html)[:9]:
+            self.assertIn(entry, ids[:9])
 
 
 def workdir() -> Path:
@@ -200,9 +210,12 @@ class TestConsoleWorkspace(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("text/html", ctype)
         html = raw.decode("utf-8")
-        for marker in ("全部具体功能", "功能配置", "启动与结束"):
+        # 重构后的页面：九大系统 + 运维视图，且不引用任何外部 CDN
+        for marker in ("九大系统", "海马体", "骨架", "功能配置", "从启动到结束"):
             self.assertIn(marker, html)
         self.assertNotIn("pet-dock", html)
+        self.assertNotIn("http://cdn", html)
+        self.assertNotIn("https://cdn", html)
         status, _, _ = self.request("/console")
         self.assertEqual(status, 404)
 

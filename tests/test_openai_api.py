@@ -785,8 +785,10 @@ class TestOpenAIChatCompletions(unittest.TestCase):
             self.assertTrue(response.headers["Content-Type"].startswith("text/html"))
             html = response.read().decode("utf-8")
 
-        self.assertIn("全部具体功能", html)
-        self.assertIn("/v1/chat/completions", html)
+        # 控制台已按架构图重构（2026-11-03）：九大系统导航 + 真实接口面板
+        self.assertIn("九大系统", html)
+        self.assertIn("/v1/audio/speech", html)
+        self.assertIn("/api/memories", html)
 
     def test_openai_routes_require_bearer_key_when_configured(self):
         with mock.patch.dict(os.environ, {"AIJI_API_KEY": "points-gateway-token"}):

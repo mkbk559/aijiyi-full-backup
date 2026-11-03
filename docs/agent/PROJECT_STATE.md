@@ -69,6 +69,23 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **控制台重构为「架构图对应」+ 桌宠残迹清理**，见
+  `docs/agent/evidence/console-rebuild-2026-11-03.md`。
+  控制台从手写 4 视图（概览/功能/配置/生命周期）改成**从架构图生成**：
+  新增 `tools/console_build.py`（读 `results/nodes.json`，按 band 生成节点卡 + 真实接口面板 +
+  动作按钮），输出 `aiji/right_hand/web/operations.html`（23.7 KB、零外链）——
+  左栏 9 个身体系统（① 感官…⑨ 骨架）+ ⚙ 配置 / ⏻ 生命周期。
+  新增 `tools/archcheck/console_check.py` 三重机器校验：**9 band / 68 节点全有归属**、
+  页面引用的 **55 条接口逐条比对 server.py 的 56 条路由（0 条不存在）**、
+  真机 `GET /operations` 200 + 9 个导航项 + 每系统首块面板无 5xx。这条校验当场抓出一个真 bug：
+  我最初写的 `/api/operations/overview` 服务端**根本不存在**（`route_smoke` 也没这条）。
+  桌宠：代码里早已没有实现（`aiji/` 搜 `桌宠|pet_state|tkinter` 只剩 1 处文案），
+  这轮清掉 `service_control` 的 presence 描述、`PROJECT_STATE` 未决 #11 与相关风险条目、
+  `acceptance-checklist` 的 P3-06/P3-07、历史截图 `workspace-pet.png`；
+  回归测试 `test_removed_pet_routes_do_not_create_state` 继续守着 404。
+  测试更新 3 处（导航断言改成九系统、页面标记词、openai 用例）。
+  **本机 Chrome/Edge headless 都被沙箱 ACL 拦住，控制台渲染没有浏览器截图证据**（同 excluded #49）。
+
 - 2026-11-03 **体检前三项落地**（同 `docs/agent/evidence/project-audit-2026-11-03.md` §八）：
   ①新增 `tools/archcheck/cli_smoke.py`：17 个子命令 33 次真子进程调用 **0 失败**、
   全 JSON、在全新临时库上跑（30 张表）→ 补上 `cli.py` 的 0% 覆盖。
@@ -601,10 +618,12 @@ python bench/demo_loop.py                                       # 端到端：�
 9. 控制台工作区：`/api/fs` 只能把**路径**限制在工作区内，`/api/shell` 的**命令本身**
    无法沙箱化（`cd` 出去就出去了）。它是本地个人控制台，别绑 `0.0.0.0`；
    不想要终端时设 `AIJI_CONSOLE_SHELL=0`。
-10. 控制台只在真实 Edge 窗口截图验证过工作区/桌宠；**聊天统计与 ECharts 交互没有
+10. 控制台只在真实 Edge 窗口截图验证过工作区；**聊天统计与 ECharts 交互没有
     自动化浏览器测试**（本机 Edge headless 被沙箱 ACL 拦住，excluded #49）。
-11. 桌宠状态仍是 `data/pet_state.json`：Tk 桌宠 + 控制台同时跑是"后写覆盖"；
-    要做多宠物/多进程再迁 SQLite（见 growth.py `shortcut:`）。
+11. ~~桌宠状态仍是 `data/pet_state.json`~~ **桌宠已整体删除（2026-11-03 清理残迹）**：
+    代码里 `/api/pet*`、`/assets/whale_spritesheet.webp` 全部 404（有回归测试
+    `test_console_workspace.py::test_removed_pet_routes_do_not_create_state` 守着），
+    没有 `pet_state.json`、没有宠物素材、服务链路里的 presence 改成"供前端同步"。
 12. 记忆代谢（**2026-11-02 已实施**，schema v11）：方案与实施状态唯一入口
     `docs/agent/design/borrow-plan-2026-11-02.md`（§0–§8 是决策，**§9 是落地状态与实测数字**）。
     已落：读→强化（`store.bump_usage`，1h 冷却）、冻结层（`fact.frozen`，不删只藏）、
@@ -664,5 +683,4 @@ python bench/demo_loop.py                                       # 端到端：�
   服务端会对这个来源放行（含 `/api/operations/config`、`/api/operations/services`；POST 另外仍限
   127.0.0.1 客户端）。任何本机网页或本地 HTML 因此都能读接口数据——与"任何本地进程本来就能
   curl"同一威胁级别，但**不要**把服务绑到 `0.0.0.0`，也不要给它加公网反代。
-- **`data/pet_state.json` 两个写入方**：Tk 桌宠与控制台各持一把进程内锁，文件级是
-  tmp+replace 原子写，但跨进程仍是后写覆盖；同时操作时以最后一次落盘为准。
+- ~~**`data/pet_state.json` 两个写入方**~~：桌宠已于 2026-11-03 整体删除，这条风险随之消失。
