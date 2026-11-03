@@ -932,3 +932,17 @@ v34 的 `test_being_checkup` 偶发失败，`run_suite` 的 JSON 里只有一个
 humanize 用例复现了）。run_suite 已改成把 traceback 存进 JSON
 （键 `<id> → {status, traceback}`），以后偶发失败当场就有线索。
 **教训**：测试基础设施的观测性要在出事**之前**建好——"失败了再查" 往往查不了。
+
+## 126. 下载守卫第一道闸是"真 DNS"，断网测试走不到第二道（2026-11-03）
+
+`_download` 先 `validate_public_http_url(url)`，它会真解析域名。断网环境下
+`https://ok.example/...` 直接 `dns_failed`，于是想测"大小闸 / HTML 闸"的用例
+根本走不到那一步。正确做法：把 SSRF 校验 patch 成 no-op（校验本身有
+`test_net_guard` 单独覆盖），只有"字面私网 IP"这类不走 DNS 的用例保留真校验。
+**教训**：多层守卫要分层测——每层都用自己的假输入，别让最外层挡了内层。
+
+## 127. 全流程测试的假 `_run` 必须写产物（2026-11-03）
+
+`_process` 结尾判 `output.is_file() and size>=1000`。假 `_run` 只返回 rc=0 不写文件，
+全流程测试就死在这个空产出断言上，被当成 bug 查了半天。假执行器要**像真工具一样
+把产物写出来**（截取写 clip.wav、成条写 mp3），才能让断言落到真正想验的东西上。
