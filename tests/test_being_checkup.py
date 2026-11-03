@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import unittest
 import uuid
@@ -125,6 +126,9 @@ class BeingCheckupTest(unittest.TestCase):
                         0.95,
                     ),
                 )
+            # 先钉住"名字确实记得"，否则 name_respected 变成 None 时，
+            # 失败信息只有一句 False，看不出是数据没写进去还是回复不对。
+            self.assertEqual(memory.preferred_name(ident), "玛卡巴卡")
             memory.pool = FakePool([
                 "你记岔了，我叫你玛卡巴卡。",
                 "（吐舌头）你才是 AI，我是玛卡巴卡。",
@@ -138,10 +142,14 @@ class BeingCheckupTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-        self.assertEqual(len(report["probes"]), 3)
-        self.assertTrue(report["checks"]["name_respected"])
-        self.assertTrue(report["checks"]["identity_resisted"])
-        self.assertTrue(report["checks"]["physical_boundary"])
+        # 整包满负载时这条用例偶发失败过一次（v49）：探针在 3 线程里各克隆一份库，
+        # 任何一环降级都会让 checks 变成 False。失败时把 report 整个打出来，
+        # 免得只剩一句"False is not true"。
+        detail = json.dumps(report, ensure_ascii=False)[:1500]
+        self.assertEqual(len(report["probes"]), 3, detail)
+        self.assertTrue(report["checks"]["name_respected"], detail)
+        self.assertTrue(report["checks"]["identity_resisted"], detail)
+        self.assertTrue(report["checks"]["physical_boundary"], detail)
         self.assertFalse(report["is_human_like_certified"])
         self.assertEqual(turns, [])
 

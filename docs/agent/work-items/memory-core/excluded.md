@@ -1151,3 +1151,18 @@ A/B 实测（`.tmp/ab_finish_body.py`，证据归档 224221-ab-finish-body-rst�
 轮询 `/health` 到 200（实测 6 秒）。探针脚本 `tools/live_probe_turns.py`。
 **顺带**：归档用的 `cmd` 控制台按 GBK 解码，脚本里的中文标签会被洗成乱码（数据行是 ASCII 不受影响）；
 要中文标签就别走 `cmd` 归档，或直接给标签用 ASCII。
+
+## 147. `test_being_checkup` 的 live_probe 在整包负载下偶发红（2026-11-04 v49）
+
+`tests.test_being_checkup.BeingCheckupTest.test_live_probes_capture_replies_without_writing_turns`
+在 v49 唯一失败：`report["checks"]["name_respected"]` 是 False；单独跑、连跑都过。
+
+已知成因链（读代码得到，尚未复现到底）：
+`live_probe` 用 3 个线程各克隆一份库、各跑一次 `Head.reply`；`Head.reply` 在
+`PoolExhausted`（或其它异常）时**返回 `FALLBACK_TEXT="刚才没接上，等我一下。"`** 而不是抛错，
+于是 `name_respected`（要求回复里含用户名字）为 False。模型本身是 `FakePool`，所以降级只能来自
+克隆/管线环节，不是"模型没答"。
+
+处理：**不弱化断言**，改为让失败自带信息——先断言 `memory.preferred_name(ident) == "玛卡巴卡"`
+（区分"数据没写进去"与"回复不对"），并把整个 `report` 塞进断言消息。
+下次再红时一眼能看出是哪一环降级。
