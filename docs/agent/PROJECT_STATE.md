@@ -35,7 +35,7 @@
 
 ```bash
 cd D:\AIJiYi
-python -m unittest discover -s tests -t .                       # 2026-11-04：1207 tests, OK（整包覆盖率 93%，见下方"当前数字"）
+python -m unittest discover -s tests -t .                       # 2026-11-04：1266 tests, OK（整包覆盖率 93%，见下方"当前数字"）
 python -m unittest tests.test_console_workspace                 # 期望：Ran 4 tests, OK（桌宠/工作区/终端/资源）
 python bench/bench_recall.py --facts 5000 --platforms 4         # 期望：ok=true，p99 < 100ms
 python bench/bench_http.py   --facts 5000 --clients 4 --rounds 10

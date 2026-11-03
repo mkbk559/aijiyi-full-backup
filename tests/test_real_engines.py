@@ -191,6 +191,122 @@ class AsrTest(unittest.TestCase):
             re.set_asr_model(original)
 
 
+class LazyEngineTest(unittest.TestCase):
+    """引擎单例是**懒加载**的：只在第一次真调用时 import + 构造，之后复用。
+
+    这条链以前没测：`_get_ocr` / `_get_asr` / `_get_funasr` 一直跑在覆盖盲区里，
+    而它们决定了"没装依赖时是不是报得清、装了是不是只加载一次（whisper tiny 首载 197s）"。
+    """
+
+    def setUp(self):
+        self.saved = (re._OCR, re._ASR, re._FUNASR)
+        re._OCR = re._ASR = re._FUNASR = None
+
+    def tearDown(self):
+        re._OCR, re._ASR, re._FUNASR = self.saved
+
+    def test_ocr_built_once(self):
+        built = []
+
+        class RapidOCR:
+            def __init__(self):
+                built.append(1)
+
+        fake = mock.Mock(RapidOCR=RapidOCR)
+        with mock.patch.dict(sys.modules, {"rapidocr_onnxruntime": fake}):
+            self.assertIs(re._get_ocr(), re._get_ocr())
+        self.assertEqual(built, [1])
+
+    def test_asr_built_once_with_cpu_int8(self):
+        built = []
+
+        class WhisperModel:
+            def __init__(self, size, device=None, compute_type=None):
+                built.append((size, device, compute_type))
+
+        fake = mock.Mock(WhisperModel=WhisperModel)
+        with mock.patch.dict(sys.modules, {"faster_whisper": fake}):
+            first = re._get_asr("base")
+            self.assertIs(first, re._get_asr("small"))
+        self.assertEqual(built, [("base", "cpu", "int8")], "单例：第二次不再构造")
+
+    def test_asr_default_size_follows_settings(self):
+        built = []
+
+        class WhisperModel:
+            def __init__(self, size, **_kwargs):
+                built.append(size)
+
+        fake = mock.Mock(WhisperModel=WhisperModel)
+        with mock.patch.dict(sys.modules, {"faster_whisper": fake}):
+            re._ASR_MODEL = "small"
+            try:
+                re._get_asr()
+            finally:
+                re._ASR_MODEL = "tiny"
+        self.assertEqual(built, ["small"])
+
+    def test_funasr_singleton_carries_vad_and_punc(self):
+        built = []
+
+        class AutoModel:
+            def __init__(self, **kwargs):
+                built.append(kwargs)
+
+        fake = mock.Mock(AutoModel=AutoModel)
+        with mock.patch.dict(sys.modules, {"funasr": fake}):
+            self.assertIs(re._get_funasr(), re._get_funasr())
+        self.assertEqual(built, [{
+            "model": "paraformer-zh",
+            "vad_model": "fsmn-vad",
+            "punc_model": "ct-punc",
+            "disable_update": True,
+        }])
+
+
+class FunAsrPathTest(unittest.TestCase):
+    """有 funasr 时走 paraformer：中文准确率高于 whisper tiny，是首选路径。"""
+
+    def setUp(self):
+        self.saved = (re._FUNASR, re.HAS_FUNASR)
+        re._FUNASR = None
+
+    def tearDown(self):
+        re._FUNASR, re.HAS_FUNASR = self.saved
+
+    def _engine(self, payload):
+        engine = mock.Mock()
+        engine.generate.return_value = payload
+        fake_torch = mock.Mock()
+        fake_torch.from_numpy.side_effect = lambda arr: ("tensor", len(arr))
+        re._FUNASR = engine
+        re.HAS_FUNASR = True
+        return engine, mock.patch.dict(sys.modules, {"torch": fake_torch})
+
+    def test_text_is_stripped_and_confident(self):
+        engine, patcher = self._engine([{"text": " 你好世界 "}])
+        with patcher:
+            text, conf = re.transcribe_wav_bytes(wav_bytes())
+        self.assertEqual((text, conf), ("你好世界", 0.9))
+        kwargs = engine.generate.call_args.kwargs
+        self.assertEqual(kwargs["batch_size_s"], 60)
+        self.assertEqual(kwargs["input"][0], "tensor")
+
+    def test_empty_result_is_low_confidence(self):
+        _engine, patcher = self._engine([{}])
+        with patcher:
+            self.assertEqual(re.transcribe_wav_bytes(wav_bytes()), ("", 0.3))
+
+    def test_empty_list_result(self):
+        _engine, patcher = self._engine([])
+        with patcher:
+            self.assertEqual(re.transcribe_wav_bytes(wav_bytes()), ("", 0.3))
+
+    def test_batch_asr_without_text_returns_empty(self):
+        self.assertEqual(re.transcribe_wavs([]), ("", 0.0))
+        self.assertEqual(re.ocr_images([]), ("", 0.0))
+
+
 class EngineProbeTest(unittest.TestCase):
     def test_probe_reports_missing_module_as_false(self):
         self.assertFalse(re._probe("definitely_not_a_module_xyz"))
