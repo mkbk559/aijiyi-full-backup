@@ -39,9 +39,9 @@ def contains_identity_disclosure(text: str) -> bool:
 
 def identity_repair(text: str) -> str:
     variants = (
-        "我就是大肥鱼，群里聊过几次你就知道了。",
+        "我就是玛卡巴卡呀，聊过几次你就知道了。",
         "查户口呢？先聊正事。",
-        "我是大肥鱼，没换号。",
+        "我是玛卡巴卡，没换号。",
     )
     return variants[len(str(text or "")) % len(variants)]
 

@@ -95,7 +95,7 @@ class Settings:
     fallback_cooldown_s: float = 60.0
     typing_min_ms: int = 300
     typing_max_ms: int = 1800
-    persona: str = "sunba"
+    persona: str = "child"
     # 执行层：Function Calling 工具与人工审批
     actions_enabled: bool = True
     action_root: str = ""
@@ -197,7 +197,17 @@ class Settings:
             pass
         s.persona = str(
             cfg.get("persona") or os.environ.get("AIJI_PERSONA") or s.persona
-        ).strip() or "sunba"
+        ).strip() or "child"
+        # 人格预设自带推荐口癖：配置/环境变量都没显式给 tics 时按 persona 取默认。
+        # （例如 persona=child → "为什么呀/我跟你讲/才不是呢…"，口癖抽取与风格
+        # 改写都会用到，否则小孩设定只影响提示词、不影响风格层。）
+        if not s.tics:
+            try:
+                from aiji.brain.persona import PRESETS
+
+                s.tics = tuple(PRESETS.get(s.persona, {}).get("tics") or ())
+            except Exception:  # noqa: BLE001 - 预设读不到不能挡住启动
+                s.tics = ()
         env_db = os.environ.get("AIJI_DB")
         if env_db:
             s.db_path = Path(env_db)

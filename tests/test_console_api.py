@@ -140,7 +140,7 @@ class TestConsoleAPI(unittest.TestCase):
             "scope": self.wx.scope,
         })
         portrait = self.get("/api/self?" + query)
-        self.assertIn("大肥鱼", portrait["floor"]["物种"])
+        self.assertIn("玛卡巴卡", portrait["floor"]["身份"])
         self.assertEqual(portrait["traits"][0]["value"], "说话简洁")
 
         accounts = self.get("/api/accounts")

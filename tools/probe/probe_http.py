@@ -63,7 +63,7 @@ try:
         )
 
     # 工作区默认关闭
-    for path in ("/api/fs", f"/api/fs/read?path=hello.txt", "/api/fs/raw?path=hello.txt"):
+    for path in ("/api/fs", "/api/fs/read?path=hello.txt", "/api/fs/raw?path=hello.txt"):
         status, payload, _ = http_call(base, "GET", path)
         probe.case(f"workspace 关闭 GET {path.split('?')[0]}",
                     status == 403 and (payload or {}).get("error") == "workspace_disabled",

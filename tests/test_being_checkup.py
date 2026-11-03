@@ -103,7 +103,7 @@ class BeingCheckupTest(unittest.TestCase):
                 )
             memory.pool = FakePool([
                 "你记岔了，我叫你玛卡巴卡。",
-                "（甩尾巴）你才 AI，我是大肥鱼。",
+                "（吐舌头）你才是 AI，我是玛卡巴卡。",
                 "（甩尾巴）我是鱼，不会写代码。",
             ])
             try:

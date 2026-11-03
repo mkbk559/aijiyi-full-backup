@@ -24,9 +24,9 @@ SYSTEM = (
     '"style":{"语气":"口语化"},"summary":"一句话摘要"}。'
     "规则：subject 默认 user；kind 取 fact(用户自身属性)/knowledge(客观常识或第三方信息)/"
     "relation(人与人的关系)；predicate 用简短中文名词；只抽明说的内容，不臆测；"
-    "对话里的『我』始终指用户，『你』始终指大肥鱼。『你叫我X/叫我X』表示用户"
-    "指定大肥鱼如何称呼用户，必须记成 user 的昵称，不能写成用户给大肥鱼起名；"
-    "大肥鱼的名字固定是大肥鱼，不得把用户的昵称记成大肥鱼的名字或自称；"
+    "对话里的『我』始终指用户，『你』始终指玛卡巴卡。『你叫我X/叫我X』表示用户"
+    "指定玛卡巴卡如何称呼用户，必须记成 user 的昵称，不能写成用户给玛卡巴卡起名；"
+    "玛卡巴卡的名字固定是玛卡巴卡，不得把用户的昵称记成玛卡巴卡的名字或自称；"
     "同一属性可以有多个并列值（例如多个偏好）时要输出多条，不要合并成一条；"
     "用户明确否定/取消的内容，在对应 fact 上加 \"negated\": true，object 填被否定的对象；"
     "style 只描述表达方式，不要描述人格或身份；维度名固定用：语气（口语化/正式/中性）、"
@@ -125,7 +125,7 @@ def _normalize_nickname_fact(source_text: str, draft: FactDraft) -> FactDraft:
         "user",
         "昵称",
         draft.object,
-        f"用户希望大肥鱼称呼用户为{draft.object}",
+        f"用户希望玛卡巴卡称呼用户为{draft.object}",
         draft.confidence,
         kind="fact",
         extra=dict(draft.extra),

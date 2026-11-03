@@ -105,7 +105,7 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         self.assertTrue(payload["aiji"].get("used_ids"))
 
         prompt = json.dumps(self.pool.calls[0], ensure_ascii=False)
-        self.assertIn("大肥鱼", prompt)
+        self.assertIn("玛卡巴卡", prompt)
         self.assertIn("用户住在杭州", prompt)
         self.assertIn("回答尽量简短", prompt)
 
@@ -347,8 +347,8 @@ class TestOpenAIChatCompletions(unittest.TestCase):
     def test_live_being_checkup_endpoint_runs_three_probes(self):
         self.memory.pool = FakePool("\n".join([
             "你记岔了，我叫你主人。",
-            "（甩尾巴）我是大肥鱼，不是模型。",
-            "（甩尾巴）我是鱼，不会写代码。",
+            "（吐舌头）你才是模型，我是玛卡巴卡。",
+            "（吐舌头）我写不了代码，你找大人写嘛。",
         ]))
         payload = self.post_json("/api/being/checkup/live", {})
         self.assertEqual(len(payload["probes"]), 3)

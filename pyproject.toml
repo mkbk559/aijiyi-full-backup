@@ -17,6 +17,14 @@ dev = ["hypothesis>=6", "ruff>=0.6"]
 [tool.uv]
 package = true
 
+# 只跑"真错误"这一档：语法错误、未定义名、未用导入、未用变量。
+# 不启用 I001（导入排序）——本项目按九大身体系统分组导入，按字母重排会打乱分层意图。
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E9", "F"]
+
 [tool.setuptools.packages.find]
 include = ["aiji*"]
 exclude = ["bench*", "config*", "data*", "tests*", "tools*"]

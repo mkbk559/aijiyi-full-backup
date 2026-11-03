@@ -362,9 +362,9 @@ class BeingState:
 
 
 class BeingStore:
-    def __init__(self, db: DB, *, persona: str = "sunba"):
+    def __init__(self, db: DB, *, persona: str = "child"):
         self.db = db
-        self.persona = str(persona or "sunba")
+        self.persona = str(persona or "child")
         self.process_started = time.time()
 
     def load(self, *, now: float | None = None, hour: int | None = None) -> BeingState:

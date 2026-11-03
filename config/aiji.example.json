@@ -16,7 +16,7 @@
   "humanize_max_ms": 4500,
   "typing_min_ms": 300,
   "typing_max_ms": 1800,
-  "persona": "sunba",
+  "persona": "child",
   "actions_enabled": true,
   "action_root": "",
   "action_approval_timeout_s": 120,

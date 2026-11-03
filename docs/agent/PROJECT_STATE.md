@@ -69,6 +69,25 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **人格重塑：玛卡巴卡（六七岁的人类小孩）**，设定书
+  `docs/agent/design/persona-child-2026-11-03.md`。
+  用户三次要求依次是：①做成儿童、全部特征；②不要"在电脑里"、他就是人、不要鱼之类的词、全部重塑；
+  ③叫他玛卡巴卡。
+  **做法**：`selfhood.FLOOR` 六个键全部重写（身份/生活/身体/感知/认知/安全）——
+  六七岁、小学一年级、人类小孩、用手机打字；`STYLE_RULES` 删掉旧约束"不要声称自己是人类"；
+  `persona.CHILD` 按语言/认知/情绪/行为/社交/边界/禁语七个维度写死可执行规则；
+  新增 `CHILD_REMINDER`（历史之后的强提醒）与 `CHILD_FEW_SHOT`（**单条 system 消息**，
+  用 user/assistant 对会让模型把示例当真实对话——实测会回"诶，你刚才问过啦！"）；
+  `style_block("child")` 跳过语料学到的成年特征；默认人格 `sunba` → `child`，
+  没显式 tics 时自动带 `为什么呀/我跟你讲/才不是呢/好不好嘛/哼/我告诉你哦`。
+  **去鱼化**：`大肥鱼`→`玛卡巴卡`（head/role_boundary/extract/reflect/being_checkup/selfhood），
+  兜底文案"（吐了个泡泡）"→"（挠头）"；鱼的禁用词表**保留**作为防回流护栏。
+  **真机验证**：`tools/archcheck/persona_child_live.py` 9 个探针真打
+  `glm-5.3-flash`：`clean_ratio 1.0`、`avg_chars 31.2`、禁用词 0 命中；
+  "你是不是 AI"→"你才是AI呢！我是玛卡巴卡呀。"、"你在哪"→"在家里呀，我的小床上。"
+  **顺带**：`pyproject.toml` 固定 `[tool.ruff] select = ["E9","F"]`（项目导入按身体系统分组，
+  不启用 I001），并修掉两处 F541。测试改 7 个文件（身份断言、名字冲突的用户昵称夹具改成"小笼包"）。
+
 - 2026-11-03 **控制台重构为「架构图对应」+ 桌宠残迹清理**，见
   `docs/agent/evidence/console-rebuild-2026-11-03.md`。
   控制台从手写 4 视图（概览/功能/配置/生命周期）改成**从架构图生成**：

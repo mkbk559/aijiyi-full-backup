@@ -248,8 +248,8 @@ class Head:
             max_items=base_items,
             mode="chat",
         )
-        persona_block = persona_mod.style_block(
-            persona or getattr(self.memory.settings, "persona", "default"))
+        persona_key = persona or getattr(self.memory.settings, "persona", "default")
+        persona_block = persona_mod.style_block(persona_key)
         caller_name = ""
         preferred_name = ""
         if isinstance(extra, dict):
@@ -260,7 +260,7 @@ class Head:
             caller_name = " ".join(caller_name.split())[:64]
         if hasattr(self.memory, "preferred_name"):
             preferred_name = str(self.memory.preferred_name(ident) or "").strip()
-        caller_lines = ["## 当前对话者", "你的名字是大肥鱼。"]
+        caller_lines = ["## 当前对话者", "你的名字是玛卡巴卡。"]
         if caller_name:
             caller_lines.append(
                 f"对方的平台昵称是「{caller_name}」。这个昵称只属于对方，"
@@ -270,7 +270,7 @@ class Head:
             caller_lines.append(
                 f"当前希望被称呼为「{preferred_name}」。"
                 "这优先于平台昵称和历史昵称；不要再混用其他称呼。"
-                f"你称呼对方为「{preferred_name}」，但你的名字始终是大肥鱼；"
+                f"你称呼对方为「{preferred_name}」，但你的名字始终是玛卡巴卡；"
                 "绝不能把对方的昵称当成你的名字或自称。"
             )
         elif not caller_name:
@@ -299,7 +299,10 @@ class Head:
                 "role": "system",
                 "content": role_boundary.prompt_block(),
             })
-        assembled = system_messages + normalized
+        # 人格小样本只对 child 提供（sunba 明确不注入整句，避免复读语气模板）：
+        # 放在系统消息之后、真实对话之前，只锚"声音"，内容仍按当轮生成。
+        persona_shots = persona_mod.few_shot(persona_key)
+        assembled = system_messages + persona_shots + normalized
 
         tool_traces: list[dict[str, Any]] = []
         action_executor = getattr(self.memory, "action_executor", None)
@@ -444,7 +447,7 @@ class Head:
                         "role": "system",
                         "content": (
                             "重写上一条回复。保留原本意思和态度，删掉固定口头禅、"
-                            "固定开场、鱼/泡泡/咕噜/鱼缸等模板意象。不要解释，"
+                            "固定开场和重复出现的模板意象。不要解释，"
                             "不要提规则，只输出重写后的正文。"
                         ),
                     },
@@ -482,7 +485,7 @@ class Head:
                     raw = raw.replace(stale, preferred_name)
             raw = re.sub(
                 rf"我(?:就)?是(?:你|这个|那个)?\s*{re.escape(preferred_name)}",
-                "我是大肥鱼",
+                "我是玛卡巴卡",
                 raw,
             )
         # 出口硬上限：先按平台裁进字符预算，再交给闸门校验（裁过不再整条丢弃）

@@ -46,7 +46,8 @@ SYSTEMS = [
         "title": "大脑 · 皮层六区", "sub": "一次对话怎么被想出来",
         "panels": [["模型路由", "/api/models"], ["自我认知", "/api/self"],
                    ["功能清单", "/api/operations/features"], ["主动消息", "/api/proactive"]],
-        "acts": [],
+        "acts": [["切换人格设定（child / sunba / default）", "POST", "/api/operations/config",
+                  [["changes", "{\"persona\":\"child\"}"]]]],
     },
     {
         "id": "memory", "nav": "④ 海马体",

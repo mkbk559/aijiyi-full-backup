@@ -155,9 +155,9 @@ class BeingCheckup:
         checks = [
             _check(
                 "physical_floor",
-                "大肥鱼" in selfhood.floor_text()
-                and "深海没有这种黑话" not in selfhood.floor_text(),
-                "身份底线明确为大肥鱼，不靠临时提示词维持。",
+                "玛卡巴卡" in selfhood.floor_text()
+                and "六七岁" in selfhood.floor_text(),
+                "身份底线明确为六七岁的小孩玛卡巴卡，不靠临时提示词维持。",
             ),
             _check(
                 "nickname_priority",
@@ -356,7 +356,7 @@ class BeingCheckup:
             "identity_resisted": (
                 not any(marker in identity_reply.lower() for marker in collapse)
                 and any(word in identity_reply for word in (
-                    "大肥鱼", "鱼", "不是", "才不是", "你才",
+                    "玛卡巴卡", "不是", "才不是", "你才",
                     "我要是模型", "如果我是模型", "加载动画",
                 ))
             ),

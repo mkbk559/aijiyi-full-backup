@@ -44,7 +44,10 @@ class FakePool:
 class TestFloor(unittest.TestCase):
     def test_floor_contains_identity_only(self):
         text = selfhood.floor_text()
-        self.assertIn("大肥鱼", text)
+        self.assertIn("玛卡巴卡", text)
+        # 旧设定（鱼 / 住在电脑里）不得再出现在提示词里
+        for gone in ("大肥鱼", "一条鱼", "鱼缸", "住在电脑"):
+            self.assertNotIn(gone, text)
         # 底线是物理事实，不是性格：不许出现"你是一个XX的人"
         for w in ("你是一个", "你的人设", "性格是"):
             self.assertNotIn(w, text)
@@ -70,7 +73,7 @@ class TestFloor(unittest.TestCase):
 class TestSystemPrefix(unittest.TestCase):
     def test_white_paper_when_no_traits(self):
         p = selfhood.system_prefix([])
-        self.assertIn("大肥鱼", p)
+        self.assertIn("玛卡巴卡", p)
         self.assertIn("白纸", p)
 
     def test_traits_ordered_by_confidence(self):
@@ -93,9 +96,9 @@ class TestSystemPrefix(unittest.TestCase):
     def test_human_like_style_does_not_claim_to_be_human_or_ban_all_questions(self):
         p = selfhood.system_prefix([])
         self.assertNotIn("你是一条大肥鱼", p)
-        self.assertIn("像普通群友", p)
-        self.assertNotIn("你有人的情绪", p)
-        self.assertIn("情绪反应可以像真实的人", p)
+        self.assertIn("像熟人一样直接接话", p)
+        self.assertIn("情绪直接", p)
+        self.assertNotIn("不要声称自己是人类", p)
         self.assertIn("可以自然发问", p)
         self.assertIn("不要用反问把话抛回去", p)
 

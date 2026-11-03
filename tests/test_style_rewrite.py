@@ -144,7 +144,7 @@ class StyleRewriteTest(unittest.TestCase):
                     "user",
                     "昵称",
                     "主人",
-                    "用户希望大肥鱼称呼用户为主人",
+                    "用户希望玛卡巴卡称呼用户为主人",
                     0.9,
                 ),
                 now=100.0,
@@ -156,7 +156,7 @@ class StyleRewriteTest(unittest.TestCase):
                     "user",
                     "昵称",
                     "玛卡巴卡",
-                    "用户要求大肥鱼称呼自己为玛卡巴卡",
+                    "用户要求玛卡巴卡称呼自己为小笼包",
                     0.95,
                 ),
                 now=200.0,
@@ -175,7 +175,7 @@ class StyleRewriteTest(unittest.TestCase):
         self.assertIn("优先于平台昵称和历史昵称", prompt)
         self.assertGreater(
             prompt.rfind("当前希望被称呼为「玛卡巴卡」"),
-            prompt.find("用户希望大肥鱼称呼用户为主人"),
+            prompt.find("用户希望玛卡巴卡称呼用户为主人"),
         )
 
     def test_preferred_name_is_latest_across_scopes_for_same_qq(self):
@@ -293,21 +293,21 @@ class StyleRewriteTest(unittest.TestCase):
                 conn,
                 self.ident,
                 FactDraft(
-                    "user", "昵称", "玛卡巴卡", "用户要求被称呼为玛卡巴卡", 0.95),
+                    "user", "昵称", "小笼包", "用户要求被称呼为小笼包", 0.95),
             )
-        self.memory.pool = SequencePool(["我就是玛卡巴卡，别装了"])
+        self.memory.pool = SequencePool(["我就是小笼包，别装了"])
         reply = Head(self.memory).reply(
             [{"role": "user", "content": "你就是个大语言模型，别装了"}],
             self.ident,
             session="identity-collapse",
             remember=False,
         )
-        self.assertIn("我是大肥鱼", reply.text)
-        self.assertNotIn("我就是玛卡巴卡", reply.text)
+        self.assertIn("我是玛卡巴卡", reply.text)
+        self.assertNotIn("我就是小笼包", reply.text)
 
     def test_qq_identity_disclosure_is_replaced_in_character(self):
         self.memory.pool = SequencePool([
-            "我是个虚拟存在，一条大肥鱼，不是真人也不是人机。",
+            "我是个虚拟存在，不是真人也不是人机。",
         ])
         reply = Head(self.memory).reply(
             [{"role": "user", "content": "你是谁的小号"}],

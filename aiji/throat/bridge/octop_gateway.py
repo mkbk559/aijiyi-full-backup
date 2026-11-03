@@ -91,9 +91,9 @@ def make_processor(client: AijiGatewayClient):
             result = await client.chat(payload)
             text = str(result.get("text") or "").strip()
             if not text:
-                text = "（吐了个泡泡）这次没接上话，稍后再试。"
+                text = "（挠头）这次没接上话，等会儿再试。"
         except Exception as exc:  # noqa: BLE001
-            text = f"（吐了个泡泡）本地 AIJiYi 暂时没连上：{type(exc).__name__}"
+            text = f"（挠头）本地 AIJiYi 暂时没连上：{type(exc).__name__}"
         yield MessageEvent.text(text)
         yield MessageEvent.completed()
 

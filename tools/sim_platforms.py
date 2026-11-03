@@ -72,7 +72,7 @@ class QQMing(VirtualUser):
         r = rng.random()
         if self.facts_told == 0 or r < 0.3:
             self.facts_told += 1
-            return dict(kind="comment", pri=0, text=f"我叫小明，住在杭州，你记住啊")
+            return dict(kind="comment", pri=0, text="我叫小明，住在杭州，你记住啊")
         if r < 0.5:
             return dict(kind="mention", pri=0, text=rng.choice(self.QUESTIONS))
         if r < 0.65 and self.facts_told >= 2:
