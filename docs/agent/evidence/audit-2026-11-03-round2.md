@@ -105,7 +105,27 @@ jsdelivr 与 raw.githubusercontent 两个源都试过，都能直连
 - 根目录 `aiji-life-loop-qthyvr0o` 反复出现：`being_checkup` 用 `mkdtemp(dir=temp_base)`，`temp_base` 有时落在仓库根；已随本轮清理删掉，**根因未改**
 - `build/`(0.81 MB) `dist/`(5.8 MB) 陈旧产物：`cleanup_junk` 保留当前版产物，其余已删
 
+## 6.5 顺带解决：`pip install` 装不上的真因是代理（2026-11-03）
+
+之前 `pip install coverage` 报 `ERROR: No matching distribution found for coverage`，
+被记成"本机装不了"。真因是环境变量 `HTTP_PROXY=http://127.0.0.1:7897` 指向没启动的代理，
+pip 走它就直接失败。清掉大小写四个代理变量 + `--proxy ''` 之后：
+
+```
+python -m pip install --quiet --proxy '' ruff     → ruff 0.17.3
+python -m pip install --quiet --proxy '' coverage → Coverage.py 7.17.0
+```
+
+所以"覆盖率无法在本机重测"这条**不再成立**，ruff 也重新可用（本轮 `ruff check` 0 error）。
+
 ## 7. 本轮没解决的清单（按建议顺序）
+
+0. **`aiji/senses/cli.py` 覆盖率 0%（311 条语句一条没走到）**——本轮新测：
+   `python -m coverage run --source=aiji -m unittest discover -s tests -t .`
+   → `TOTAL 9545 语句 / 1817 未覆盖 / 81%`，529 tests OK。
+   CLI 的所有子命令（`grow`/`quota`/`forget`/`archive`/`self-memory`…）只被手工敲过，
+   没有一条自动化用例；同理 `octop_gateway` 53%、`media_audio` 53%。
+   **这轮没补**：CLI 是薄壳，但"薄壳零覆盖"意味着改名/改签名不会有测试拦住。
 
 1. `being_*` 去掉 persona 分区（schema 决策，一次到位就不会再有"换人格失忆"）
 2. 慢端点异步化：`/api/being/checkup/live`（32.5 s）、`/api/stickers/update`
@@ -113,4 +133,4 @@ jsdelivr 与 raw.githubusercontent 两个源都试过，都能直连
 4. 235 条成年语感 trait：清库 / 降权 / 保留，三选一
 5. 29 个 docs 里旧身份的措辞：批量加"历史归档，人名已改"的抬头，而不是逐句改写
 6. `mkdtemp` 落在仓库根的根因（`being_checkup` 的 `temp_base`）
-7. 覆盖率无法在本机重测（`pip install coverage` → "No matching distribution found"，pypi 侧取不到包）；上一次测得的数字仍是唯一依据
+7. ~~覆盖率无法在本机重测~~ **已解决**：清掉代理后 `coverage 7.17.0` 装上了，本文件 §6.5 有命令与依据
