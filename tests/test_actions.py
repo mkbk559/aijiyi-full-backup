@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
-from aiji.left_hand.actions import ActionExecutor, ActionPolicy, ApprovalManager, PolicyViolation, ToolCall
+from aiji.left_hand.actions import ActionExecutor, ActionPolicy, ApprovalManager, ToolCall
 from aiji.left_hand.actions.gui import parse_hotkey
 from aiji.right_hand.config import Route, Settings
 from aiji.brain.head import Head

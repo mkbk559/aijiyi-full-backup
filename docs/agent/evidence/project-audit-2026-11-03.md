@@ -94,3 +94,53 @@ sqlite 3.50.4
 3. `media_unrecognized` 2 001 条抽样查因。
 4. 换声客户端常驻化 + 缓存 faiss 索引（省 0.5~1 s/次）。
 5. 长音频分块换声（>15 s 才能覆盖）。
+
+## 八、上面 1/2/3 条的落地结果（同一天做完）
+
+### ① CLI 冒烟：`tools/archcheck/cli_smoke.py`
+
+17 个子命令 × (--help + 最小实参) = **33 次真子进程调用，0 失败**，全部输出 JSON，
+全在**全新临时库**上跑（`AIJI_DB=.tmp/cli_smoke/aiji.db`，自动建出 30 张表）。
+产物 `results/cli_smoke.json`。第一版有 4 条失败，全是**我自己把实参写错**
+（`ingest` 要 `--kind/--text`、`feedback` 要 `--note`、`forget` 要 `--like/--id`、
+`self-memory` 要 `--add`），CLI 本身没有 bug。
+
+### ② `/api/being/checkup/live` 加结果缓存
+
+33.8 s 的探针不重复付账：同身份 10 分钟内命中缓存返回 `cached: true, age_s`，
+要新的传 `{"refresh": true}`。缓存挂在 `AijiHTTPServer.checkup_cache` 上（裸
+`ThreadingHTTPServer` 也能用，惰性建）。新增测试
+`tests/test_console_api.py::test_checkup_live_is_cached_and_refreshable`
+（mock 掉真探针，断言调用次数 2 而不是 3）。
+`/api/stickers/update` **不改**：它本身有 30 s 超时上限，是"我就要现在拉"的显式动作。
+
+### ③ `media_unrecognized` 2 001 条的真相：不是 OCR 质量差，是 QQ 的 URL 过期
+
+`data/aiji.db` 里 7 662 条 media，状态分布：
+
+| status | 条数 | 说明 |
+|---|---|---|
+| `low_confidence` | 3 760 | 其中 **2 807 条 `elapsed_ms < 1ms`**（根本没跑识别） |
+| `error` | 1 930 | **1 660 image + 257 voice 全是 `UrlGuardError: HTTP Error 400 ** |
+| `ok` | 1 870 | 全部 `elapsed_ms ≥ 0.1 s`，有真文本（如 `妈妈`/0.63、ASR 一句 0.9） |
+| timeout / metadata_only / unsupported | 53 / 31 / 18 | doctor 的 `media_unrecognized` = error+timeout+unsupported = 2 001 |
+
+- `error` 的 1 917 条是 `HTTP Error 400 Bad Request`——QQ 多媒体链接的 `rkey` 过期，
+  图片/语音**根本没下载下来**。结论：这 2 001 条**不能用来评价 OCR/ASR 质量**。
+- `low_confidence` 里 `elapsed<1ms` 的 2 807 条集中在 **10-31（1 049）和 11-01（1 758）**，
+  11-02 只有 55 条 —— 对应 `probe-2026-11-01-runtime.md` 记录的 **G1/R1「只有 url 的图片 OCR 不生效」**，
+  该 bug **在 11-02 已经被真实引擎接线修掉了**（11-02 当天 880/935 条走了真识别）。
+  也就是说这些是**修好之前的遗留记录**，不是现在的缺陷。
+
+### ④ 顺手把"空结果"和"低置信"分开
+
+`recognize.py` 以前只要是 `ok` 就按置信度判：跑完但**一个字都没识别出来**（表情包、静音、
+纯图）也记成 `low_confidence`，于是"3 760 条低置信"看起来像 OCR 不准。现在：
+跑完且清理后为空 → `status="empty"` + `meta.reason="no_text"`（`usable` 自然为 False），
+只有"有文本但置信度低于门槛"才叫 `low_confidence`。新增测试
+`tests/test_memory.py::test_empty_recognition_is_not_low_confidence`。
+**注意：历史 2 807 条遗留记录不会自动改写**（要不要回填另说）。
+
+验收：全量 **494/494** 通过（新增 2 个用例），`ruff check aiji tools tests` 干净
+（顺手清掉 19 处测试里的未用导入）。
+

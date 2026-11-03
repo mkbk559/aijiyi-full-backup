@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from aiji.hippocampus.db import DB
 from aiji.brain.gate import check_reply
-from aiji.heart.heart import Heart, OutboxEvent, LEASE_SECONDS
+from aiji.heart.heart import Heart, OutboxEvent
 from aiji.hippocampus.store import Ident
 
 

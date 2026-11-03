@@ -69,6 +69,18 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **体检前三项落地**（同 `docs/agent/evidence/project-audit-2026-11-03.md` §八）：
+  ①新增 `tools/archcheck/cli_smoke.py`：17 个子命令 33 次真子进程调用 **0 失败**、
+  全 JSON、在全新临时库上跑（30 张表）→ 补上 `cli.py` 的 0% 覆盖。
+  ②`/api/being/checkup/live` 加 10 分钟结果缓存（`cached/age_s`，`{"refresh":true}` 强制重跑），
+  带新测试；`/api/stickers/update` 不动（本身有 30 s 上限、是显式动作）。
+  ③查清 `media_unrecognized` 2 001 条：**1 917 条是 QQ 多媒体 `rkey` 过期 → `HTTP 400`**，
+  图片/语音压根没下载，**不能用来评价 OCR/ASR 质量**；`low_confidence` 里 2 807 条
+  `elapsed<1ms` 集中在 10-31/11-01，是 `probe-2026-11-01` 记的 **G1/R1 遗留**，
+  11-02 真实引擎接线后已修（当天 880/935 条走了真识别）。
+  ④`recognize.py` 新增 `empty` 状态：跑完没识别出字（表情包/静音）不再混记成 `low_confidence`，
+  只有"有文本但低于门槛"才算低置信；历史记录不回填。全量 **494/494**、`ruff aiji tools tests` 干净。
+
 - 2026-11-03 **全项目体检**，见 `docs/agent/evidence/project-audit-2026-11-03.md`。
   实测口径：`coverage`（492 用例全绿）**总覆盖 81%**（9 243 语句 / 漏 1 774）；
   **`senses/cli.py` 285 语句 0%、`endocrine/desktop_sense.py` 80 语句 0%**；

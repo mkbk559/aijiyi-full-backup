@@ -6,10 +6,8 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sys
-import time
 import unittest
 from pathlib import Path
 
@@ -20,7 +18,7 @@ from aiji.right_hand import params  # noqa: E402
 from aiji.right_hand.config import Settings  # noqa: E402
 from aiji.hippocampus.memory import Memory  # noqa: E402
 from aiji.brain.quota import CreditProvider, parse_credits, record_send, sends_last_24h
-from aiji.hippocampus.store import FactDraft, Ident, add_fact  # noqa: E402
+from aiji.hippocampus.store import Ident  # noqa: E402
 
 ME = Ident("quota", "me", "default")
 

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """实例注册表（solid_queue 语义）单测：崩溃接管、活实例不被误收、双实例认领互斥。"""
 import sys
-import time
 import unittest
 from pathlib import Path
 

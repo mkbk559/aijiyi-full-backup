@@ -244,6 +244,28 @@ class TestConsoleAPI(unittest.TestCase):
             time.sleep(0.01)
         self.assertEqual(sent[0][1], "咕噜")
 
+    def test_checkup_live_is_cached_and_refreshable(self):
+        """live_probe 实测 33.8 s，结果必须能复用；refresh 才真跑。"""
+        calls = []
+
+        def fake_probe(_self, ident, **_kwargs):
+            calls.append(ident)
+            return {"ok": True, "probe": len(calls)}
+
+        body = {"platform": "wechat", "user": "u1", "scope": "personal"}
+        with mock.patch("aiji.endocrine.being_checkup.BeingCheckup.live_probe",
+                        fake_probe):
+            first = self.post("/api/being/checkup/live", body)
+            second = self.post("/api/being/checkup/live", body)
+            fresh = self.post("/api/being/checkup/live", {**body, "refresh": True})
+        self.assertEqual(len(calls), 2, "第二次同身份调用应命中缓存")
+        self.assertFalse(first["cached"])
+        self.assertTrue(second["cached"])
+        self.assertEqual(second["probe"], 1)
+        self.assertGreaterEqual(second["age_s"], 0.0)
+        self.assertFalse(fresh["cached"])
+        self.assertEqual(fresh["probe"], 2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

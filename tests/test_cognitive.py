@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from aiji.hippocampus.db import DB
 from aiji.hippocampus.inject import Injector
-from aiji.right_hand.params import EPISODIC_HALF_LIFE_DAYS, RECALL_CHAT_POOL, RECALL_CHAT_TAKE, RECALL_LINK_BUDGET, RECALL_LINK_HOPS
+from aiji.right_hand.params import EPISODIC_HALF_LIFE_DAYS, RECALL_CHAT_TAKE, RECALL_LINK_BUDGET
 from aiji.hippocampus.recall import RecallResult, Recaller, half_life_days, now_bucket
 from aiji.hippocampus.store import Fact, FactDraft, Ident, add_fact, link_facts
 
@@ -183,7 +183,6 @@ class TestEpisodic(unittest.TestCase):
 class TestLinkCapAudit(unittest.TestCase):
     def test_dropped_outparam_reports_capped_edges(self):
         """dropped 出参：阈值之上被 cap 落选的候选按 sim 降序报告（审计口径）。"""
-        from aiji.hippocampus.store import link_facts
         db = mkdb("capdrop")
         texts = ["我住在苏州工业园区", "我住在苏州姑苏区", "我住在苏州吴中区",
                  "我住在苏州相城区"]
@@ -203,7 +202,6 @@ class TestLinkCapAudit(unittest.TestCase):
 
     def test_dropped_none_zero_overhead(self):
         """dropped=None（默认）：行为与旧签名完全一致，不产生额外状态。"""
-        from aiji.hippocampus.store import link_facts
         db = mkdb("capnone")
         with db.tx() as c:
             f1, _ = add_fact(c, IDENT, FactDraft("user", "备注", "西湖", "用户住在杭州西湖", 0.6))

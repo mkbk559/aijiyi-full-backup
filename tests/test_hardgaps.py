@@ -138,7 +138,6 @@ class TestSoftDeleteReadPaths(unittest.TestCase):
         hits = search_facts(db.conn(), IDENT, "杭州")
         self.assertTrue(all(h.id != fid for h in hits), f"search_facts 泄漏: {[(h.id, h.text) for h in hits]}")
         # 读路径 2：inject 按 id 回查（kinds 映射）
-        from aiji.hippocampus.inject import Injector
         rows = db.read("SELECT id, kind, confidence FROM fact WHERE id IN (?) AND status='active'", (fid,))
         self.assertEqual(len(rows), 0)
         # 读路径 3：recall 主链路
@@ -162,7 +161,7 @@ class TestFloorSlope(unittest.TestCase):
         trace = []
         for i in range(10):
             with db.tx() as c:
-                res = apply_correction(c, IDENT, cited_ids=[fid], text=f"不对，第{i}轮")
+                apply_correction(c, IDENT, cited_ids=[fid], text=f"不对，第{i}轮")
             row = db.read("SELECT confidence FROM fact WHERE id=?", (fid,))[0]
             trace.append(round(row["confidence"], 4))
         # 0.9 ×0.7^n：0.63 → 0.441 → 0.3087 → 0.2161 → 0.1513（近地板）→ 之后恒 ≤0.1513
@@ -212,7 +211,7 @@ class TestReplayIdempotent(unittest.TestCase):
     """P1：event_log 回放幂等 + 收敛（崩溃恢复语义）。"""
 
     def _mk(self, name):
-        from aiji.heart.heart import Heart, OutboxEvent
+        from aiji.heart.heart import Heart
         db = mkdb(f"replay_{name}")
         h = Heart(db)
         a = Ident("qq", "u_a")
@@ -239,7 +238,6 @@ class TestReplayIdempotent(unittest.TestCase):
 
     def test_replay_converges_with_new_events(self):
         """收敛：回放后新事件追加，再次回放 = 旧事件 + 新事件（正序、无重复）。"""
-        from aiji.heart.heart import Heart, OutboxEvent
         db, h, a = self._mk("conv")
         old = h.replay_recent(a, limit=100)
         h.enqueue(a, OutboxEvent(kind="comment", text="new1"))

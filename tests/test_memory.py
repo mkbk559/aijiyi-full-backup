@@ -41,7 +41,7 @@ from aiji.hippocampus.inject import FOOTER, HEADER, STYLE_HEADER  # noqa: E402
 from aiji.brain.pool import ModelPool, PoolExhausted  # noqa: E402
 from aiji.hippocampus.recognize import Item, Recognizers  # noqa: E402
 from aiji.throat.server import make_server  # noqa: E402
-from aiji.hippocampus.store import FactDraft, Ident, add_fact, add_media, media_for, put_summary, search_facts, upsert_profile, upsert_style
+from aiji.hippocampus.store import FactDraft, Ident, add_fact, put_summary, search_facts, upsert_profile, upsert_style
 
 WX = Ident("wechat", "u1", "default")
 DY = Ident("douyin", "u1", "default")
@@ -757,6 +757,18 @@ class TestRecognize(TmpDB):
         r = self.r(ocr=lambda item: ("糊成一团的文字", 0.3), min_confidence=0.5)
         env = r.recognize(Item("image", ref="m", url="u"))
         self.assertEqual(env.status, "low_confidence")
+        self.assertFalse(env.usable)
+
+    def test_empty_recognition_is_not_low_confidence(self):
+        """跑完但没识别出字（表情包/静音）记 empty，别混成 low_confidence。
+
+        2026-11-03 体检：库里 3 760 条 low_confidence 中 880 条其实真跑了 OCR 且输出为空，
+        混在一起会让人得出"OCR 质量差"的错误结论。
+        """
+        r = self.r(ocr=lambda item: ("", 0.0), min_confidence=0.5)
+        env = r.recognize(Item("image", ref="m", url="u"))
+        self.assertEqual(env.status, "empty")
+        self.assertEqual(env.meta["reason"], "no_text")
         self.assertFalse(env.usable)
 
     def test_recognizer_timeout(self):

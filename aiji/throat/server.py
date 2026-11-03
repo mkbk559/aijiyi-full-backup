@@ -814,9 +814,23 @@ class _Handler(BaseHTTPRequestHandler):
                     code, payload = self._sticker_error(exc)
                     return self._send(code, payload)
             if path == "/api/being/checkup/live":
+                # 这个探针要克隆整库 + 跑真模型，实测 33.8 s（route_smoke 2026-11-03）。
+                # 结果按身份缓存 10 分钟，重复点不再等；要新的就传 {"refresh": true}。
                 from aiji.endocrine.being_checkup import BeingCheckup
-                result = BeingCheckup(self.memory).live_probe(self._ident(body))
-                return self._send(200, result)
+                ident = self._ident(body)
+                key = (ident.platform, ident.platform_user_id, ident.scope)
+                cache = getattr(self.server, "checkup_cache", None)
+                if cache is None:  # 测试里可能用裸 ThreadingHTTPServer
+                    cache = {}
+                    self.server.checkup_cache = cache
+                hit = cache.get(key)
+                now = time.time()
+                if hit and not body.get("refresh") and now - hit[0] < 600:
+                    return self._send(200, {**hit[1], "cached": True,
+                                            "age_s": round(now - hit[0], 1)})
+                result = BeingCheckup(self.memory).live_probe(ident)
+                cache[key] = (now, result)
+                return self._send(200, {**result, "cached": False})
             if path == "/api/mcp/research":
                 research = getattr(self.memory, "mcp_research_loop", None)
                 if research is None:
@@ -1278,6 +1292,11 @@ class AijiHTTPServer(ThreadingHTTPServer):
     life_loop: Any = None
     mcp_research_loop: Any = None
     sticker_loop: Any = None
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # /api/being/checkup/live 的结果缓存（身份 → (时间戳, 结果)）
+        self.checkup_cache: dict[Any, Any] = {}
 
     def server_close(self) -> None:
         loop = self.life_loop

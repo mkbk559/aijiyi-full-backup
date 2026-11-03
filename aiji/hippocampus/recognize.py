@@ -7,6 +7,8 @@
 - **不按类型分叉**：调用方拿到 Envelope 之后，文本/OCR/ASR/表情的处理代码是同一段。
 - **全部异步**：本模块只在 worker 线程被调用，主链路不碰它。
 - **超时 + 置信度门槛**：每个识别器有超时；低于门槛的结论标 `low_confidence`，**不喂给抽取层**。
+- **空结果 ≠ 低置信**：跑完但一个字都没识别出来（表情包、纯图片、静音）记 `empty`，
+  以前混在 `low_confidence` 里，会让"OCR 质量差"这种判断凭空成立（2026-11-03 体检踩到）。
 - **原始文件不入库**：这里只收 `ref`/`url`/`size_bytes`，从不收字节；OCR/ASR 由外部引擎做。
 - 初期只做 text / image / voice / emoji 四类正经识别：
   video 只留元数据（`metadata_only`），复杂视觉理解明确不做。
@@ -75,7 +77,7 @@ class Envelope:
     ref: str
     text: str
     confidence: float
-    status: str  # ok | low_confidence | unsupported | timeout | error | metadata_only
+    status: str  # ok | low_confidence | empty | unsupported | timeout | error | metadata_only
     recognizer: str
     elapsed_ms: float = 0.0
     meta: dict[str, Any] = field(default_factory=dict)
@@ -178,7 +180,13 @@ class Recognizers:
         env.text = text
         if truncated:
             env.meta["truncated"] = True
-        if env.status == "ok" and env.confidence < self.min_confidence:
+        if env.status == "ok" and not env.text:
+            # 跑完了但一个字都没识别出来（表情包/纯图片/静音），这和"识别出内容但没把握"
+            # 是两件事。以前都记成 low_confidence，2026-11-03 体检时 3 760 条 low_confidence
+            # 里有 880 条其实是"空"（11-02 那天真跑了 OCR，输出为空），会让人误判成 OCR 质量差。
+            env.status = "empty"
+            env.meta.setdefault("reason", "no_text")
+        elif env.status == "ok" and env.confidence < self.min_confidence:
             env.status = "low_confidence"
         env.elapsed_ms = (time.perf_counter() - t0) * 1000
         self.by_status[env.status] = self.by_status.get(env.status, 0) + 1
