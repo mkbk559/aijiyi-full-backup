@@ -881,3 +881,37 @@ WS 服务端把"连上就断"记成握手失败。改法：先读 netstat（无�
 **顺带修掉的两个"假绿"**：`test_completed_job_survives_service_restart` 以前靠 `_persist`
 崩溃打死工作线程才通过；`test_link_title` 依赖真实 DNS（本机网络抖一下就红），
 现在 SSRF 守卫支持注入 resolver（excluded #101–#103）。
+
+## 2026-11-04 自我迭代第 12–19 轮（覆盖率 + 守门测试 + 线上重启验证）
+
+**规模**：全量 suite 1128 条（v48），整包覆盖率 **93%**（9990 语句 / 693 未覆盖）。
+基线是第 11 轮的 903 条 / 91%——这七轮净增 225 条用例。
+
+**打到 100% 的模块**（原来都在 69%–86%，都是"写错也不报错"的地方）：
+`octop_gateway.py`（69→100，非 OneBot 平台的唯一入口，用假包注入 sys.modules）、
+`params.py`（79→100，并抓出两个真问题：两个参数缺来源注释导致 `snapshot()` 输出
+`(无来源标注！)`、`RECALL_DECAY_MODE` 下方残留"默认 fsrs"孤儿注释与真实默认矛盾）、
+`service_control.py`（84→100，控制台按钮的手：schtasks 注册/删除、脚本拉起）、
+`recognize.py`（82→100，识别层：空≠低置信、无引擎不许编、超时要 cancel、SSRF 先过关）、
+`mcp_client.py`（83→100，把外部进程拉起来的唯一入口，配置校验逐条断言拒绝文案）。
+
+**新增的守门测试**（每一份都对应一类"静默坏掉"）：
+`test_server_routes.py`（32）、`test_params.py`（8）、`test_service_control.py`（45）、
+`test_recognize_edges.py`（35）、`test_mcp_client.py`（30）；
+前几轮的 `test_identity_isolation.py`（13）、`test_identity_sql_runtime.py`（3）、
+`test_console_contract.py`（5）、`test_early_exit_body.py`（4）继续守着身份隔离、
+控制台路径契约、以及"提前返回不读完 body 会 RST"。
+
+**修掉的真缺陷**（都有 A/B 证据）：
+1. 空白消息算一条对话（`_clip_text` 不 strip）——线上 A/B：重启前 202 / 重启后 400
+2. `snapshot()` 里 onebot 的 `_established()` 在 try 外，探针抛 OSError 会让
+   `/api/operations/services` 整体 500（服务面板白屏）
+3. 401/404 提前返回不读 body → 客户端 `WinError 10053`：A/B 8 次里 5 次 abort → 0 次
+4. `params.snapshot()` 两处 `(无来源标注！)` + 一条自相矛盾的孤儿注释
+
+**线上一致性**：改完 `aiji/` 代码，8787 的进程仍跑旧代码，必须
+`taskkill` + `Start-ScheduledTask -TaskName 'AIJiYi Console Watchdog'` 才生效
+（规程与证据见 `PROJECT_STATE.md` 末尾与 `tools/live_probe_turns.py`）。
+
+**证据**：`docs/agent/evidence/self-iterate-round12..18-2026-11-03.md`；
+新增教训见 `excluded.md` #135–#145。

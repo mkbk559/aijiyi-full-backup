@@ -1138,3 +1138,16 @@ A/B 实测（`.tmp/ab_finish_body.py`，证据归档 224221-ab-finish-body-rst�
 单跑通过、整包 suite 满负载时 `empty` 抖成 `timeout`（v48 唯一那条 failure）。
 **规则**：线程池里的调用要按"最坏排队时间"给预算（这层给 2 秒），
 要专门测超时就自己造一个短预算实例，别让正常用例背这个风险。
+
+## 146. 改完 `aiji/` 代码，线上控制台还跑旧代码（2026-11-04 实测）
+
+8787 是计划任务拉起的常驻进程，**不会**因源码变更热重载；`ensure_console.ps1`
+只在进程消失时补拉。所以"修好了 + 测试绿了"不等于线上生效。
+2026-11-04 实测同一条请求：重启前 `POST /turns {"content":"   "}` → 202（旧代码），
+重启后 → 400 `content_required`。归档 `…\000136-live-probe-before-46e988\` 与
+`…\000200-live-probe-after-44e27f\`。
+**规程**：`Get-NetTCPConnection -LocalPort 8787 -State Listen` 拿 PID →
+`taskkill /PID <pid> /F` → `Start-ScheduledTask -TaskName 'AIJiYi Console Watchdog'` →
+轮询 `/health` 到 200（实测 6 秒）。探针脚本 `tools/live_probe_turns.py`。
+**顺带**：归档用的 `cmd` 控制台按 GBK 解码，脚本里的中文标签会被洗成乱码（数据行是 ASCII 不受影响）；
+要中文标签就别走 `cmd` 归档，或直接给标签用 ASCII。

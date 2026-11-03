@@ -35,7 +35,7 @@
 
 ```bash
 cd D:\AIJiYi
-python -m unittest discover -s tests -t .                       # 2026-11-03：452 tests, OK（全绿，含 3 条 hypothesis 属性测试）
+python -m unittest discover -s tests -t .                       # 2026-11-04：1128 tests, OK（整包覆盖率 93%，见下方"当前数字"）
 python -m unittest tests.test_console_workspace                 # 期望：Ran 4 tests, OK（桌宠/工作区/终端/资源）
 python bench/bench_recall.py --facts 5000 --platforms 4         # 期望：ok=true，p99 < 100ms
 python bench/bench_http.py   --facts 5000 --clients 4 --rounds 10
@@ -800,3 +800,32 @@ python bench/demo_loop.py                                       # 端到端：�
   127.0.0.1 客户端）。任何本机网页或本地 HTML 因此都能读接口数据——与"任何本地进程本来就能
   curl"同一威胁级别，但**不要**把服务绑到 `0.0.0.0`，也不要给它加公网反代。
 - ~~**`data/pet_state.json` 两个写入方**~~：桌宠已于 2026-11-03 整体删除，这条风险随之消失。
+
+## 2026-11-04 当前数字（自我迭代第 12–19 轮后的状态）
+
+- 测试：`python tools/archcheck/run_suite.py tools/archcheck/results/suite_vNN.json`
+  一次跑完 **1128 条**（含 hypothesis 属性测试）；最近日志 `suite_v48.json`
+- 覆盖率：`python -m coverage run --source=aiji tools/archcheck/run_suite.py …` →
+  **整包 93%**（9990 语句 / 693 未覆盖）
+- **已把以下模块打到 100%**：`octop_gateway.py`、`params.py`、`admin.py`、`onebot.py`、
+  `social_service.py`、`service_control.py`、`recognize.py`、`mcp_client.py`
+- 新增的守门测试（不是凑覆盖，是"写错不会报错"的地方）：
+  `test_identity_isolation.py`（13）、`test_identity_sql_runtime.py`（3）、
+  `test_identity_sql_audit.py`、`test_console_contract.py`（5，控制台 32 条路径对得上服务端）、
+  `test_early_exit_body.py`（4，401/404/413 提前返回必须把 body 读完，否则 RST）、
+  `test_server_routes.py`（32，开关门两个方向）、`test_params.py`（8，参数来源注释）、
+  `test_service_control.py`（45）、`test_recognize_edges.py`（35）、`test_mcp_client.py`（30）
+- **改完 `aiji/` 的代码，线上控制台不会自动生效**：8787 那个进程一直跑的是**启动时**的代码。
+  要生效必须重启：
+
+  ```powershell
+  Get-NetTCPConnection -LocalPort 8787 -State Listen   # 拿 OwningProcess
+  taskkill /PID <pid> /F
+  Start-ScheduledTask -TaskName 'AIJiYi Console Watchdog'
+  # 约 6-10 秒后 http://127.0.0.1:8787/health 恢复 200
+  ```
+
+  2026-11-04 实测：重启前 `POST /turns {"content":"   "}` 返回 **202**（旧代码把空白当一条对话），
+  重启后同一条返回 **400 content_required**（证据见
+  `C:\Users\22166\.dsh\evidence\2026-11-03\000136-live-probe-before-46e988\` 与
+  `…\000200-live-probe-after-44e27f\`）。探针脚本：`tools/live_probe_turns.py`。
