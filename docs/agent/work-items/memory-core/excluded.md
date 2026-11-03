@@ -982,3 +982,42 @@ humanize 用例复现了）。run_suite 已改成把 traceback 存进 JSON
 于是断言指向了 `--pitch` 这个字面量。**正确写法**是按 token 定位：
 `command[command.index("--out") + 1]`。同理，写产物也要按 token 找路径，
 否则假执行器会把文件写到 cwd 下一个叫 `--out` 的文件里。
+
+## 132. 空正文的 200 响应被当成成功（2026-11-03 修复）
+
+`pool._post` 原来直接 `return str(message.get("content") or "")`，于是
+"HTTP 200 + content 空串"被记成成功：不换路由、不重试、不冷却，`Head` 把空串
+当回复发出去。用户看到的是"机器人突然不说话了"，日志里却全绿。
+**实测**：本机网关 `max_tokens=20` 时 `content` 就是 `""`（预算被推理吃掉）。
+修法：空正文且没有 `tool_calls` → `_RouteError("empty_content", retryable=True)`，
+全路由都空 → `PoolExhausted` → 兜底文案。真机复验（生产进程、
+`max_tokens=1`）返回 `'刚才没接上，等我一下。'`，不再是空串。
+**教训**：只要中间层"把上游的退化响应当正常值往上抛"，上层就永远看不见失败。
+
+## 133. `addCleanup` 是后进先出，HTTP 假服务器要按 shutdown → close 注册（2026-11-03）
+
+写 `tests/test_pool_resilience.py` 时先注册 `shutdown` 再注册 `server_close`，
+结果是 close 先跑、shutdown 后跑，`selectors.select` 上抛
+`OSError: [WinError 10038] 在一个非套接字上尝试了一个操作`。
+正确顺序：先 `addCleanup(server_close)`、后 `addCleanup(shutdown)`。
+（测试仍然全绿，但每个用例都会喷一段线程异常栈，等于把"绿"污染了。）
+
+## 134. `/api/turns`、`/api/stats` 在控制台里不存在（2026-11-03 复核）
+
+第 11 轮 E2E 里试探这两个路径都是 404。真实存在的是
+`/api/capabilities`、`/api/self`、`/api/memory/library`（带身份参数）、
+`/api/turns`（无）。要么补只读接口，要么在文档里写清"没有"，别让调用方反复试错。
+
+
+## 134. 控制台没有 `/api/turns`、`/api/stats`、`/api/memory/library`（2026-11-03 复核）
+
+第 11 轮 E2E 试探这几个路径全是 404。`throat/server.py` 里真实存在的是：
+`/api/memories`、`/api/memory-graph`、`/api/recent-turns`、`/api/injections`、
+`/api/capabilities`、`/api/self`、`/api/growth`、`/api/scheduler`、`/api/models`、
+`/api/social`、`/api/stickers`、`/api/life`、`/api/proactive`、`/api/mcp`、
+`/api/actions/{pending,stats}`、`/api/integrations/onebot`、`/api/operations/*`、
+`/v1/{models,voices,songs,voices/use,chat/completions,embeddings,audio/speech}`、
+`/stats`、`/media`、`/style`、`/being`、`/accounts`、`/health`。
+**教训**：名字相近的路径最容易靠印象写错（`/api/turns` vs `/api/recent-turns`、
+`/api/stats` vs `/stats`、`/api/memory/library` vs `/api/memories`）。
+探接口前先 grep 路由表，别拿记忆当文档。

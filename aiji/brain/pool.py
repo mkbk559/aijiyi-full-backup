@@ -221,7 +221,13 @@ class ModelPool:
                     ))
                 except (TypeError, ValueError, AttributeError):
                     continue
-            return str(message.get("content") or ""), calls
+            text = str(message.get("content") or "")
+            if not text.strip() and not calls:
+                # 200 但正文是空的（网关积分不足、max_tokens 被推理吃掉、上游截断）：
+                # 当成这条路线坏了，换下一条。否则会把空消息当"成功"发出去，
+                # 用户端表现是"机器人不说话了"，而且一次都不会重试。
+                raise _RouteError("empty_content", retryable=True)
+            return text, calls
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise _RouteError("bad_response", retryable=True) from exc
 
