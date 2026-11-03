@@ -200,6 +200,7 @@ class _Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         if n <= 0:
             return {}
+        self._body_consumed = True
         if n > self.MAX_BODY_BYTES:
             # 超过 8 MB 的请求体没有合法用途（实测 1.4 MB 的单条文本都能被 /ingest
             # 接进队列，会把库和注入预算一起撑坏）。但要**把 body 读空再回 413**：
@@ -212,6 +213,24 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             return {}
         return data if isinstance(data, dict) else {}
+
+    def _finish_body(self) -> None:
+        """回应前把没读过的请求体读空。
+
+        Windows 上"服务端先关、客户端还在写"会给出
+        `ConnectionAbortedError: [WinError 10053]`，客户端连状态码都拿不到
+        （401/404 这种早退路径最容易踩）。413 分支早就这么做了，
+        这里把它变成所有响应的统一收尾。
+        """
+        if getattr(self, "_body_consumed", False):
+            return
+        self._body_consumed = True
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            n = 0
+        if n > 0:
+            self._drain(n)
 
     def _drain(self, n: int, chunk: int = 65_536) -> None:
         """把多余请求体读掉丢掉（最多 64 MB），避免客户端收到 RST。"""
@@ -281,8 +300,9 @@ class _Handler(BaseHTTPRequestHandler):
         return bool(token) and hmac.compare_digest(str(expected), str(token))
 
     def _unauthorized(self) -> None:
-        # The rejected request body may still be unread. Close the HTTP/1.1
-        # connection so the client can reliably consume the 401 response.
+        # 被拒绝的请求体可能还没读：先读空再关连接，客户端才能稳定拿到 401
+        # （直接关会变成 RST / WinError 10053）。
+        self._finish_body()
         self.close_connection = True
         self.send_response(401)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -319,6 +339,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _send(self, code: int, payload: dict[str, Any]) -> None:
+        self._finish_body()
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -327,6 +348,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _send_html(self, html: str) -> None:
+        self._finish_body()
         data = html.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
