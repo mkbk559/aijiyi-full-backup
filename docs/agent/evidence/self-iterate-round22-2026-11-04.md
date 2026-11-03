@@ -114,3 +114,14 @@ GET  /api/capabilities  -> 200 bytes=2427
   sticker 循环的 `_run` 是第一句 `wait(initial_delay_s)`，读过代码是好的
 - 线上部署默认仍开三个循环：这是产品选择，不是缺陷；要关现在有 `AIJI_*_LOOP` / `AIJI_STICKER_UPDATE` 三个入口
 - 下一轮候选：`extract.py` 86%、`real_engines.py` 88%、`server.py` 85%；控制台按钮级 E2E
+
+## 两条独立路径复核（本轮结论不是单一工具的转述）
+
+| 路径 | 命令 | 结果 | 外网请求 |
+|---|---|---|---|
+| 1（覆盖率壳 + 逐例结果 JSON） | `python -m coverage run --source=aiji tools\archcheck\run_suite.py tools\archcheck\results\suite_v54.json` | `ran=1207 ok=1207 errors=0 failures=0` | `suite_v54.log` 里 `HTTP Request:` = **0** |
+| 2（完全不经 run_suite） | `python -m unittest discover -s tests -t .` | `OK`（exit 0） | `.tmp\discover_check.log` 里 `HTTP Request:` = **0** |
+
+两条路径的"0 次外网请求"是同一个机械计数：
+`(Select-String -Path <log> -Pattern 'HTTP Request:' -AllMatches).Count`。
+对照基线（同一条命令打在 v51/v52/v53 上）：527 / 441 / 549。
