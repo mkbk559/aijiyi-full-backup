@@ -102,7 +102,11 @@ def score(reply: str, *, age: float | None = None) -> dict:
 
 
 def main() -> None:
-    # 年龄可以通过 `--age 14` 锁定，用来证明"人格随年龄变化"而不是一张固定贴纸
+    # 阶段可以钉住，用来证明"人格随学习阶段变化"而不是一张固定贴纸。
+    # `--stage high` 是 v2 的正式用法；`--age 16` 是兼容写法（按年龄落到对应阶段）。
+    stage = None
+    if "--stage" in sys.argv:
+        stage = sys.argv[sys.argv.index("--stage") + 1]
     age = None
     if "--age" in sys.argv:
         age = float(sys.argv[sys.argv.index("--age") + 1])
@@ -118,6 +122,8 @@ def main() -> None:
         "summary_model": False, "reflection_interval_s": 3600,
         "sticker_update": False, "actions_enabled": False,
     }
+    if stage is not None:
+        payload["persona_stage"] = stage
     if age is not None:
         payload["persona_age"] = age
     cfg.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -172,7 +178,7 @@ def main() -> None:
         "forbidden_hits": {k: [r["prompt"] for r in rows if k in r["forbidden"]]
                            for k in FORBIDDEN if any(k in r["forbidden"] for r in rows)},
     }
-    suffix = "" if age is None else f"_age{age:g}"
+    suffix = "" if stage is None else f"_{stage}"
     (ROOT / "tools" / "archcheck" / "results"
      / f"persona_child_live{suffix}.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

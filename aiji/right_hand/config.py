@@ -96,10 +96,11 @@ class Settings:
     typing_min_ms: int = 300
     typing_max_ms: int = 1800
     persona: str = "child"
-    # 成长引擎：年龄是唯一真源。persona_age 锁定年龄（None=按真实时间走），
-    # aging_rate = 每个真实天对应的角色天数（默认 30，约 12 天长大一岁）。
+    # 成长引擎 v2：阶段由"学习量（学分）"决定，**没有按时间长大的速率**。
+    # persona_stage 直接把阶段钉住（primary/middle/high/university/work，None=按学分走）；
+    # persona_age 是兼容旧配置的另一种钉法（按年龄落到对应阶段）。
     persona_age: float | None = None
-    aging_rate: float | None = None
+    persona_stage: str | None = None
     # 执行层：Function Calling 工具与人工审批
     actions_enabled: bool = True
     action_root: str = ""
@@ -202,18 +203,21 @@ class Settings:
         s.persona = str(
             cfg.get("persona") or os.environ.get("AIJI_PERSONA") or s.persona
         ).strip() or "child"
-        # 成长引擎：年龄锁定 / 成长速率（环境变量优先，方便演示与验收复现）
-        for key, env_name in (("persona_age", "AIJI_PERSONA_AGE"),
-                              ("aging_rate", "AIJI_AGING_RATE")):
-            raw = cfg.get(key)
-            if raw is None:
-                raw = os.environ.get(env_name)
-            if raw is None or raw == "":
-                continue
+        # 成长引擎 v2：阶段钉住 + 旧的年龄钉住（环境变量优先，方便演示与验收复现）。
+        # 注意：**没有 aging_rate**——成长只看学分，不看真实时间。
+        raw = cfg.get("persona_age")
+        if raw is None:
+            raw = os.environ.get("AIJI_PERSONA_AGE")
+        if raw not in (None, ""):
             try:
-                setattr(s, key, float(raw))
+                s.persona_age = float(raw)
             except (TypeError, ValueError):
                 pass
+        stage = cfg.get("persona_stage")
+        if stage is None:
+            stage = os.environ.get("AIJI_PERSONA_STAGE")
+        if stage not in (None, ""):
+            s.persona_stage = str(stage).strip() or None
         # 人格预设自带推荐口癖：配置/环境变量都没显式给 tics 时按 persona 取默认。
         # （例如 persona=child → "为什么呀/我跟你讲/才不是呢…"，口癖抽取与风格
         # 改写都会用到，否则小孩设定只影响提示词、不影响风格层。）

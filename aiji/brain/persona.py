@@ -282,8 +282,8 @@ def few_shot(name: str | None, limit: int = 3) -> list[dict[str, str]]:
     if key == "child":
         from .growth import current
 
-        # 满 10 岁就不再喂幼儿语气示例（否则会把少年拉回小孩腔）
-        if current().age_years() >= 10.0:
+        # 离开小学阶段就不再喂幼儿语气示例（否则会把初中生拉回小孩腔）
+        if current().stage().id != "primary":
             return []
         pairs = CHILD_FEW_SHOT[:max(1, int(limit))]
         lines = ["## 语气示例（这些不是你们真说过的话，不要当成历史、也不要复述）"]

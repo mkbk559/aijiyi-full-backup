@@ -251,12 +251,19 @@ class Head:
             mode="chat",
         )
         persona_key = persona or getattr(self.memory.settings, "persona", "default")
-        # 成长引擎：年龄是唯一真源，人格文案从年龄渲染（配置可锁定年龄/速率）
+        # 成长引擎 v2：阶段由"学习量（学分）"决定，不看真实时间；
+        # 每轮先结算一次增量（内部 60 秒节流），再从阶段渲染人格文案。
         growth_mod.configure(
             age=getattr(self.memory.settings, "persona_age", None),
-            rate=getattr(self.memory.settings, "aging_rate", None),
+            stage=getattr(self.memory.settings, "persona_stage", None),
         )
-        persona_age = growth_mod.current().age_years()
+        try:
+            growth_mod.current().sync(getattr(self.memory, "db", None))
+        except Exception:  # noqa: BLE001 - 结算失败也要能正常聊天
+            pass
+        persona_growth = growth_mod.current()
+        persona_age = persona_growth.age_years()
+        persona_stage = persona_growth.stage().id
         persona_block = persona_mod.style_block(persona_key)
         caller_name = ""
         preferred_name = ""
@@ -294,6 +301,7 @@ class Head:
                 ),
                 persona=persona_key,
                 age=persona_age,
+                stage=persona_stage,
             )
             + (f"\n\n{persona_block}" if persona_block else "")
             + (f"\n\n{system_suffix}" if system_suffix else "")
@@ -502,7 +510,8 @@ class Head:
                 raw,
             )
         # 出口硬上限：先按平台裁进字符预算，再交给闸门校验（裁过不再整条丢弃）
-        if persona_key == "child" and persona_age < 15:
+        # 小学/初中还在学说话，模型偶尔会甩代码围栏出来，直接剥掉。
+        if persona_key == "child" and persona_stage in ("primary", "middle"):
             raw = gate_mod.strip_code_fences(raw)
         raw = fit_reply(raw, reply_char_limit(ident.platform))
         gate = check_reply(raw)

@@ -19,7 +19,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
                  "max_turns_per_session", "turn_keep", "inject_chars", "inject_items",
                  "inject_min_rel"),
     "识别与对话": ("recognize_timeout_s", "min_confidence", "asr_model", "persona",
-                   "persona_age", "aging_rate",
+                   "persona_age", "persona_stage",
                    "reflection_interval_s", "debounce_ms", "humanize_min_ms",
                    "humanize_max_ms", "typing_min_ms", "typing_max_ms",
                    "fallback_cooldown_s", "writer_backlog_heuristic_at"),
@@ -48,7 +48,10 @@ CHOICES = {
     "rank_mode": ("weighted", "rrf", "rrf_shadow"),
     "onebot_group_mode": ("mention", "all", "off"),
     "qq_mode": ("auto", "mention", "all", "off"),
+    "persona_stage": ("primary", "middle", "high", "university", "work"),
 }
+# 默认值是 None、但语义上是文本的键（不能按"数字或空值"校验）
+TEXT_KEYS = frozenset({"persona_stage"})
 MINIMUM = {
     "budget_ms": 1, "workers": 1, "top_k": 1, "recent_turns": 1,
     "max_attempts": 1, "recognize_timeout_s": 0.1, "min_confidence": 0,
@@ -66,11 +69,11 @@ MINIMUM = {
     "qq_auto_daily_max": 1, "qq_auto_burst_max": 1,
     "qq_auto_min_recent": 1, "qq_heart_silence": 0,
     "qq_heart_cooldown": 0, "qq_heart_daily": 1,
-    "persona_age": 4, "aging_rate": 0.1,
+    "persona_age": 4,
 }
 MAXIMUM = {"min_confidence": 1, "inject_min_rel": 1,
            "qq_auto_interject_chance": 1, "qq_auto_max_chance": 1,
-           "persona_age": 60, "aging_rate": 365.25}
+           "persona_age": 60}
 EDITABLE = frozenset(key for names in GROUPS.values() for key in names)
 DEFAULT = Settings()
 
@@ -109,9 +112,14 @@ def _validate(key: str, value: Any) -> Any:
     if default is None:
         if value is None:
             return None
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(f"{key} 必须是数字或空值")
-        value = float(value)
+        if key in TEXT_KEYS:
+            if not isinstance(value, str) or len(value) > 100:
+                raise ValueError(f"{key} 必须是短文本")
+            value = value.strip()
+        else:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"{key} 必须是数字或空值")
+            value = float(value)
     elif isinstance(default, bool):
         if not isinstance(value, bool):
             raise ValueError(f"{key} 必须是布尔值")

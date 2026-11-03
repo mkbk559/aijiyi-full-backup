@@ -69,6 +69,22 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **成长引擎 v2：按学习阶段长大，不看真实时间**（用户定稿：
+  「成长绝对不能靠真实时间，事件全部按照真实时间，主动性也要按真实时间，
+  成长按小学/初中/高中/大学/工作，学习到哪成长到哪」）。
+  设计+证据 `docs/agent/design/growth-v2-2026-11-03.md`（v1 已标作废）。
+  **三条时间分工**：成长=学分（fact 1 / reflection 2 / trait 5 / session 3 / turn 0.1 / learn 2），
+  门槛 1200/4000/9000/16000；事件=真实时间；主动性节奏=真实时间（各有守卫用例，且反证
+  "同一份数据时钟后拉一年，阶段与年龄不变"）。
+  **年龄**退化为"阶段内按学分插值"的显示值，`describe()` 里 `age_source=learning`、
+  `time_based_growth=false`；`aging_rate` 设置项已删除，`persona_stage`（`AIJI_PERSONA_STAGE`）
+  可钉住阶段，`persona_age` 保留作兼容。
+  **踩坑**：账本原先写死不随库走，跑一次全量测试就把临时库基线写进生产账本、
+  历史存量 29837 学分把人直接推到"工作"；已改成账本跟随库 + `db_path` 守卫 + `bind_path()`，
+  验收方式是全量 546 用例跑完生产 xp 前后都是 0.0（excluded #99/#100）。
+  真机：小学档 9/9 clean、平均 38.8 字；初中档 9/9 clean、平均 54.7 字。
+
+
 - 2026-11-03 **清除"会影响人设"的旧数据（`trait` 表清零）**，证据
   `docs/agent/evidence/persona-purge-2026-11-03.md`，脚本 `tools/purge_persona_residue.py`。
   用户：「你决定，还有之前影响人设的全部删除」。

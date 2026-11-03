@@ -280,30 +280,39 @@ def cmd_quota(args: argparse.Namespace) -> int:
 
 
 def cmd_grow(args: argparse.Namespace) -> int:
-    """成长状态：现在多大、什么阶段、下一次进阶还要多久、能不能手动改。"""
+    """成长状态：学到哪、什么阶段、离下一级还差多少学分。
+
+    成长只看学习量（学分），**不看真实时间**；`--set-stage` 是演示/验收用的钉住。
+    """
     from aiji.brain import growth
 
     g = growth.Growth()
-    data = g.state()
-    start = float(data.get("start_age") or growth.START_AGE)
-    rate = float(data.get("rate") or growth.DEFAULT_RATE)
-    if args.rate is not None:
-        if args.rate <= 0:
-            raise SystemExit("aging_rate 必须大于 0")
-        rate = float(args.rate)
-    if args.set_age is not None or args.rate is not None:
-        age = float(args.set_age) if args.set_age is not None else g.age_years()
-        age = max(growth.MIN_AGE, min(growth.MAX_AGE, age))
-        # 反推出生时间：改完以后真实时间继续正常走
-        back_days = (age - start) * growth.YEAR_DAYS / rate
-        data["birth_at"] = g.now() - back_days * 86400.0
-        data["rate"] = rate
+    if args.set_stage:
+        try:
+            g.set_stage(args.set_stage)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+    if args.scale is not None:
+        if args.scale <= 0:
+            raise SystemExit("scale 必须大于 0")
+        data = g.state()
+        data["scale"] = float(args.scale)
         g.save(data)
+    if args.sync or True:          # 看状态顺手结算一次，免得显示落后于库
+        try:
+            from aiji.right_hand.config import Settings
+
+            settings = Settings.load(getattr(args, "config", None))
+            db_path = getattr(args, "db", None) or settings.db_path
+            g.sync(str(db_path), force=True)   # 只读计数，不启整套 Memory
+        except Exception:  # noqa: BLE001 - 结算失败也照样能看
+            pass
     out = g.describe()
     out["path"] = str(g.path)
+    out["weights"] = dict(growth.WEIGHTS)
     out["stages"] = [
-        {"id": s.id, "label": s.label, "range": [s.age_min, s.age_max],
-         "sentence": s.sentence, "topics": s.topics}
+        {"id": s.id, "label": s.label, "school": s.school, "xp_min": s.xp_min,
+         "range": [s.age_min, s.age_max], "sentence": s.sentence, "topics": s.topics}
         for s in growth.STAGES
     ]
     print(json.dumps(out, ensure_ascii=False, indent=2))
@@ -430,11 +439,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="把反代当前积分写进 data/credits.json（按单价折算成每日次数）")
     sp.set_defaults(func=cmd_quota)
 
-    sp = sub.add_parser("grow", help="成长状态：年龄/阶段/下次进阶；可 --set-age 手动调")
-    sp.add_argument("--set-age", type=float, default=None,
-                    help="把当前年龄改到 X 岁（反推出生时间，之后继续正常长）")
-    sp.add_argument("--rate", type=float, default=None,
-                    help="成长速率：1 个真实天 = 多少角色天（默认 30）")
+    sp = sub.add_parser(
+        "grow",
+        help="成长状态：学分/阶段/离下一级差多少；可 --set-stage 钉住、--scale 调节门槛")
+    sp.add_argument("--set-stage", default=None,
+                    choices=["primary", "middle", "high", "university", "work"],
+                    help="把阶段钉到这一级（演示/验收用；平时靠学习量自己长）")
+    sp.add_argument("--scale", type=float, default=None,
+                    help="门槛倍数：>1 长得更慢，<1 长得更快（默认 1.0）")
+    sp.add_argument("--sync", action="store_true",
+                    help="先结算一次（默认也会结算，写下来只是让意图明显）")
     sp.set_defaults(func=cmd_grow)
 
     sp = sub.add_parser("bench", help="召回延迟压测")

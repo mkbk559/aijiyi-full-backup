@@ -116,16 +116,20 @@ def kid_safe_traits(
     traits: list[dict[str, Any]] | None,
     persona: str | None,
     age: float | None = None,
+    stage: str | None = None,
 ) -> list[dict[str, Any]]:
-    """儿童人格下过滤成年语感的涌现性格（不改库，只影响注入）。
+    """小学阶段过滤成年语感的涌现性格（不改库，只影响注入）。
 
-    满 10 岁（成长引擎进入少儿/少年阶段）以后自动放开——那些"调侃/自嘲"
-    本来就是成年人才有的说话习惯，年龄到了就能用。
+    成长 v2 起阶段的真源是"学分"（`growth.stage()`），所以这里优先看 `stage`；
+    只有只知道年龄的老调用方才退回按年龄判断（小学档封顶 12 岁）。
     """
     items = [t for t in (traits or []) if str(t.get("value", "")).strip()]
     if str(persona or "").strip().lower() != "child":
         return items
-    if age is not None and float(age) >= 10.0:
+    if stage is not None:
+        if str(stage).strip().lower() != "primary":
+            return items
+    elif age is not None and float(age) >= 12.0:
         return items
     kept: list[dict[str, Any]] = []
     for item in items:
@@ -143,15 +147,16 @@ def system_prefix(
     max_traits: int = 6,
     persona: str | None = None,
     age: float | None = None,
+    stage: str | None = None,
 ) -> str:
     """自我描述块 = 物理底线 + 涌现性格（按置信度取前 N）。
 
-    `persona="child"` 时先过一遍 `kid_safe_traits()`：库里 235 条"调侃/损人/自嘲"
-    这类成年语感是旧人格时期学的，直接喂给六七岁的小孩会立刻变成"大人装小孩"；
-    但年龄满 10 岁后这些习惯本来就该生效，所以要用 `age` 一起判断。
+    `persona="child"` 时先过一遍 `kid_safe_traits()`：成年语感（调侃/损人/自嘲）
+    喂给小学生会立刻变成"大人装小孩"；离开小学阶段后这些习惯本来就该生效，
+    所以要用 `stage`（学分决定的阶段）一起判断。
     """
-    traits = kid_safe_traits(traits, persona, age)
-    global_traits = kid_safe_traits(global_traits, persona, age)
+    traits = kid_safe_traits(traits, persona, age, stage)
+    global_traits = kid_safe_traits(global_traits, persona, age, stage)
     parts = ["## 你是谁（不可动摇的物理底线）", floor_text()]
     ts = [t for t in (traits or []) if str(t.get("value", "")).strip()]
     gs = [t for t in (global_traits or []) if str(t.get("value", "")).strip()]

@@ -463,13 +463,19 @@ class _Handler(BaseHTTPRequestHandler):
 
             growth_mod.configure(
                 age=getattr(self.memory.settings, "persona_age", None),
-                rate=getattr(self.memory.settings, "aging_rate", None),
+                stage=getattr(self.memory.settings, "persona_stage", None),
             )
-            snap = growth_mod.current().describe()
+            engine = growth_mod.current()
+            try:
+                engine.sync(self.memory.db, force=True)
+            except Exception:  # noqa: BLE001 - 结算失败也要能看状态
+                pass
+            snap = engine.describe()
             snap["persona"] = getattr(self.memory.settings, "persona", "")
             snap["stages"] = [
-                {"id": s.id, "label": s.label, "range": [s.age_min, s.age_max],
-                 "sentence": s.sentence}
+                {"id": s.id, "label": s.label, "label_cn": s.label,
+                 "school": s.school, "xp_min": s.xp_min,
+                 "range": [s.age_min, s.age_max], "sentence": s.sentence}
                 for s in growth_mod.STAGES
             ]
             self._send(200, snap)
