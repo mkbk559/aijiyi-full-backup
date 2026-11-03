@@ -44,6 +44,10 @@ def _screenshot(include_ocr: bool) -> str:
 
 def _mouse_click(x: int, y: int, button: str = "left", clicks: int = 1) -> str:
     _windows()
+    if button not in ("left", "right"):
+        # 原来这个分支写死成"不是 right 就当 left"：传 "middle"/拼错都静默左键，
+        # 点了别的东西还以为什么都没发生。显式拒绝。
+        raise ValueError(f"unsupported mouse button: {button}")
     user32 = ctypes.windll.user32
     width = int(user32.GetSystemMetrics(0))
     height = int(user32.GetSystemMetrics(1))
@@ -51,9 +55,7 @@ def _mouse_click(x: int, y: int, button: str = "left", clicks: int = 1) -> str:
     if not (0 <= x < width and 0 <= y < height):
         raise ValueError("mouse coordinates outside screen")
     user32.SetCursorPos(x, y)
-    down, up = ((0x0002, 0x0004) if button == "right" else (0x0002, 0x0004))
-    if button == "right":
-        down, up = 0x0008, 0x0010
+    down, up = (0x0008, 0x0010) if button == "right" else (0x0002, 0x0004)
     for _ in range(max(1, min(3, int(clicks or 1)))):
         user32.mouse_event(down, 0, 0, 0, 0)
         user32.mouse_event(up, 0, 0, 0, 0)

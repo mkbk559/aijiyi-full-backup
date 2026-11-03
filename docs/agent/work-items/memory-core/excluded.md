@@ -794,3 +794,33 @@ CUDA 版 torch 是 RVC 换声提速的前提。**判断"能不能删"之前先�
 平时根本不执行。要验它必须显式打开（`AIJI_ENABLE_WORKSPACE=1`）再试越权路径；
 `/api/shell` 还是三道门（工作区 + `AIJI_CONSOLE_SHELL` + `AIJI_UNSAFE_SHELL`）。
 "默认关闭"不能替代"打开时是对的"。
+
+## 112. 客户端断开不是服务端故障（2026-11-03）
+
+`data/console.err.*.log` 里成篇的 `ConnectionResetError: [WinError 10054]` +
+socketserver 栈，全是浏览器/探针提前关连接。base `handle_error` 会把**任何**
+异常打成 traceback，真问题就被埋了。
+处置：在 `AijiHTTPServer.handle_error` 里把 ConnectionReset/BrokenPipe/ConnectionAborted
+降成一行 debug，其余照旧交给父类。
+
+## 113. 自动研究"跑了但什么都没查到"要算失败（2026-11-03）
+
+MCP 研究原来在所有 GitHub query 都 403 时仍然"成功"产出一份空报告，
+于是 loop 认为这轮没问题、6 小时后照跑，日志里刷满 403。
+处置：全 query 失败直接抛（让 loop 退避），重复告警降 debug，
+loop 侧 `interval * 2**min(n,4)` 退避、封顶 24 h、成功清零。
+**"没报错"不等于"干成了"**，循环类任务尤其要看产出是否为空。
+
+## 114. 队列 worker 会把自己置 None，等它收工要判空（2026-11-03）
+
+`song_service` 的 `_pump` 处理完队列会把 `self._worker = None`，
+测试里 `service._worker.join()` 于是随机 `AttributeError`（单独跑挂、全量跑也挂，
+但换台机器可能就不挂 —— 典型竞态用例）。测试里统一用 `drain()` 判空再 join。
+
+## 115. 静默兜底的条件分支是"假校验"（2026-11-03）
+
+`gui._mouse_click` 里 `down, up = ((0x0002,0x0004) if button=="right" else (0x0002,0x0004))`
+—— 两个分支完全一样，等于没写；紧接着的 `if button == "right"` 才是真逻辑。
+更糟的是"非 right 一律当左键"：传 "middle" 或拼错会**静默左键点一下**，
+用户以为没反应。处置：显式拒绝未知 button，并把死三元删掉。
+看到"三元两边一样"就当 bug 处理。

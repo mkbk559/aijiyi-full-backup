@@ -29,6 +29,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -1440,6 +1441,20 @@ class AijiHTTPServer(ThreadingHTTPServer):
         if sticker_loop is not None:
             sticker_loop.stop()
         super().server_close()
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        """客户端半路断开不是服务端故障：别打整篇 traceback。
+
+        实测 `data/console.err.*.log` 里成篇的
+        `ConnectionResetError: [WinError 10054]` + socketserver 栈——
+        那是浏览器/探针提前关连接（或写入被 RST）造成的噪声，把它降成
+        debug 一行，真异常照旧走默认处理（traceback 留给真问题）。
+        """
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+            logger.debug("客户端断开 %s：%s", client_address, type(exc).__name__)
+            return
+        super().handle_error(request, client_address)
 
 
 def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> ThreadingHTTPServer:

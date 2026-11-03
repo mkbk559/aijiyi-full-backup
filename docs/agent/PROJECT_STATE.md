@@ -69,6 +69,20 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **自我迭代第 3 轮：日志噪声 / 自动研究退避 / 覆盖率 47–53% 段**。
+  证据 `docs/agent/evidence/self-iterate-round3-2026-11-03.md`。要点：
+  ①`data/console.err.*.log` 里成篇 `ConnectionResetError: [WinError 10054]` +
+  socketserver 栈（浏览器提前关连接）→ `AijiHTTPServer.handle_error` 只把
+  连接类异常降成一行 debug，真异常照旧 traceback；
+  ②MCP 自动研究在 GitHub 全 403 时仍"成功"产出空报告、每 6 小时白跑并刷屏
+  → 全 query 失败即抛、重复告警降 debug、loop 按 `interval*2**min(n,4)` 退避封顶 24 h；
+  ③`gui._mouse_click` 有个两边一样的三元（死代码），且非 "right" 一律当左键 →
+  "middle" 会静默左键点一下；改成显式拒绝未知 button；
+  ④`real_engines` 置信度注释与公式不符（注释 -0.2→0.85，实际 0.77），按公式修正注释；
+  ⑤补用例：`test_real_engines.py`(17)、`test_gui_actions.py`(20)、`test_song_queue.py`(22)、
+  `test_media_audio_bounds.py`(18)、`test_mcp_backoff.py`(6)、`test_server_errors.py`(3)；
+  ⑥全量 `run_suite` 695 条通过；仓库补了 `user.name/user.email`（之前靠环境变量，直接 `git commit`
+  会报 "unable to auto-detect email address"）。
 - 2026-11-03 **自我迭代第 2 轮：安全边界 / 入站上限 / SQLite 副产物 / 覆盖率 0% 模块**。
   证据 `docs/agent/evidence/self-iterate-round2-2026-11-03.md`。要点：
   ①探针证实 `/api/fs`、`/api/shell` 默认全 403（工作区默认关），但"打开后对不对"从没人验过

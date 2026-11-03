@@ -4,7 +4,6 @@
 `wal_autocheckpoint` 只重置写指针不缩文件。
 """
 import pathlib
-import sqlite3
 import sys
 import unittest
 
