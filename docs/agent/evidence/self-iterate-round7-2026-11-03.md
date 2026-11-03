@@ -37,8 +37,12 @@ flush 后：media 行 64 / 去重 64，failed=0，evicted=0
 
 ## 四、验证
 
-- 全量 `run_suite`：v34 = 770 用例 **1 fail**（`test_being_checkup.test_live_probes_capture_replies…`，
-  单独跑/重跑全量都过——与 v25 同款偶发）；重跑 v35（加了 traceback 落盘后）= 770 全过
+- 全量 `run_suite`：v34 = 770 用例 **1 fail**（`test_being_checkup.test_live_probes…`，
+  单独跑/重跑全量都过——与 v25 同款偶发）；v35（加了 traceback 落盘后）= 1 fail，
+  **这次有 traceback 了**：失败在我自己的 `test_humanize.test_wait_sleeps_and_counts`
+  ——`patch("aiji.brain.humanize.time.sleep")` 改到的是共享 time 模块，别的测试线程
+  的 `time.sleep(0.2)` 全被记进 mock。改成 `patch("aiji.brain.humanize.time")` 后
+  v36 = **770 全过**
 - `ruff check aiji tools tests` 全过
 - 新增：`tests/test_writer_backlog.py` 5 条
 - 顺手：`run_suite.py` 现在**把失败 traceback 存进 JSON**——v34 那次失败
