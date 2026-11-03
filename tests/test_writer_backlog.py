@@ -15,7 +15,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from aiji.brain.pool import ModelPool  # noqa: E402
 from aiji.hippocampus.db import DB  # noqa: E402
 from aiji.hippocampus.recall import Recaller  # noqa: E402
-from aiji.hippocampus.recognize import Item, Recognizers  # noqa: E402
+from aiji.hippocampus.recognize import Recognizers  # noqa: E402
 from aiji.hippocampus.store import Ident  # noqa: E402
 from aiji.hippocampus.writer import Writer  # noqa: E402
 from aiji.right_hand.config import Settings  # noqa: E402

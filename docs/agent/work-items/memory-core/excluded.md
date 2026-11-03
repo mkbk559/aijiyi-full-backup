@@ -946,3 +946,21 @@ humanize 用例复现了）。run_suite 已改成把 traceback 存进 JSON
 `_process` 结尾判 `output.is_file() and size>=1000`。假 `_run` 只返回 rc=0 不写文件，
 全流程测试就死在这个空产出断言上，被当成 bug 查了半天。假执行器要**像真工具一样
 把产物写出来**（截取写 clip.wav、成条写 mp3），才能让断言落到真正想验的东西上。
+
+## 128. `patch` 脚本里"先替换再匹配原文"会把文件改成语法错误（2026-11-03）
+
+写 `test_admin_snapshots.py` 的数据库插入时，同一个 patch 脚本里第一处替换已经
+改了 `payload` 的取值，第二处替换还在匹配**原文**（含 `"bad-json"`），于是没命中，
+留下一个 `"{"not": "closed"") if False else None)` 的碎片 —— 文件直接
+`SyntaxError: unmatched ')'`。
+**教训**：一个 patch 脚本对同一段文本只能替换一次；连续修同一处要么合并成一个替换，
+要么第二次匹配"第一次的结果"。写完就跑一次 import 检查，别等到单测。
+
+## 129. 造测试数据前先看 NOT NULL（2026-11-03）
+
+给 `outbox`/`send_queue`/`fact` 直接 INSERT 时连撞四次 `IntegrityError`：
+`send_queue.send_idem_key`、`outbox.idem_key`、`outbox.created_at`、
+`fact.importance/mentions/hit_count` 都是 NOT NULL 且无默认。
+这些表的写入本来都由 store 层封装，**裸 INSERT 只有测试会做**，所以这个坑
+每次写控制台类测试都会重踩。以后再往这些表塞数据，先
+`PRAGMA table_info(<表>)` 看一眼。
