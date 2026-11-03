@@ -32,6 +32,9 @@ NEG_FACTOR_FALLBACK = 0.35     # 来自方案 1.7 轮1补：无 cited 降级定�
 POS_FACTOR = 1.25              # 先验：正向确认回升乘数（不对称升降：一次纠错 ×0.7 需约 3 次确认拉回，防"一次夸就满血"）
 POS_CAP = 0.95                 # 先验：回升封顶（不到 1.0，留模型不确定度）
 LINK_CAP = 6                   # 实测（2026-10-29 linkcap_audit）：cap=3 在簇密语料丢 9% 阈值上边（含 0.66 语义近邻）；cap=6 全保留，边数仅 +10%，且召回侧 RECALL_LINK_BUDGET=6 已封顶遍历——多边只是图材料不进 prompt（方案风险 16 的"十万级"指不封顶，6 仍硬封顶）
+
+# WAL 超过这个大小就 TRUNCATE 一次（实测涨到 46 MB，比库还大）
+WAL_TRUNCATE_MB = 32
 HEARTSTATE_KEEP_BUCKETS = 2    # 来自方案 1.11 #5：day-scoped 状态桶保留天数
 EVENTLOG_KEEP_DAYS = 7.0       # 来自方案 1.11 #5：event_log 保留天数（短期缓冲恢复用）
 JANITOR_LEASE_TTL = 600.0      # 先验：单实例租约 TTL（janitor 全程实测 <1s，TTL≈600× 余量；持锁崩溃停摆上限=600s，见 test_lease_single_instance）

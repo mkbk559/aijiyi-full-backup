@@ -188,7 +188,11 @@ def learned_examples(name: str) -> list[str]:
         for item in (data.get("examples") or []):
             if isinstance(item, dict):
                 user = item.get("user") or item.get("用户")
-                reply = item.get("assistant") or item.get("reply")
+                # `回应` 原先只在"字符串字面量"分支认，写成 dict 时会漏掉，
+                # 于是整条变成 "{'用户': '干嘛', '回应': '玩呢'}" 塞进人设提示词
+                # （2026-11-03 覆盖率补测抓到的真 bug）。
+                reply = (item.get("assistant") or item.get("reply")
+                         or item.get("回应"))
                 text = f"对方：{user}｜你：{reply}" if user and reply else str(item)
             elif isinstance(item, (list, tuple)) and len(item) >= 2:
                 text = f"对方：{item[0]}｜你：{item[1]}"

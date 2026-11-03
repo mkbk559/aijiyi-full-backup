@@ -236,11 +236,18 @@ class MCPResearcher:
                 for query in QUERIES
             )
             discovered: dict[str, dict[str, Any]] = {}
+            query_failures = 0
             for query_index, query in enumerate(queries):
                 try:
                     rows = self.github.search_repositories(query, limit=20)
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("GitHub MCP query failed: %s", exc)
+                    query_failures += 1
+                    # 第一次失败要留 warning（真出问题时看得见），
+                    # 之后同样的失败降级 debug（本机 GitHub 常 403，别刷屏）。
+                    if query_failures == 1:
+                        logger.warning("GitHub MCP query failed: %s", exc)
+                    else:
+                        logger.debug("GitHub MCP query failed: %s", exc)
                     continue
                 for row in rows:
                     name = str(row.get("full_name") or "").strip()
@@ -257,7 +264,12 @@ class MCPResearcher:
                 ),
                 reverse=True,
             )
+            if query_failures == len(queries):
+                # 一条都没查通：这一轮没有任何意义，直接失败（让 loop 去退避）
+                raise RuntimeError(
+                    f"GitHub 查询全部失败（{query_failures} 条 query）")
             fetched = 0
+            readme_failures = 0
             candidates: list[dict[str, Any]] = []
             for row in ranked:
                 if fetched >= self.max_fetches:
@@ -269,7 +281,11 @@ class MCPResearcher:
                     readme = self.fetch_text(readme_url)
                     fetched += 1
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("MCP README fetch failed for %s: %s", repo, exc)
+                    readme_failures += 1
+                    if readme_failures <= 3:
+                        logger.warning("MCP README fetch failed for %s: %s", repo, exc)
+                    else:
+                        logger.debug("MCP README fetch failed for %s: %s", repo, exc)
                     readme = ""
                 candidate = self._candidate(row, readme)
                 candidates.append(candidate)
@@ -430,6 +446,8 @@ class MCPResearchLoop:
         self.stats = {
             "runs": 0,
             "errors": 0,
+            "consecutive_errors": 0,
+            "backoff_s": 0.0,
             "last_run_at": 0.0,
             "last_error": "",
             "last_report": None,
@@ -481,9 +499,13 @@ class MCPResearchLoop:
             }
             self.stats["runs"] += 1
             self.stats["last_run_at"] = time.time()
+            self.stats["consecutive_errors"] = 0
+            self.stats["backoff_s"] = 0.0
         except Exception as exc:  # noqa: BLE001
             self.stats["errors"] += 1
+            self.stats["consecutive_errors"] += 1
             self.stats["last_error"] = f"{type(exc).__name__}: {exc}"
+            self.stats["backoff_s"] = self.next_delay()
         finally:
             self._work_lock.release()
 
@@ -498,6 +520,16 @@ class MCPResearchLoop:
         if self.stats["last_error"]:
             raise RuntimeError(self.stats["last_error"])
         return self.snapshot()
+
+    def next_delay(self) -> float:
+        """连续失败 n 次 → interval * 2**min(n, 4)，上限 24 h。
+
+        本机对 GitHub 是不稳定出网：不背退避就会每 6 小时白跑一轮、刷一屏 403。
+        """
+        fails = max(0, int(self.stats.get("consecutive_errors") or 0))
+        if fails <= 0:
+            return self.interval_s
+        return min(24 * 3600.0, self.interval_s * (2 ** min(fails, 4)))
 
     def due_delay(self, *, now: float | None = None) -> float:
         latest = self.researcher.snapshot().get("latest") or {}
@@ -515,8 +547,13 @@ class MCPResearchLoop:
                 self.trigger_and_wait(timeout_s=300.0)
             except Exception as exc:  # noqa: BLE001
                 self.stats["errors"] += 1
+                self.stats["consecutive_errors"] += 1
                 self.stats["last_error"] = f"{type(exc).__name__}: {exc}"
-                if self._stop.wait(self.interval_s):
+                delay = self.next_delay()
+                self.stats["backoff_s"] = delay
+                logger.warning("MCP 研究失败（连续 %d 次），%.0f 分钟后重试：%s",
+                               self.stats["consecutive_errors"], delay / 60.0, exc)
+                if self._stop.wait(delay):
                     return
 
 

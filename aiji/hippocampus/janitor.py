@@ -13,12 +13,17 @@ heart_state day_bucket 过期清理、event_log 滚动保留。
 from __future__ import annotations
 
 import json
+import logging
+import pathlib
+import sqlite3
 import time
 import uuid
 
 from aiji.right_hand import params
 from aiji.hippocampus import store
 from aiji.hippocampus.db import DB
+
+logger = logging.getLogger(__name__)
 
 LEASE_KEY = "janitor_lease"
 JANITOR_ID = "janitor"
@@ -32,6 +37,7 @@ EVENTLOG_KEEP_DAYS = params.EVENTLOG_KEEP_DAYS    # 7 天
 HEARTSTATE_KEEP_BUCKETS = params.HEARTSTATE_KEEP_BUCKETS  # 2 天
 LEASE_TTL = params.JANITOR_LEASE_TTL              # 600s 单实例租约
 TURN_ARCHIVE_KEEP_DAYS = params.TURN_ARCHIVE_KEEP_DAYS  # 90 天归档保留（退役不删）
+WAL_TRUNCATE_MB = params.WAL_TRUNCATE_MB  # WAL 文件超过这个大小就截断
 
 
 def _day_bucket(ts: float) -> str:
@@ -47,7 +53,8 @@ class Janitor:
         self.stats = {"runs": 0, "skipped_lease": 0, "expired": 0, "floor_deleted": 0,
                       "stale_frozen": 0, "dedup_merged": 0, "links_capped": 0,
                       "state_buckets": 0, "eventlog": 0, "purged_index": 0,
-                      "archive_pruned": 0, "self_memory_trimmed": 0}
+                      "archive_pruned": 0, "self_memory_trimmed": 0,
+                      "wal_truncated": 0, "wal_busy": 0}
 
     # ---- 单实例租约（1.2 轮2补） ----
 
@@ -91,7 +98,41 @@ class Janitor:
             # 正常完成立即释放租约；崩溃则等 TTL（600s）自然过期——
             # 失败模式明确：持锁进程崩溃 → 最长停摆 TTL 秒，无死锁面。
             self._release_lease(now=t)
+        # WAL 截断放在最后：run() 中间任何一步都可能还攥着读游标，
+        # 那时候 TRUNCATE 会被判 busy（实测直接在 _purge_index 后面调用 →
+        # WAL 24 MB 一动不动，stats 里连痕迹都没有）。
+        self._truncate_wal()
         return {"skipped": False, **{k: v for k, v in self.stats.items() if v}}
+
+    def _truncate_wal(self) -> None:
+        """WAL 超过阈值就 TRUNCATE。
+
+        `wal_autocheckpoint` 只重置写指针、不缩文件；文件被历史长事务撑大后会
+        一直占着（实测 46.18 MB，比 41 MB 的库还大）。TRUNCATE 需要没有别的
+        读者挡住，busy 时返回非 0 —— 那就下一轮再来，不重试不阻塞。
+
+        注意：**必须用独立连接**。`PRAGMA wal_checkpoint` 不能在事务里跑，
+        而 `self.db.tx()` 本身就是事务，写在里面会静默失败（实测 stats 里没数）。
+        """
+        path = getattr(self.db, "path", None)
+        if path is None:
+            return
+        wal = pathlib.Path(str(path) + "-wal")
+        try:
+            if not wal.exists() or wal.stat().st_size < WAL_TRUNCATE_MB * 1024 * 1024:
+                return
+            conn = sqlite3.connect(str(path), timeout=5.0)
+            try:
+                row = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            finally:
+                conn.close()
+            if row and row[0] == 0:
+                self.stats["wal_truncated"] += 1
+            else:
+                # busy（有别的读者挡着）：下一轮再来，但别装作没事
+                self.stats["wal_busy"] += 1
+        except Exception as exc:  # noqa: BLE001 - 维护动作失败不该影响业务
+            logger.warning("WAL 截断失败：%s", exc)
 
     def _release_lease(self, *, now: float) -> None:
         with self.db.tx() as c:

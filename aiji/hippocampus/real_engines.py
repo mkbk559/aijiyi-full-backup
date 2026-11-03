@@ -164,7 +164,8 @@ def transcribe_wav_bytes(data: bytes) -> tuple[str, float]:
     segments, info = model.transcribe(audio, language="zh")
     segs = list(segments)
     text = "".join(s.text for s in segs).strip()
-    # whisper 的 avg_logprob → 经验映射到 0-1 置信（-0.2→0.85，-1.0→0.5）
+    # whisper 的 avg_logprob → 经验映射到 0-1 置信：0.85 + lp*0.4
+    # （lp=-0.2 → 0.77；lp=-1.0 → 0.45；再夹到 [0.3, 0.95]）
     if segs:
         lp = sum(s.avg_logprob for s in segs) / len(segs)
         conf = max(0.3, min(0.95, 0.85 + lp * 0.4))

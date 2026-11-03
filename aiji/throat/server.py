@@ -164,6 +164,22 @@ def _decode_console(data: bytes) -> str:
     return data.decode("utf-8", "replace")
 
 
+class _PayloadTooLarge(Exception):
+    """请求体超过 MAX_BODY_BYTES；在 do_POST 里转成 413。"""
+
+    def __init__(self, size: int) -> None:
+        self.size = size
+        super().__init__(f"payload too large: {size} bytes")
+
+
+def _clip_text(value: Any, limit: int = 32_768) -> tuple[str, dict[str, Any]]:
+    """截断超长文本并如实回报（不静默丢内容）。"""
+    text = str(value or "")
+    if len(text) <= limit:
+        return text, {}
+    return text[:limit], {"truncated": True, "original_chars": len(text)}
+
+
 class _Handler(BaseHTTPRequestHandler):
     server_version = f"aiji/{__version__}"
     protocol_version = "HTTP/1.1"
@@ -176,15 +192,35 @@ class _Handler(BaseHTTPRequestHandler):
 
     # ---- 工具 ----
 
+    MAX_BODY_BYTES = 8 * 1024 * 1024
+    MAX_TEXT_CHARS = 32_768
+
     def _body(self) -> dict[str, Any]:
         n = int(self.headers.get("Content-Length") or 0)
         if n <= 0:
             return {}
+        if n > self.MAX_BODY_BYTES:
+            # 超过 8 MB 的请求体没有合法用途（实测 1.4 MB 的单条文本都能被 /ingest
+            # 接进队列，会把库和注入预算一起撑坏）。但要**把 body 读空再回 413**：
+            # 直接甩手会让客户端还在写 9 MB 时收到 RST（WinError 10053），
+            # 连错误码都拿不到。
+            self._drain(n)
+            raise _PayloadTooLarge(n)
         try:
             data = json.loads(self.rfile.read(n))
         except ValueError:
             return {}
         return data if isinstance(data, dict) else {}
+
+    def _drain(self, n: int, chunk: int = 65_536) -> None:
+        """把多余请求体读掉丢掉（最多 64 MB），避免客户端收到 RST。"""
+        remaining = min(int(n), 64 * 1024 * 1024)
+        while remaining > 0:
+            block = self.rfile.read(min(chunk, remaining))
+            if not block:
+                break
+            remaining -= len(block)
+        self.close_connection = True
 
     def _ident(self, body: dict[str, Any]) -> Ident:
         meta = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
@@ -631,7 +667,12 @@ class _Handler(BaseHTTPRequestHandler):
         qs = {k: v[0] for k, v in parse_qs(parsed.query).items()}
         if not self._authorized(path):
             return self._unauthorized()
-        body = self._body()
+        try:
+            body = self._body()
+        except _PayloadTooLarge as exc:
+            return self._send(413, {"error": "payload_too_large",
+                                    "limit_bytes": self.MAX_BODY_BYTES,
+                                    "size_bytes": exc.size})
         try:
             if path in ("/api/operations/config", "/api/operations/services"):
                 if self.client_address[0] not in ("127.0.0.1", "::1"):
@@ -964,23 +1005,25 @@ class _Handler(BaseHTTPRequestHandler):
             if path == "/api/shell":
                 return self._run_shell(body)
             if path == "/turns":
-                content = str(body.get("content") or "")
+                content, clipped = _clip_text(body.get("content"), self.MAX_TEXT_CHARS)
                 if not content:
                     return self._send(400, {"error": "content_required"})
                 depth = self.memory.turn(
                     self._ident(body), str(body.get("session") or "default"),
                     str(body.get("role") or "user"), content, extra=body.get("extra"),
                 )
-                return self._send(202, {"queued": True, "queue_depth": depth})
+                return self._send(202, {"queued": True, "queue_depth": depth,
+                                        **clipped})
             if path == "/remember":
-                text = str(body.get("text") or "")
+                text, clipped = _clip_text(body.get("text"), self.MAX_TEXT_CHARS)
                 if not text:
                     return self._send(400, {"error": "text_required"})
                 depth = self.memory.remember(
                     text, self._ident(body), session=str(body.get("session") or "default"),
                     extra=body.get("extra"),
                 )
-                return self._send(202, {"queued": True, "queue_depth": depth})
+                return self._send(202, {"queued": True, "queue_depth": depth,
+                                        **clipped})
             if path == "/media":
                 if not body.get("ref"):
                     return self._send(400, {"error": "ref_required"})
@@ -993,15 +1036,21 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(201, {"id": mid, "stored": "reference_only"})
             if path == "/ingest":
                 kind = str(body.get("kind") or "text")
+                clipped_text = {}
+                if kind == "text":
+                    text, clipped_text = _clip_text(
+                        body.get("text"), self.MAX_TEXT_CHARS)
                 if kind != "text" and not (body.get("ref") or body.get("url")):
                     return self._send(400, {"error": "ref_or_url_required"})
                 depth = self.memory.ingest(
                     self._ident(body), kind=kind, ref=str(body.get("ref") or ""),
-                    text=body.get("text"), url=body.get("url"), mime=body.get("mime"),
+                    text=text if kind == "text" else body.get("text"),
+                    url=body.get("url"), mime=body.get("mime"),
                     size_bytes=body.get("size_bytes"),
                     session=str(body.get("session") or "default"), extra=body.get("extra"),
                 )
-                return self._send(202, {"queued": True, "queue_depth": depth, "kind": kind})
+                return self._send(202, {"queued": True, "queue_depth": depth,
+                                        "kind": kind, **clipped_text})
             if path == "/recall":
                 res = self.memory.recall(
                     str(body.get("query") or ""), self._ident(body),

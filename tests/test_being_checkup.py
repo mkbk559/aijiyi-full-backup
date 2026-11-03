@@ -34,7 +34,10 @@ class FakePool:
     def chat(self, messages, **kwargs):
         with self._lock:
             self.calls.append(messages)
-            text = "".join(str(m.get("content", "")) for m in messages)
+            # 只看用户消息：系统提示词/人设块里也可能出现「大语言模型」「Python」
+            # 这类词，扫全量 messages 会让探针互相串味（单独跑通过、全量跑偶发失败）。
+            users = [m for m in messages if str(m.get("role")) == "user"]
+            text = "".join(str(m.get("content", "")) for m in (users or messages))
             for keyword, reply in self._by_keyword.items():
                 if keyword in text:
                     return type("R", (), {

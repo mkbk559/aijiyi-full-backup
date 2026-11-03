@@ -18,7 +18,12 @@ KEEP_PREFIX = "aiji.db.bak-before-persona-purge-"
 
 
 def plan(keep: int) -> tuple[list[Path], list[Path]]:
-    files = sorted(BACKUPS.glob("aiji.db.bak-*"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # 只认"真正的备份"：WAL/SHM 是 SQLite 的运行时副产物，单独存在没有恢复价值
+    files = sorted(
+        (p for p in BACKUPS.glob("aiji.db.bak-*")
+         if not p.name.endswith(("-wal", "-shm"))),
+        key=lambda p: p.stat().st_mtime, reverse=True,
+    )
     purge = [p for p in files if p.name.startswith(KEEP_PREFIX)]
     others = [p for p in files if not p.name.startswith(KEEP_PREFIX)]
     # 清理备份按时间升序，最早的（=清理前、最全）那份留，其余是子集

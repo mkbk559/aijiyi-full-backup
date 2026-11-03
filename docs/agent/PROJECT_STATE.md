@@ -69,6 +69,18 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **自我迭代第 2 轮：安全边界 / 入站上限 / SQLite 副产物 / 覆盖率 0% 模块**。
+  证据 `docs/agent/evidence/self-iterate-round2-2026-11-03.md`。要点：
+  ①探针证实 `/api/fs`、`/api/shell` 默认全 403（工作区默认关），但"打开后对不对"从没人验过
+  → 新增 4 条越权用例（6 种穿越写法全拒）+ 三道门/kill switch 用例；
+  ②`/ingest` 原先能吃下 1.4 MB 单条文本 → 请求体 8 MB 回 413（先 `_drain` 再回，否则客户端
+  收 RST）、`/ingest`/`/remember`/`/turns` 文本超 32768 字符截断并回 `truncated/original_chars`；
+  ③生产库 WAL 46.18 MB（比库还大）→ janitor 末尾 `wal_checkpoint(TRUNCATE)`（独立连接、
+  阈值 32 MB、busy 记 `wal_busy`）；清掉 `data/backups` 里 43.19 MB 孤立 WAL，
+  备份 158.2 → 115.0 MB，`prune_backups` 不再把 `-wal/-shm` 当备份；
+  ④补覆盖率时抓到真 bug：`learned_examples()` 的 dict 分支漏认 `回应` 键，
+  会把 `{'用户':…,'回应':…}` 原样塞进人设提示词（生产数据恰好为空，属潜伏 bug），已修+9 条用例；
+  ⑤`desktop_sense.py` 0% → 11 条用例（假屏幕/假窗口/假 OCR，不碰真桌面）。
 - 2026-11-03 **自我迭代第 1 轮：先补测量，再修量出来的**（用户：「自我迭代，不要问我，直到所有问题消失」）。
   证据 `docs/agent/evidence/self-iterate-round1-2026-11-03.md`。要点：
   ①新增 `tools/archcheck/console_render.py`（无头浏览器真渲染，11 导航/无 JS 错误/DOM 大于静态文件）
