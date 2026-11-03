@@ -845,3 +845,28 @@ loop 侧 `interval * 2**min(n,4)` 退避、封顶 24 h、成功清零。
 - `policy`：危险命令静默放行（看起来有黑名单，实际不触发）
 两边都只能用"该发生 X / 不该发生 Y"成对断言才抓得到；
 只测"正常路径能跑通"的话，覆盖率再高也发现不了。
+
+## 118. SSRF 守卫只看第一跳 = 没守（2026-11-03）
+
+`validate_public_http_url` 在下载**之前**校验用户给的 URL，看起来没问题；
+但 urllib 默认自动跟随 302，于是
+
+```
+用户给 https://evil.example/x   → 校验通过（公网）
+响应 302 Location: http://127.0.0.1:8787/api/stickers   → urllib 直接跟过去
+```
+
+私网地址就这么被拉到了，前面的校验等于白做。**"校验入口"和"校验实际请求的地址"
+是两件事**，中间隔着重定向。
+
+处置：`aiji/net.py` 里给 direct/proxy 两个 opener 都装 `_GuardedRedirect`，
+在 `redirect_request` 里对 urljoin 之后的**目标 URL** 再跑一次
+`validate_public_http_url`。真机验证：贴纸更新（jsdelivr → CDN 有重定向）
+仍然 `ok: true / total 204 / failed 0 / 26.1 s`，合法重定向没被误杀。
+
+## 119. 随机数参与的断言要注入确定性 rng（2026-11-03）
+
+测 `HumanPacer` 的"低电量变慢 / 高电量变快"时，两次调用各自 `randint(low, high)`，
+抽样不同 → 断言随机翻车（实测 2915 > 3477 失败）。
+正确做法是注入返回区间中点的 rng，把随机度去掉，只留被测的乘子。
+凡是"比较两次随机结果大小"的用例，基本都是错的。

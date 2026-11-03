@@ -21,7 +21,25 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
+    """跟随重定向前先校验目标 URL（否则 SSRF 守卫只看第一跳）。
+
+    urllib 的 `http_error_302` 会先把 Location 与 base 做 urljoin，
+    再交给 `redirect_request`，所以这里拿到的已是绝对地址。
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        from aiji.throat.net_guard import validate_public_http_url
+
+        validate_public_http_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _opener(*handlers) -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(_GuardedRedirect(), *handlers)
+
+
+_DIRECT = _opener(urllib.request.ProxyHandler({}))
 _PROXY: urllib.request.OpenerDirector | None = None
 
 
@@ -35,7 +53,7 @@ def _proxy_opener() -> urllib.request.OpenerDirector | None:
     if not _env_proxy_configured():
         return None
     if _PROXY is None:
-        _PROXY = urllib.request.build_opener()
+        _PROXY = _opener()
     return _PROXY
 
 
