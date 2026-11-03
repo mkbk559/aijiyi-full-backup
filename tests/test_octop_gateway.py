@@ -1,15 +1,16 @@
-"""Octop 桥接（`throat/bridge/octop_gateway.py`）——原先 53% 覆盖。
+"""Octop Gateway 桥接：归一化、aiohttp 调用、processor 的兜底文案、CLI 入口。
 
-桥接层最容易出的错是**身份/范围串号**（群聊混进私聊）和"平台消息没字时直接崩"。
-这里不装 octop_gateway 包：给 `make_processor` 注入一个假 MessageEvent 模块，
-再把 `client.chat` 换成假实现，验：
-- 私聊/群聊 scope 与 platform_user_id 的取法
-- 只有媒体没有文字时的兜底话术
-- 网关返回空/异常时的兜底话术（不能把异常抛给平台）
-- Authorization 头只在配了 api_key 时出现
+这条链路是所有非 OneBot 平台（QQ 官方机器人/飞书/微信）唯一的入口，
+`octop_gateway` 这个第三方包在本机没装，所以这里用假模块注入 sys.modules，
+把"包装层自己"的行为全部测到（真协议由 Octop 负责，不属于本项目）。
 """
+from __future__ import annotations
+
 import asyncio
+import contextlib
+import io
 import pathlib
+import runpy
 import sys
 import types
 import unittest
@@ -17,7 +18,9 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from aiji.throat.bridge import octop_gateway as og  # noqa: E402
+from aiji.throat.bridge.octop_gateway import (  # noqa: E402
+    AijiGatewayClient, inbound_payload, main, make_processor, run_qq,
+)
 
 
 class Subject:
@@ -27,154 +30,357 @@ class Subject:
 
 
 class Message:
-    def __init__(self, text="", *, metadata=None, subject=None,
-                 session="", channel="qq", has_media=False):
-        self.text = text
-        self.metadata = metadata or {}
-        self.channel_subject = subject
-        self.channel_session_id = session
-        self.channel_type = channel
-        self.has_media = has_media
+    def __init__(self, **kwargs):
+        self.metadata = kwargs.get("metadata", {})
+        self.channel_subject = kwargs.get("channel_subject")
+        self.channel_session_id = kwargs.get("channel_session_id", "")
+        self.channel_type = kwargs.get("channel_type", "qq")
+        self.text = kwargs.get("text", "")
+        self.has_media = kwargs.get("has_media", False)
 
 
-class InboundPayloadTest(unittest.TestCase):
-    def test_private_chat_scope_is_default(self):
-        payload = og.inbound_payload(Message("你好", metadata={"sender_id": "u1"}))
-        self.assertEqual(payload["scope"], "default")
-        self.assertEqual(payload["platform_user_id"], "u1")
-        self.assertEqual(payload["content"], "你好")
-        self.assertTrue(payload["debounce"])
-
-    def test_group_chat_scope_carries_subject(self):
-        payload = og.inbound_payload(Message(
-            "在吗", metadata={"sender_id": "u2"},
-            subject=Subject("g-42", "group")))
-        self.assertEqual(payload["scope"], "group:g-42", "群聊必须带 subject，否则串号")
-        self.assertEqual(payload["platform_user_id"], "u2")
-        self.assertEqual(payload["session"], "g-42")
-
-    def test_chat_type_can_come_from_metadata(self):
-        payload = og.inbound_payload(Message(
-            "hi", metadata={"sender_id": "u3", "chat_type": "Guild"},
-            subject=Subject("c-7")))
-        self.assertEqual(payload["scope"], "group:c-7", "chat_type 大小写不敏感")
-
-    def test_sender_falls_back_to_openid_then_subject(self):
-        payload = og.inbound_payload(Message(
-            "hi", metadata={"user_openid": "open-1"}, subject=Subject("s-1")))
-        self.assertEqual(payload["platform_user_id"], "open-1")
-        payload = og.inbound_payload(Message("hi", subject=Subject("s-2")))
-        self.assertEqual(payload["platform_user_id"], "s-2")
-        payload = og.inbound_payload(Message("hi"))
-        self.assertEqual(payload["platform_user_id"], "unknown")
-
-    def test_media_only_message_gets_placeholder_text(self):
-        payload = og.inbound_payload(Message("", has_media=True))
-        self.assertEqual(payload["content"], "[用户发送了媒体消息]")
-
-    def test_whitespace_text_is_stripped(self):
-        self.assertEqual(og.inbound_payload(Message("   你好  "))["content"], "你好")
-
-
-class FakeMessageEvent:
-    def __init__(self, kind, text=""):
-        self.kind = kind
-        self.text_value = text
+# ---- 假的 octop_gateway 包 ----
+class MessageEventFake:
+    emitted: list[tuple[str, str]] = []
 
     @classmethod
     def text(cls, value):
-        return cls("text", value)
+        cls.emitted.append(("text", value))
+        return ("text", value)
 
     @classmethod
     def completed(cls):
-        return cls("completed")
+        cls.emitted.append(("completed", ""))
+        return ("completed", "")
 
 
-def fake_octop_module():
-    return types.SimpleNamespace(MessageEvent=FakeMessageEvent)
+class FakeChannelManager:
+    instances: list["FakeChannelManager"] = []
+
+    def __init__(self, *, processor, workers_per_channel, media_backend):
+        self.processor = processor
+        self.workers = workers_per_channel
+        self.media = media_backend
+        self.started = False
+        self.stopped = False
+        self.added: list[object] = []
+        FakeChannelManager.instances.append(self)
+
+    async def start(self):
+        self.started = True
+
+    async def add_qq_channel(self, config):
+        self.added.append(config)
+        return "channel-1"
+
+    async def stop(self):
+        self.stopped = True
 
 
-async def collect(gen):
-    return [item async for item in gen]
+def fake_octop_modules() -> dict[str, types.ModuleType]:
+    """把 octop_gateway 造成**包**（`from octop_gateway.channels.qq import …` 才行）。"""
+    module = types.ModuleType("octop_gateway")
+    module.__path__ = []                     # 声明成 package
+    module.MessageEvent = MessageEventFake
+    module.ChannelManager = FakeChannelManager
+    module.FileSystemMediaBackend = lambda path: ("media", path)
+    channels = types.ModuleType("octop_gateway.channels")
+    channels.__path__ = []
+    qq = types.ModuleType("octop_gateway.channels.qq")
+    qq.QQConfig = lambda **kwargs: ("qqconfig", kwargs)
+    module.channels = channels
+    channels.qq = qq
+    return {"octop_gateway": module,
+            "octop_gateway.channels": channels,
+            "octop_gateway.channels.qq": qq}
+
+
+class InboundPayloadTest(unittest.TestCase):
+    def test_group_scopes_by_subject(self):
+        payload = inbound_payload(Message(
+            channel_subject=Subject("g-9", "group"),
+            metadata={"sender_id": "u1"}, text="  你好  "))
+        self.assertEqual(payload["scope"], "group:g-9")
+        self.assertEqual(payload["content"], "你好")
+        self.assertTrue(payload["debounce"])
+        self.assertEqual((payload["platform"], payload["platform_user_id"]),
+                         ("qq", "u1"))
+
+    def test_guild_and_channel_count_as_group(self):
+        for chat_type in ("group", "guild", "channel"):
+            payload = inbound_payload(Message(
+                channel_subject=Subject("s1", chat_type), text="hi"))
+            self.assertEqual(payload["scope"], "group:s1", chat_type)
+
+    def test_private_scope_is_default(self):
+        payload = inbound_payload(Message(
+            channel_subject=Subject("s1", "private"), text="hi"))
+        self.assertEqual(payload["scope"], "default")
+
+    def test_sender_fallbacks(self):
+        self.assertEqual(
+            inbound_payload(Message(metadata={"user_openid": "o1"}, text="x"))
+            ["platform_user_id"], "o1")
+        self.assertEqual(
+            inbound_payload(Message(channel_subject=Subject("sid"), text="x"))
+            ["platform_user_id"], "sid")
+        self.assertEqual(inbound_payload(Message(text="x"))["platform_user_id"],
+                         "unknown")
+
+    def test_session_fallbacks(self):
+        self.assertEqual(
+            inbound_payload(Message(channel_session_id="cs1", text="x"))["session"],
+            "cs1")
+        self.assertEqual(
+            inbound_payload(Message(channel_subject=Subject("sid"), text="x"))
+            ["session"], "sid")
+        self.assertEqual(
+            inbound_payload(Message(metadata={"sender_id": "u1"}, text="x"))["session"],
+            "u1")
+
+    def test_media_only_message_gets_placeholder(self):
+        payload = inbound_payload(Message(has_media=True))
+        self.assertEqual(payload["content"], "[用户发送了媒体消息]")
+        self.assertEqual(inbound_payload(Message()).get("content"), "")
+
+
+class ChatTest(unittest.TestCase):
+    def test_calls_gateway_endpoint_with_bearer(self):
+        seen = {}
+
+        async def post(url, *, json, headers):
+            seen.update(url=url, payload=json, headers=headers)
+            return {"text": "在的"}
+
+        client = AijiGatewayClient("http://127.0.0.1:8787/", api_key="k",
+                                   post=post)
+        result = asyncio.run(client.chat({"content": "在吗"}))
+        self.assertEqual(result["text"], "在的")
+        self.assertEqual(seen["url"], "http://127.0.0.1:8787/v1/gateway/messages")
+        self.assertEqual(seen["headers"]["Authorization"], "Bearer k")
+
+    def test_no_api_key_means_no_authorization_header(self):
+        seen = {}
+
+        async def post(url, *, json, headers):
+            seen.update(headers=headers)
+            return {}
+
+        asyncio.run(AijiGatewayClient(post=post).chat({"content": "x"}))
+        self.assertNotIn("Authorization", seen["headers"])
+
+    def test_default_post_uses_aiohttp(self):
+        calls = []
+
+        class FakeResponse:
+            def __init__(self, payload):
+                self._payload = payload
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_exc):
+                return False
+
+            def raise_for_status(self):
+                calls.append("raise_for_status")
+
+            async def json(self):
+                return self._payload
+
+        class FakeSession:
+            def __init__(self, *, timeout=None, **kwargs):
+                calls.append(("session", timeout))
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_exc):
+                return False
+
+            def post(self, url, *, json=None, headers=None):
+                calls.append(("post", url, json, headers))
+                return FakeResponse({"text": "回来了"})
+
+        module = types.ModuleType("aiohttp")
+        module.ClientTimeout = lambda total: ("timeout", total)
+        module.ClientSession = FakeSession
+        with mock.patch.dict(sys.modules, {"aiohttp": module}):
+            client = AijiGatewayClient("http://h", timeout_s=7)
+            result = asyncio.run(client._default_post(
+                "http://h/x", json={"a": 1}, headers={"H": "v"}))
+        self.assertEqual(result, {"text": "回来了"})
+        self.assertIn(("session", ("timeout", 7.0)), calls)
+        self.assertIn("raise_for_status", calls)
+
+    def test_default_post_returns_empty_for_non_object_json(self):
+        class FakeResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_exc):
+                return False
+
+            def raise_for_status(self):
+                return None
+
+            async def json(self):
+                return [1, 2, 3]
+
+        class FakeSession:
+            def __init__(self, **_kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_exc):
+                return False
+
+            def post(self, *_a, **_k):
+                return FakeResponse()
+
+        module = types.ModuleType("aiohttp")
+        module.ClientTimeout = lambda total: total
+        module.ClientSession = FakeSession
+        with mock.patch.dict(sys.modules, {"aiohttp": module}):
+            result = asyncio.run(AijiGatewayClient()._default_post(
+                "http://h/x", json={}, headers={}))
+        self.assertEqual(result, {})
 
 
 class ProcessorTest(unittest.TestCase):
-    def _run(self, message, chat_result=None, raise_exc=None):
-        client = og.AijiGatewayClient()
+    def setUp(self):
+        MessageEventFake.emitted = []
+        patcher = mock.patch.dict(sys.modules, fake_octop_modules())
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
-        async def chat(payload):  # noqa: ARG001
-            if raise_exc:
-                raise raise_exc
-            return chat_result or {}
+    def collect(self, client, message) -> list[tuple[str, str]]:
+        async def run():
+            return [item async for item in make_processor(client)(message)]
+        return asyncio.run(run())
 
-        client.chat = chat
-        processor = og.make_processor(client)
-        with mock.patch.dict(sys.modules,
-                             {"octop_gateway": fake_octop_module()}):
-            return asyncio.run(collect(processor(message)))
+    def test_replies_with_gateway_text(self):
+        async def post(url, *, json, headers):
+            return {"text": "  玛卡巴卡！  "}
 
-    def test_normal_reply_is_forwarded(self):
-        events = self._run(Message("你好"), chat_result={"text": "在呀"})
-        self.assertEqual([e.kind for e in events], ["text", "completed"])
-        self.assertEqual(events[0].text_value, "在呀")
+        events = self.collect(AijiGatewayClient(post=post), Message(text="你好"))
+        self.assertEqual(events, [("text", "玛卡巴卡！"), ("completed", "")])
 
-    def test_empty_reply_uses_placeholder(self):
-        events = self._run(Message("你好"), chat_result={"text": "   "})
-        self.assertIn("没接上话", events[0].text_value)
+    def test_empty_text_gets_soft_fallback(self):
+        async def post(url, *, json, headers):
+            return {"text": "   "}
 
-    def test_gateway_error_is_soft(self):
-        events = self._run(Message("你好"), raise_exc=OSError("连不上"))
-        self.assertIn("没连上", events[0].text_value)
-        self.assertIn("OSError", events[0].text_value)
-        self.assertEqual(events[-1].kind, "completed")
+        events = self.collect(AijiGatewayClient(post=post), Message(text="你好"))
+        self.assertIn("没接上话", events[0][1])
 
-    def test_message_without_text_never_calls_gateway(self):
-        client = og.AijiGatewayClient()
+    def test_exception_becomes_friendly_error(self):
+        async def post(url, *, json, headers):
+            raise RuntimeError("核心没起")
+
+        events = self.collect(AijiGatewayClient(post=post), Message(text="你好"))
+        self.assertIn("本地 AIJiYi 暂时没连上：RuntimeError", events[0][1])
+        self.assertEqual(events[-1][0], "completed")
+
+    def test_message_without_text_short_circuits(self):
         called = []
 
-        async def chat(payload):
-            called.append(payload)
-            return {"text": "不该到这里"}
+        async def post(url, *, json, headers):
+            called.append(True)
+            return {}
 
-        client.chat = chat
-        processor = og.make_processor(client)
-        with mock.patch.dict(sys.modules,
-                             {"octop_gateway": fake_octop_module()}):
-            events = asyncio.run(collect(processor(Message(""))))
-        self.assertEqual(called, [])
-        self.assertIn("没有可识别的文字", events[0].text_value)
+        events = self.collect(AijiGatewayClient(post=post), Message(text=""))
+        self.assertEqual(called, [], "没文字就别打网关")
+        self.assertIn("没有可识别的文字", events[0][1])
 
 
-class ChatClientTest(unittest.TestCase):
-    def test_authorization_header_only_when_key_present(self):
+class RunQqTest(unittest.TestCase):
+    def setUp(self):
+        FakeChannelManager.instances = []
+        patcher = mock.patch.dict(sys.modules, fake_octop_modules())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_requires_app_id_and_secret(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(SystemExit):
+                asyncio.run(run_qq(AijiGatewayClient()))
+
+    def test_starts_channel_then_stops_manager(self):
+        class FakeEvent:
+            async def wait(self):
+                raise asyncio.CancelledError()
+
+        async def fake_run():
+            with mock.patch.object(asyncio, "Event", FakeEvent):
+                try:
+                    await run_qq(AijiGatewayClient(), sandbox=True)
+                except asyncio.CancelledError:
+                    pass
+
+        env = {"QQ_APP_ID": "app", "QQ_TOKEN": "tok", "QQ_SECRET": "sec"}
+        buffer = io.StringIO()
+        with mock.patch.dict("os.environ", env, clear=True), \
+                contextlib.redirect_stdout(buffer):
+            asyncio.run(fake_run())
+            manager = FakeChannelManager.instances[-1]
+        self.assertTrue(manager.started)
+        self.assertTrue(manager.stopped, "finally 里必须 stop")
+        self.assertEqual(manager.workers, 4)
+        config = manager.added[0]
+        self.assertEqual(config[0], "qqconfig")
+        self.assertEqual(config[1]["app_id"], "app")
+        self.assertTrue(config[1]["sandbox"])
+
+
+class MainTest(unittest.TestCase):
+    def test_returns_zero_and_builds_client_from_args(self):
         seen = {}
 
-        async def post(url, *, json, headers):  # noqa: A002
-            seen["url"] = url
-            seen["headers"] = headers
-            seen["json"] = json
-            return {"text": "ok"}
+        def fake_run(client, *, sandbox):
+            seen["client"] = client
+            seen["sandbox"] = sandbox
 
-        client = og.AijiGatewayClient("http://127.0.0.1:8787/", post=post)
-        asyncio.run(client.chat({"content": "hi"}))
-        self.assertEqual(seen["url"], "http://127.0.0.1:8787/v1/gateway/messages")
-        self.assertNotIn("Authorization", seen["headers"])
+        with mock.patch("aiji.throat.bridge.octop_gateway.asyncio.run",
+                        lambda coro: (coro.close(), fake_run(
+                            AijiGatewayClient("http://x"), sandbox=True))):
+            with mock.patch.dict("os.environ", {"QQ_SANDBOX": "1"}, clear=True):
+                self.assertEqual(
+                    main(["--core-url", "http://core:1", "--api-key", "k"]), 0)
 
-        client = og.AijiGatewayClient("http://x", api_key="k1", post=post)
-        asyncio.run(client.chat({"content": "hi"}))
-        self.assertEqual(seen["headers"]["Authorization"], "Bearer k1")
+    def test_env_defaults_fill_arguments(self):
+        parser_seen = {}
 
-    def test_base_url_trailing_slash_is_normalised(self):
-        self.assertEqual(og.AijiGatewayClient("http://x///").base_url, "http://x")
+        def fake_parse(argv):
+            parser_seen["argv"] = argv
+            return types.SimpleNamespace(core_url="http://env:1", api_key="",
+                                         sandbox=True)
 
+        with mock.patch("argparse.ArgumentParser.parse_args",
+                        lambda self, argv=None: fake_parse(argv)), \
+                mock.patch("aiji.throat.bridge.octop_gateway.asyncio.run",
+                           lambda coro: coro.close()):
+            self.assertEqual(main([]), 0)
 
-class RunQqGuardTest(unittest.TestCase):
-    def test_missing_credentials_exits_with_message(self):
-        with mock.patch.dict("os.environ", {"QQ_APP_ID": "", "QQ_SECRET": ""},
-                             clear=False):
+    def test_keyboard_interrupt_returns_zero(self):
+        def boom(coro):
+            coro.close()                     # 否则 RuntimeWarning: never awaited
+            raise KeyboardInterrupt
+
+        with mock.patch("aiji.throat.bridge.octop_gateway.asyncio.run", boom):
+            self.assertEqual(main(["--core-url", "http://x"]), 0)
+
+    def test_module_entrypoint_exits_with_zero(self):
+        with mock.patch("aiji.throat.bridge.octop_gateway.asyncio.run",
+                        lambda coro: coro.close()), \
+                mock.patch.object(sys, "argv", ["octop_gateway.py"]):
             with self.assertRaises(SystemExit) as ctx:
-                asyncio.run(og.run_qq(og.AijiGatewayClient()))
-        self.assertIn("QQ_APP_ID", str(ctx.exception))
+                runpy.run_path(
+                    str(pathlib.Path(__file__).resolve().parent.parent
+                        / "aiji" / "throat" / "bridge" / "octop_gateway.py"),
+                    run_name="__main__")
+        self.assertEqual(ctx.exception.code, 0)
 
 
 if __name__ == "__main__":

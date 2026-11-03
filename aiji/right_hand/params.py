@@ -33,8 +33,7 @@ POS_FACTOR = 1.25              # 先验：正向确认回升乘数（不对称�
 POS_CAP = 0.95                 # 先验：回升封顶（不到 1.0，留模型不确定度）
 LINK_CAP = 6                   # 实测（2026-10-29 linkcap_audit）：cap=3 在簇密语料丢 9% 阈值上边（含 0.66 语义近邻）；cap=6 全保留，边数仅 +10%，且召回侧 RECALL_LINK_BUDGET=6 已封顶遍历——多边只是图材料不进 prompt（方案风险 16 的"十万级"指不封顶，6 仍硬封顶）
 
-# WAL 超过这个大小就 TRUNCATE 一次（实测涨到 46 MB，比库还大）
-WAL_TRUNCATE_MB = 32
+WAL_TRUNCATE_MB = 32            # 实测（2026-10-30）：WAL 涨到 46 MB，比库本体还大；超 32 MB 就 TRUNCATE 一次
 HEARTSTATE_KEEP_BUCKETS = 2    # 来自方案 1.11 #5：day-scoped 状态桶保留天数
 EVENTLOG_KEEP_DAYS = 7.0       # 来自方案 1.11 #5：event_log 保留天数（短期缓冲恢复用）
 JANITOR_LEASE_TTL = 600.0      # 先验：单实例租约 TTL（janitor 全程实测 <1s，TTL≈600× 余量；持锁崩溃停摆上限=600s，见 test_lease_single_instance）
@@ -59,7 +58,10 @@ RECALL_CHAT_TAKE = 3           # 先验：锚点之外抽 k 条注入（防复�
 RECALL_LINK_HOPS = 2           # 来自方案（差序联想）：图遍历最多 2 跳（防上下文爆炸）
 RECALL_LINK_BUDGET = 6         # 先验：联想扩展命中预算（1 跳 + 2 跳合计上限）
 EPISODIC_HALF_LIFE_DAYS = 14.0 # 先验：情景记忆快衰减（"上次被群友嘲笑"类，鲜活但易忘）
-RECALL_DECAY_MODE = "stability" # 2026-11-03：新近度口径。stability=FSRS-5 幂律曲线(用事实自己存的 stability，随引用增长) / half_life=旧的指数衰减(不看用没用过)
+# 2026-11-03：新近度口径。stability=FSRS-5 幂律曲线(用事实自己存的 stability，随引用增长) /
+# half_life=旧的指数衰减(不看用没用过)。
+# 默认 stability：bench/bench_memory_quality.py 的 6 条排序不变量在两种口径下都过（见证据文档）
+RECALL_DECAY_MODE = "stability"
 
 # 换声（RVC）时长护栏：语音条超过这个秒数就不换声，直接用 TTS 原声。
 # 2026-11-03 真机实测（tools/archcheck/{rvc_gpu_bench,rvc_half_bench}.json，RTX 3050 4 GB，半精度）：
@@ -68,8 +70,7 @@ RECALL_DECAY_MODE = "stability" # 2026-11-03：新近度口径。stability=FSRS-
 #   30 s 素材 23 799 ms（RTF 0.79，显存 3954/4096 MiB）← 断崖：一次性推理把 4 GB 打满
 # （fp32 更惨：30 s 要 59 983 ms）。所以拐点在 15 s 上下，超过就别在语音条上换声。
 # 点歌/翻唱走 mode="song"，不受此限（离线任务，30 s 素材 24 s 可以等）。
-VOICE_MAX_CONVERT_SECONDS = 15.0
-                               # 默认 fsrs：bench/bench_memory_quality.py 的 6 条排序不变量在两种口径下都过（见证据文档）
+VOICE_MAX_CONVERT_SECONDS = 15.0  # 先用 15 s 兜底（无实测来源，见上方 RVC 真机拐点：>15 s 显存打满）
 
 # ---- 反思 Worker：aiji/reflect.py（性格涌现，2026-10-29 新增）----
 REFLECT_EVERY_TURNS = 30       # 先验：攒够 30 条新对话才反思一次（太勤=性格抖动，太懒=学不到）
