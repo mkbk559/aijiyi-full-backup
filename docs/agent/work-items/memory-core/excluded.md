@@ -889,3 +889,46 @@ loop 侧 `interval * 2**min(n,4)` 退避、封顶 24 h、成功清零。
 原来那 16 个线程是同一个 Python 进程里开的，客户端自己在抢 GIL。
 **教训**：压测报告必须写清客户端形态；"同进程多线程客户端"测出来的高位数
 可能一大半是测量工具造成的，不能当服务端瓶颈。
+
+## 122. "最多丢最后一个事件"是错的：kill 丢的是整个队列（2026-11-03）
+
+并发写不丢验证（64 条并发 /ingest，8 进程）实测：
+- 全部 202 收下、flush 后 **64/64 落库、去重 64、failed=0、evicted=0** —— 无丢无重；
+- 但单条抽取 ≈4.9s（模型调用为主），队列一度积压 **56 条**，排空全程 314s；
+- 队列是 `queue.Queue()` 无界内存队列。此刻进程被 kill，丢的是 56 条，
+  不是 `writer.py` 注释里说的"最多丢最后一个未处理的事件"。
+
+处置：①注释改准确（并加了守着注释的用例）；②加 `writer_backlog_warn`（默认 200）
+越过阈值打 warning（60s 不重复）、回落一半以下提示"已消化"并重置闸门——
+之前积压唯一能被看见的方式是手动打 `/flush` 看.queue_depth。
+
+**教训**：凡是"最多丢 N"的注释，N 必须有实验支撑；队列型系统的丢数上限
+永远等于"队列当前深度"，不是 1。
+
+## 123. patch 脚本不 assert 会静默失效（2026-11-03）
+
+给 `writer.py` 加 `self._backlog_warned_at = 0.0` 时，patch 脚本匹配
+`self._q: queue.Queue[Job] = queue.Queue()`——实际代码是 `Queue[Job | None]`，
+替换**静默没生效**。靠随后 Select-String 检查才抓到。
+处置：patch 脚本一律 `assert old in s`（本会话大部分遵守，这次漏了）。
+PowerShell 手写多行替换不可靠的根因相同：**没有断言的替换不是编辑，是祈祷**。
+
+
+## 124. `patch("...模块.time.sleep")` 会污染所有共享 time 模块的代码（2026-11-03）
+
+v35 全量跑，我自己的 `test_wait_sleeps_and_counts` 偶发失败：
+mock 里攒了几百次 `call(0.2)`——来自**别的测试线程**的 `time.sleep(0.2)`
+（`mcp_research` 的轮询）。原因：`mock.patch("aiji.brain.humanize.time.sleep")`
+先把 `humanize.time` 解析成**共享的 time 模块对象**，再改它的 `sleep` 属性——
+全进程一起被改。改成 `mock.patch("aiji.brain.humanize.time")`
+（只换 humanize 自己的全局名字绑定）就隔离了。
+**教训**：patch 的目标是"名字绑定"不是"对象属性"；要隔离就 patch 到
+被测模块的名字上截止，别点到共享对象的属性。
+
+## 125. 失败只记 "fail" 不记 traceback，等于放弃诊断（2026-11-03）
+
+v34 的 `test_being_checkup` 偶发失败，`run_suite` 的 JSON 里只有一个 "fail"，
+日志里翻不到 traceback，只能整夜守着重跑赌复现（v35 果然没复现，换成我自己的
+humanize 用例复现了）。run_suite 已改成把 traceback 存进 JSON
+（键 `<id> → {status, traceback}`），以后偶发失败当场就有线索。
+**教训**：测试基础设施的观测性要在出事**之前**建好——"失败了再查" 往往查不了。

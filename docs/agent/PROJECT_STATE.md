@@ -787,7 +787,7 @@ python bench/demo_loop.py                                       # 端到端：�
 - **跨平台隔离靠 SQL 过滤**，一次漏写 `platform` 条件就是串号事故；新增查询务必带 `Ident.where()`。
 - **风格/摘要都有并发陷阱**：`_turn_counts` 的读改写必须加锁；摘要必须按"距上次够 N 轮"判断并幂等（见 excluded 第 10、11 条）。
 - SQLite 写事务全局串行（一把锁）；注入要写留痕，会和 writer 抢锁（实测 p99 仍 <10ms）。
-- 内存队列不落盘：进程被 kill 最多丢最后一个未处理事件（`writer.py` 有 `shortcut:` 注释）。
+- 内存队列不落盘：进程被 kill 会丢**队列里所有**未处理事件——2026-11-03 实测并发 64 条时积压 56 条，那一刻 kill 就是丢 56 条（旧说法"最多丢最后一个"是错的，已随 #120 修正；队列越过 `writer_backlog_warn`=200 会打 warning）。实测单条 ingest 抽取 ≈4.9s（模型调用为主），单 worker 吞吐 ≈12 条/分。
 - **SQLite 关联 JOIN 的坏计划**：只给 `fact` 侧加身份条件时，planner 会"扫 fact 再全表扫 fact_link"，
   实测 300ms；必须两侧都带 `Ident.where` 且用 `CROSS JOIN` 固定 `fact_link` 为外循环（见 excluded 15）。
 - **`fact_link` 边数必须封顶**（每事实 ≤3）：种子阶段不封顶会到十万级链接（见 excluded 16）。

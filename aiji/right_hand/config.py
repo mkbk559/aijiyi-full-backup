@@ -89,6 +89,8 @@ class Settings:
     # 生命体运行层
     reflection_interval_s: float = 5.0
     writer_backlog_heuristic_at: int = 20
+    # 写入队列积压告警阈值：超过就骂一句（实测单条抽取 ≈4.9s，积压会很快涨起来）
+    writer_backlog_warn: int = 200
     debounce_ms: int = 800
     humanize_min_ms: int = 600
     humanize_max_ms: int = 4500
@@ -138,7 +140,7 @@ class Settings:
                   "max_turns_per_session", "turn_keep", "inject_chars", "inject_items", "asr_model",
                   "reflection_interval_s", "debounce_ms", "humanize_min_ms", "humanize_max_ms",
                   "fallback_cooldown_s",
-                  "writer_backlog_heuristic_at",
+                  "writer_backlog_heuristic_at", "writer_backlog_warn",
                   "typing_min_ms", "typing_max_ms", "actions_enabled", "action_root",
                   "action_approval_timeout_s", "action_max_rounds", "persona",
                   "rank_mode", "decay_enabled", "inject_min_rel",
@@ -256,6 +258,7 @@ class Settings:
             "inject_items": self.inject_items,
             "reflection_interval_s": self.reflection_interval_s,
             "writer_backlog_heuristic_at": self.writer_backlog_heuristic_at,
+            "writer_backlog_warn": self.writer_backlog_warn,
             "debounce_ms": self.debounce_ms,
             "humanize_min_ms": self.humanize_min_ms,
             "humanize_max_ms": self.humanize_max_ms,

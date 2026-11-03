@@ -78,18 +78,21 @@ class PlanMsTest(unittest.TestCase):
 class WaitTest(unittest.TestCase):
     def test_wait_sleeps_and_counts(self):
         p = pacer()
-        with mock.patch("aiji.brain.humanize.time.sleep") as sleep:
+        # 注意作用域：`patch("...humanize.time.sleep")` 会改到**共享的 time 模块**，
+        # 别的测试线程（如 mcp_research 的 time.sleep(0.2) 轮询）全被记进 mock，
+        # v35 全量跑时就是被这个坑的。改成只换 humanize 自己的 time 绑定。
+        with mock.patch("aiji.brain.humanize.time") as time_mod:
             delay = p.wait("你好", "qq", idle_s=10)
         self.assertGreater(delay, 0)
-        sleep.assert_called_once()
+        time_mod.sleep.assert_called_once()
         self.assertEqual(p.stats["delayed"], 1)
         self.assertAlmostEqual(p.stats["waited_ms"], delay)
 
     def test_non_im_platform_does_not_sleep(self):
         p = pacer()
-        with mock.patch("aiji.brain.humanize.time.sleep") as sleep:
+        with mock.patch("aiji.brain.humanize.time") as time_mod:
             self.assertEqual(p.wait("你好", "console"), 0.0)
-        sleep.assert_not_called()
+        time_mod.sleep.assert_not_called()
         self.assertEqual(p.stats["delayed"], 0)
 
 

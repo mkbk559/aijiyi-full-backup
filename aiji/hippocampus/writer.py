@@ -7,7 +7,8 @@
 
 顺序保证：同一 (身份, session) 的事件按提交顺序处理（单队列 + FIFO）。
 失败保证：单条抽取失败进 write_queue 死信表，不丢。
-shortcut: 内存队列不落盘，进程被 kill 时最多丢最后一个未处理的事件；
+shortcut: 内存队列不落盘：进程被 kill 时**队列里所有未处理事件**都会丢
+shortcut: （实测并发 64 条时积压到 56 条 → 那一刻 kill 就是丢 56 条，不是"最后一个"）；
 shortcut: 摘要用本地压缩（heuristic_summary），没走模型——模型摘要要另算延迟与成本。
 """
 
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import queue
 import re
 import threading
@@ -33,6 +35,7 @@ from aiji.hippocampus.recognize import Envelope, Item, Recognizers
 from aiji.hippocampus.store import Ident
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -121,6 +124,7 @@ class Writer:
         self._threads: list[threading.Thread] = []
         self._cv = threading.Condition()
         self._pending = 0
+        self._backlog_warned_at = 0.0
         self._closed = False
         self._turn_counts: dict[tuple[str, str, str, str], int] = {}
         self._summary_lock = threading.Lock()
@@ -182,7 +186,23 @@ class Writer:
         with self._cv:
             self._pending += 1
             self.stats.submitted += 1
-        return self._q.qsize()
+        depth = self._q.qsize()
+        self._note_backlog(depth)
+        return depth
+
+    def _note_backlog(self, depth: int) -> None:
+        """积压要能看见：越过阈值骂一次（60s 内不重复），回落后说一声。"""
+        warn_at = max(1, int(getattr(self.settings, "writer_backlog_warn", 200)))
+        now = time.monotonic()
+        if depth >= warn_at:
+            if now - self._backlog_warned_at >= 60.0:
+                self._backlog_warned_at = now
+                logger.warning(
+                    "写入队列积压 %d 条（阈值 %d）：单条抽取要几秒，"
+                    "进程被 kill 会丢掉这些未处理事件", depth, warn_at)
+        elif self._backlog_warned_at and depth <= warn_at // 2:
+            self._backlog_warned_at = 0.0
+            logger.info("写入队列积压已消化到 %d 条", depth)
 
     def flush(self, timeout: float = 10.0) -> bool:
         deadline = time.monotonic() + timeout
