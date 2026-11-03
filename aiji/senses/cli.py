@@ -279,6 +279,37 @@ def cmd_quota(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_grow(args: argparse.Namespace) -> int:
+    """成长状态：现在多大、什么阶段、下一次进阶还要多久、能不能手动改。"""
+    from aiji.brain import growth
+
+    g = growth.Growth()
+    data = g.state()
+    start = float(data.get("start_age") or growth.START_AGE)
+    rate = float(data.get("rate") or growth.DEFAULT_RATE)
+    if args.rate is not None:
+        if args.rate <= 0:
+            raise SystemExit("aging_rate 必须大于 0")
+        rate = float(args.rate)
+    if args.set_age is not None or args.rate is not None:
+        age = float(args.set_age) if args.set_age is not None else g.age_years()
+        age = max(growth.MIN_AGE, min(growth.MAX_AGE, age))
+        # 反推出生时间：改完以后真实时间继续正常走
+        back_days = (age - start) * growth.YEAR_DAYS / rate
+        data["birth_at"] = g.now() - back_days * 86400.0
+        data["rate"] = rate
+        g.save(data)
+    out = g.describe()
+    out["path"] = str(g.path)
+    out["stages"] = [
+        {"id": s.id, "label": s.label, "range": [s.age_min, s.age_max],
+         "sentence": s.sentence, "topics": s.topics}
+        for s in growth.STAGES
+    ]
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_bench(args: argparse.Namespace) -> int:
     sys.path.insert(0, str(BENCH))
     from bench_recall import run  # type: ignore[import-not-found]
@@ -398,6 +429,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--set", dest="set_credits", type=float, default=None,
                     help="把反代当前积分写进 data/credits.json（按单价折算成每日次数）")
     sp.set_defaults(func=cmd_quota)
+
+    sp = sub.add_parser("grow", help="成长状态：年龄/阶段/下次进阶；可 --set-age 手动调")
+    sp.add_argument("--set-age", type=float, default=None,
+                    help="把当前年龄改到 X 岁（反推出生时间，之后继续正常长）")
+    sp.add_argument("--rate", type=float, default=None,
+                    help="成长速率：1 个真实天 = 多少角色天（默认 30）")
+    sp.set_defaults(func=cmd_grow)
 
     sp = sub.add_parser("bench", help="召回延迟压测")
     sp.add_argument("--facts", type=int, default=5000)

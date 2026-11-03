@@ -458,6 +458,21 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, operations.read_config(operations.CONFIG_PATH))
         elif path == "/api/operations/services":
             self._send(200, service_control.snapshot())
+        elif path == "/api/growth":
+            from aiji.brain import growth as growth_mod
+
+            growth_mod.configure(
+                age=getattr(self.memory.settings, "persona_age", None),
+                rate=getattr(self.memory.settings, "aging_rate", None),
+            )
+            snap = growth_mod.current().describe()
+            snap["persona"] = getattr(self.memory.settings, "persona", "")
+            snap["stages"] = [
+                {"id": s.id, "label": s.label, "range": [s.age_min, s.age_max],
+                 "sentence": s.sentence}
+                for s in growth_mod.STAGES
+            ]
+            self._send(200, snap)
         elif path == "/api/mcp":
             registry = getattr(self.memory, "mcp_registry", None)
             research = getattr(self.memory, "mcp_research_loop", None)

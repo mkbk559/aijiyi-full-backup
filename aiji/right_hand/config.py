@@ -96,6 +96,10 @@ class Settings:
     typing_min_ms: int = 300
     typing_max_ms: int = 1800
     persona: str = "child"
+    # 成长引擎：年龄是唯一真源。persona_age 锁定年龄（None=按真实时间走），
+    # aging_rate = 每个真实天对应的角色天数（默认 30，约 12 天长大一岁）。
+    persona_age: float | None = None
+    aging_rate: float | None = None
     # 执行层：Function Calling 工具与人工审批
     actions_enabled: bool = True
     action_root: str = ""
@@ -198,6 +202,18 @@ class Settings:
         s.persona = str(
             cfg.get("persona") or os.environ.get("AIJI_PERSONA") or s.persona
         ).strip() or "child"
+        # 成长引擎：年龄锁定 / 成长速率（环境变量优先，方便演示与验收复现）
+        for key, env_name in (("persona_age", "AIJI_PERSONA_AGE"),
+                              ("aging_rate", "AIJI_AGING_RATE")):
+            raw = cfg.get(key)
+            if raw is None:
+                raw = os.environ.get(env_name)
+            if raw is None or raw == "":
+                continue
+            try:
+                setattr(s, key, float(raw))
+            except (TypeError, ValueError):
+                pass
         # 人格预设自带推荐口癖：配置/环境变量都没显式给 tics 时按 persona 取默认。
         # （例如 persona=child → "为什么呀/我跟你讲/才不是呢…"，口癖抽取与风格
         # 改写都会用到，否则小孩设定只影响提示词、不影响风格层。）

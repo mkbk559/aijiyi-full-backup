@@ -25,6 +25,7 @@ from typing import Any
 
 from aiji.throat.net_guard import UrlGuardError, validate_public_http_url
 from aiji.heart.voice_service import VoiceError, VoiceRegistry
+from aiji import net
 
 
 def _default_separator() -> str:
@@ -430,7 +431,7 @@ class SongService:
     ) -> bytes:
         request = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with net.urlopen(request, timeout=timeout) as response:
                 chunks: list[bytes] = []
                 size = 0
                 while True:

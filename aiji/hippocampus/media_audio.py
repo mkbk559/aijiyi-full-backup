@@ -8,6 +8,7 @@ import urllib.request
 from typing import Any, Callable
 
 from aiji.throat.net_guard import UrlGuardError, validate_public_http_url
+from aiji import net
 
 
 def media_bytes_from_url(
@@ -83,7 +84,7 @@ def _default_fetch(url: str, max_bytes: int) -> bytes:
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=25) as response:
+        with net.urlopen(request, timeout=25) as response:
             length = int(response.headers.get("Content-Length") or 0)
             if length > max_bytes:
                 raise UrlGuardError("audio_too_large", "audio exceeds size limit")

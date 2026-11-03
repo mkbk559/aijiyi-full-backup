@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from aiji.left_hand.mcp_client import MCPRegistry
+from aiji import net
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +168,7 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {self.token}"
         request = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(
+            with net.urlopen(
                 request, timeout=self.timeout_s,
             ) as response:
                 body = response.read(4 * 1024 * 1024)

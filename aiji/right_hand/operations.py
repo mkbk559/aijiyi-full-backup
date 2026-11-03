@@ -19,6 +19,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
                  "max_turns_per_session", "turn_keep", "inject_chars", "inject_items",
                  "inject_min_rel"),
     "识别与对话": ("recognize_timeout_s", "min_confidence", "asr_model", "persona",
+                   "persona_age", "aging_rate",
                    "reflection_interval_s", "debounce_ms", "humanize_min_ms",
                    "humanize_max_ms", "typing_min_ms", "typing_max_ms",
                    "fallback_cooldown_s", "writer_backlog_heuristic_at"),
@@ -65,9 +66,11 @@ MINIMUM = {
     "qq_auto_daily_max": 1, "qq_auto_burst_max": 1,
     "qq_auto_min_recent": 1, "qq_heart_silence": 0,
     "qq_heart_cooldown": 0, "qq_heart_daily": 1,
+    "persona_age": 4, "aging_rate": 0.1,
 }
 MAXIMUM = {"min_confidence": 1, "inject_min_rel": 1,
-           "qq_auto_interject_chance": 1, "qq_auto_max_chance": 1}
+           "qq_auto_interject_chance": 1, "qq_auto_max_chance": 1,
+           "persona_age": 60, "aging_rate": 365.25}
 EDITABLE = frozenset(key for names in GROUPS.values() for key in names)
 DEFAULT = Settings()
 

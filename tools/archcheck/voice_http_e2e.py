@@ -84,9 +84,12 @@ def main() -> None:
                                 "last_skipped": voices.get("last_skipped")})
 
         text = "真机验收：这条语音是走 TTS 再换声出来的。"
+        # 声线 id 不写死：改过名的包（dafeiyu → makabaka）不该让脚本变成假失败
+        voice_id = (items[0].get("id") if items else None) or "makabaka"
+        report["steps"].append({"step": "voice id", "id": voice_id})
         t = time.perf_counter()
         code, ctype, body = post_raw("/v1/audio/speech",
-                                     {"input": text, "voice": "dafeiyu"})
+                                     {"input": text, "voice": voice_id})
         elapsed = round((time.perf_counter() - t) * 1000.0, 1)
         target = OUT / "speech.wav"
         target.write_bytes(body)

@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 from aiji.right_hand import params
 from aiji.skeleton.paths import ROOT
+from aiji import net
 
 
 class VoiceError(RuntimeError):
@@ -670,7 +671,7 @@ class VoiceRegistry:
         request = urllib.request.Request(
             url, method=method, data=data, headers=headers or {})
         try:
-            with urllib.request.urlopen(request, timeout=timeout_s) as response:
+            with net.urlopen(request, timeout=timeout_s) as response:
                 body = response.read(24 * 1024 * 1024 + 1)
         except urllib.error.HTTPError as exc:
             detail = exc.read(500).decode("utf-8", "replace")

@@ -86,6 +86,20 @@ _CANNED_HELP = re.compile(
 )
 
 
+def strip_code_fences(text: str) -> str:
+    """去掉 ``` 围栏和语言标记。
+
+    小孩/少年不会用 Markdown 代码块；提示词说"别用"，模型偶尔还是会写
+    （2026-11-03 实测 14 岁档把伪代码包在 ``` 里）。这里做成确定性后处理：
+    内容留下，围栏去掉。
+    """
+    value = str(text or "")
+    if "```" not in value:
+        return value
+    value = re.sub(r"```[a-zA-Z0-9_+-]*\n?", "", value)
+    return re.sub(r"\n{3,}", "\n\n", value).strip()
+
+
 def sanitize_reply(text: str) -> str:
     """Remove emoji/sticker markers from visible text.
 

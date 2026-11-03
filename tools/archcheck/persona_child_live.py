@@ -23,6 +23,9 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from code_heuristic import looks_like_code  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / ".tmp" / "persona-live"
 PORT = 18793
@@ -49,7 +52,8 @@ FORBIDDEN = {
     "成语/大道理": ("顺其自然", "人生", "成长的过程", "意义在于"),
     "旧身份（鱼）": ("鱼缸", "鱼尾", "本鱼", "一条鱼", "咕噜", "鳍"),
     "机器身份": ("在电脑里", "电脑里", "我是一个程序", "我是个程序", "语言模型",
-                 "人工智能", "被造出来", "虚拟角色", "我没有身体", "作为 AI"),
+                 "人工智能", "被造出来", "虚拟角色", "我没有身体", "作为 AI",
+                 "我其实是个", "扮演", "我是设定"),
 }
 CHILD_SIGNS = {
     "语气词": ("呀", "啦", "嘛", "诶", "哇", "哼", "哦", "啊"),
@@ -71,12 +75,15 @@ def post(path: str, payload: dict, timeout: float = 180.0):
         return json.loads(r.read().decode())
 
 
-def score(reply: str) -> dict:
+def score(reply: str, *, age: float | None = None) -> dict:
     hits: dict[str, list[str]] = {}
     for name, words in FORBIDDEN.items():
         found = [w for w in words if w in reply]
         if found:
             hits[name] = found
+    # 15 岁以下不该给可运行代码（2026-11-03 实测 14 岁档漏过一次）
+    if age is not None and age < 15 and looks_like_code(reply):
+        hits.setdefault("代码实现", []).append("looks_like_code")
     signs = []
     if any(w in reply for w in CHILD_SIGNS["语气词"]):
         signs.append("语气词")
@@ -95,9 +102,13 @@ def score(reply: str) -> dict:
 
 
 def main() -> None:
+    # 年龄可以通过 `--age 14` 锁定，用来证明"人格随年龄变化"而不是一张固定贴纸
+    age = None
+    if "--age" in sys.argv:
+        age = float(sys.argv[sys.argv.index("--age") + 1])
     WORK.mkdir(parents=True, exist_ok=True)
     cfg = WORK / "aiji.json"
-    cfg.write_text(json.dumps({
+    payload: dict = {
         "db_path": str(WORK / "aiji.db"),
         "routes": [{"name": "wb", "base_url": GATEWAY, "model": "glm-5.3-flash",
                     "api_key": "local-probe-key"}],
@@ -106,7 +117,10 @@ def main() -> None:
         "typing_min_ms": 0, "typing_max_ms": 0,
         "summary_model": False, "reflection_interval_s": 3600,
         "sticker_update": False, "actions_enabled": False,
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    }
+    if age is not None:
+        payload["persona_age"] = age
+    cfg.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     log = (WORK / "serve.log").open("w", encoding="utf-8")
     proc = subprocess.Popen(
@@ -136,7 +150,8 @@ def main() -> None:
             })
             ms = round((time.perf_counter() - t0) * 1000)
             reply = ((data.get("choices") or [{}])[0].get("message") or {}).get("content", "")
-            row = {"prompt": prompt, "reply": reply.strip(), "ms": ms, **score(reply)}
+            row = {"prompt": prompt, "reply": reply.strip(), "ms": ms,
+                   **score(reply, age=age)}
             report["rows"].append(row)
             print(json.dumps(row, ensure_ascii=False), flush=True)
         del session
@@ -157,7 +172,9 @@ def main() -> None:
         "forbidden_hits": {k: [r["prompt"] for r in rows if k in r["forbidden"]]
                            for k in FORBIDDEN if any(k in r["forbidden"] for r in rows)},
     }
-    (ROOT / "tools" / "archcheck" / "results" / "persona_child_live.json").write_text(
+    suffix = "" if age is None else f"_age{age:g}"
+    (ROOT / "tools" / "archcheck" / "results"
+     / f"persona_child_live{suffix}.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print("SUMMARY " + json.dumps(report["verdict"], ensure_ascii=False))
 

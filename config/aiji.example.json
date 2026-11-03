@@ -17,6 +17,8 @@
   "typing_min_ms": 300,
   "typing_max_ms": 1800,
   "persona": "child",
+  "persona_age": null,
+  "aging_rate": 30.0,
   "actions_enabled": true,
   "action_root": "",
   "action_approval_timeout_s": 120,

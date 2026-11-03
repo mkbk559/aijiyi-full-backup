@@ -48,9 +48,14 @@ _PERSONALITY_WORDS: frozenset[str] = frozenset((
     "开朗", "内向", "暴躁", "体贴", "损", "逗", "萌", "贱", "骚",
 ))
 
+# 成年语感：旧人格时期学到的"调侃/损人/自嘲"习惯。儿童人格下不注入。
+_ADULT_TONE_WORDS: frozenset[str] = frozenset((
+    "调侃", "损对方", "损人", "自嘲", "阴阳", "抬杠", "毒舌", "抽象", "玩梗",
+    "嘴臭", "刻薄", "挖苦", "冷嘲", "脏话", "骂人", "羞辱", "装傻", "油滑",
+))
+
 # 涌现性格的元描述：永远跟着性格一起给模型，防止它把性格当教条
-EMERGENT_NOTE = (
-    "下面这些不是设定，是你和人类互动中慢慢长出来的习惯，"
+EMERGENT_NOTE = ("下面这些不是设定，是你和人类互动中慢慢长出来的习惯，"
     "有新证据就可以改；拿不准的时候按当下的对话来，不必硬套。"
 )
 
@@ -107,13 +112,46 @@ def floor_text() -> str:
     return "\n".join(lines)
 
 
+def kid_safe_traits(
+    traits: list[dict[str, Any]] | None,
+    persona: str | None,
+    age: float | None = None,
+) -> list[dict[str, Any]]:
+    """儿童人格下过滤成年语感的涌现性格（不改库，只影响注入）。
+
+    满 10 岁（成长引擎进入少儿/少年阶段）以后自动放开——那些"调侃/自嘲"
+    本来就是成年人才有的说话习惯，年龄到了就能用。
+    """
+    items = [t for t in (traits or []) if str(t.get("value", "")).strip()]
+    if str(persona or "").strip().lower() != "child":
+        return items
+    if age is not None and float(age) >= 10.0:
+        return items
+    kept: list[dict[str, Any]] = []
+    for item in items:
+        value = str(item.get("value", ""))
+        if any(word in value for word in _ADULT_TONE_WORDS):
+            continue
+        kept.append(item)
+    return kept
+
+
 def system_prefix(
     traits: list[dict[str, Any]] | None = None,
     *,
     global_traits: list[dict[str, Any]] | None = None,
     max_traits: int = 6,
+    persona: str | None = None,
+    age: float | None = None,
 ) -> str:
-    """自我描述块 = 物理底线 + 涌现性格（按置信度取前 N）。"""
+    """自我描述块 = 物理底线 + 涌现性格（按置信度取前 N）。
+
+    `persona="child"` 时先过一遍 `kid_safe_traits()`：库里 235 条"调侃/损人/自嘲"
+    这类成年语感是旧人格时期学的，直接喂给六七岁的小孩会立刻变成"大人装小孩"；
+    但年龄满 10 岁后这些习惯本来就该生效，所以要用 `age` 一起判断。
+    """
+    traits = kid_safe_traits(traits, persona, age)
+    global_traits = kid_safe_traits(global_traits, persona, age)
     parts = ["## 你是谁（不可动摇的物理底线）", floor_text()]
     ts = [t for t in (traits or []) if str(t.get("value", "")).strip()]
     gs = [t for t in (global_traits or []) if str(t.get("value", "")).strip()]

@@ -14,6 +14,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable
+from aiji import net
 
 _CQ_AT = re.compile(r"\[CQ:at,qq=([^,\]]+)[^\]]*\]")
 _CQ_ANY = re.compile(r"\[CQ:[^\]]+\]")
@@ -146,7 +147,7 @@ class OneBotClient:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(url, data=data, method="POST", headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
+            with net.urlopen(request, timeout=self.timeout_s) as response:
                 body = json.loads(response.read().decode("utf-8", "replace") or "{}")
             return str(body.get("status") or "").lower() == "ok" and int(body.get("retcode", 0)) == 0
         except (urllib.error.URLError, TimeoutError, ValueError, TypeError):
@@ -157,7 +158,7 @@ class OneBotClient:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(url, data=data, method="POST", headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
+            with net.urlopen(request, timeout=self.timeout_s) as response:
                 raw = response.read().decode("utf-8", "replace") or "{}"
                 body = json.loads(raw)
             retcode = int(body.get("retcode", 0) or 0)
@@ -216,7 +217,7 @@ class OneBotClient:
         request = urllib.request.Request(
             f"{self.base_url}/{name}", data=data, method="POST", headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
+            with net.urlopen(request, timeout=self.timeout_s) as response:
                 body = json.loads(
                     response.read().decode("utf-8", "replace") or "{}")
         except urllib.error.HTTPError as exc:

@@ -210,7 +210,7 @@ class TestOneBotBridge(unittest.TestCase):
             timeout_s=9,
         )
         with mock.patch(
-            "aiji.throat.bridge.onebot.urllib.request.urlopen",
+            "aiji.throat.bridge.onebot.net.urlopen",
             fake_urlopen,
         ):
             data = client.call(

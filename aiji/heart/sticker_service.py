@@ -15,6 +15,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any, Callable
+from aiji import net
 
 
 DEFAULT_STICKER_FEED = (
@@ -369,7 +370,7 @@ class StickerService:
             },
         )
         try:
-            with urllib.request.urlopen(
+            with net.urlopen(
                 request, timeout=timeout_s or self.timeout_s,
             ) as response:
                 self._validate_public_url(response.geturl())

@@ -54,7 +54,9 @@ class TestChildPersonaBlock(unittest.TestCase):
     def test_style_block_skips_learned_traits_for_child(self):
         with mock.patch.object(persona, "_LEARNED_PATH", Path(".tmp/none-persona")):
             block = persona.style_block("child")
-        self.assertEqual(block, persona.CHILD)
+        # 成长引擎在后面追加"当前年龄"的阶段标尺，所以是前缀关系而非全等
+        self.assertTrue(block.startswith(persona.CHILD))
+        self.assertIn("成长阶段", block)
         self.assertNotIn("最近从语料学到的说话习惯", block)
 
     def test_reminder_is_child_specific(self):
@@ -109,6 +111,35 @@ class TestChildPersonaSettings(unittest.TestCase):
     def test_adult_persona_has_no_preset_tics(self):
         settings = self.config({"persona": "sunba", "routes": []})
         self.assertEqual(settings.tics, ())
+
+
+class TestKidTraitFilter(unittest.TestCase):
+    """库里 235 条"调侃/损人/自嘲"是旧人格学的，不能喂给六七岁的小孩。"""
+
+    TRAITS = [
+        {"value": "常带调侃语气损对方，如『你那是守锅还是守夜』",
+         "confidence": 0.95, "evidence": 90},
+        {"value": "说话喜欢用短句", "confidence": 0.8, "evidence": 12},
+    ]
+
+    def test_child_persona_drops_adult_tone_traits(self):
+        text = selfhood.system_prefix(self.TRAITS, persona="child")
+        self.assertNotIn("调侃", text)
+        self.assertNotIn("损对方", text)
+        self.assertIn("说话喜欢用短句", text)
+
+    def test_default_persona_keeps_them(self):
+        text = selfhood.system_prefix(self.TRAITS)
+        self.assertIn("调侃", text)
+
+    def test_global_traits_filtered_too(self):
+        globals_ = [dict(self.TRAITS[0], identities=3)]
+        text = selfhood.system_prefix([], global_traits=globals_, persona="child")
+        self.assertNotIn("调侃", text)
+
+    def test_kid_safe_traits_passthrough_when_no_persona(self):
+        self.assertEqual(
+            len(selfhood.kid_safe_traits(self.TRAITS, None)), 2)
 
 
 if __name__ == "__main__":

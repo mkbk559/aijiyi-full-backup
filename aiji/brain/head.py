@@ -14,10 +14,12 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from aiji.brain import growth as growth_mod
 from aiji.brain import persona as persona_mod
 from aiji.brain import role_boundary
 from aiji.brain import selfhood
 from aiji.left_hand.actions import OPENAI_TOOLS
+from aiji.brain import gate as gate_mod
 from aiji.brain.gate import check_reply, fit_reply, reply_char_limit
 from aiji.right_hand import params
 from aiji.brain.humanize import IM_PLATFORMS
@@ -249,6 +251,12 @@ class Head:
             mode="chat",
         )
         persona_key = persona or getattr(self.memory.settings, "persona", "default")
+        # 成长引擎：年龄是唯一真源，人格文案从年龄渲染（配置可锁定年龄/速率）
+        growth_mod.configure(
+            age=getattr(self.memory.settings, "persona_age", None),
+            rate=getattr(self.memory.settings, "aging_rate", None),
+        )
+        persona_age = growth_mod.current().age_years()
         persona_block = persona_mod.style_block(persona_key)
         caller_name = ""
         preferred_name = ""
@@ -284,6 +292,8 @@ class Head:
                     self.memory.global_traits()
                     if hasattr(self.memory, "global_traits") else []
                 ),
+                persona=persona_key,
+                age=persona_age,
             )
             + (f"\n\n{persona_block}" if persona_block else "")
             + (f"\n\n{system_suffix}" if system_suffix else "")
@@ -474,8 +484,11 @@ class Head:
                 raw = self._strip_style_fillers(original, query)
         if physical_action and role_boundary.contains_executable_code(raw):
             raw = role_boundary.refusal(query)
+        # 身份兜底：人格一旦设定（child/sunba），任何入口都不许自曝"我是 AI/在扮演"。
+        # 2026-11-03 实测：只在 qq/wechat 修，API 入口会漏（14 岁档回
+        # "我其实是个 AI，在扮演一个叫玛卡巴卡的角色"）。
         if (
-            ident.platform in ("qq", "wechat")
+            persona_key in ("child", "sunba")
             and role_boundary.contains_identity_disclosure(raw)
         ):
             raw = role_boundary.identity_repair(raw)
@@ -489,6 +502,8 @@ class Head:
                 raw,
             )
         # 出口硬上限：先按平台裁进字符预算，再交给闸门校验（裁过不再整条丢弃）
+        if persona_key == "child" and persona_age < 15:
+            raw = gate_mod.strip_code_fences(raw)
         raw = fit_reply(raw, reply_char_limit(ident.platform))
         gate = check_reply(raw)
         text = gate.text if gate.ok else "这话我说不出口。"
@@ -595,3 +610,4 @@ class Head:
 
 
 __all__ = ["FALLBACK_TEXT", "Head", "HeadReply", "normalize_messages"]
+
