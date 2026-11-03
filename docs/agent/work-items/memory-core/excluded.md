@@ -1225,3 +1225,11 @@ A/B 实测（`.tmp/ab_finish_body.py`，证据归档 224221-ab-finish-body-rst�
 
 `val.startswith("的")` → `val = val[1:]`：现代规则用负向断言 `(?![^…]*(?:是|的))` 已挡住这类值，
 这行只有在"我住在的。"这种刻意构造下才走到。保留 + 注释说明，不删（规则回退时仍需要）。
+
+## 160. 端点矩阵探针停在旧开关模型上（终端是双开关）
+
+`tools/probe/probe_http.py` 有两条一直 FAIL：`POST /api/shell → 403 unsafe_shell_disabled`。
+不是产品坏了，是探针只开了 `AIJI_CONSOLE_SHELL=1`，而终端要**两个**开关
+（`AIJI_CONSOLE_SHELL` 放行控制台终端 + `AIJI_UNSAFE_SHELL` 允许任意命令），
+两者都是请求时读环境变量。补上第二个开关后 **81/81**。
+**教训**：探针/用例报红先分清"产品回归"还是"探针过期"；开关语义变过的地方最容易演变成假失败。
