@@ -1424,6 +1424,11 @@ class AijiHTTPServer(ThreadingHTTPServer):
     life_loop: Any = None
     mcp_research_loop: Any = None
     sticker_loop: Any = None
+    # socketserver 默认 listen backlog 只有 5。实测 8 线程同时发请求时
+    # p95 从 29ms 跳到 522ms、32 线程到 1.5s，且步进正好是 Windows 的 SYN
+    # 重传间隔（≈500ms）：连接在 backlog 里排不下，客户端在重传 SYN。
+    # 控制台一屏会并发拉好几个接口，放宽到这个量级就不会排队了。
+    request_queue_size = 128
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

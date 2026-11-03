@@ -42,8 +42,9 @@ class ResearcherFailureTest(unittest.TestCase):
 
     def test_all_queries_failing_raises_instead_of_empty_report(self):
         github = BrokenGitHub()
-        with self.assertRaises(RuntimeError) as ctx:
-            self._researcher(github).run_once()
+        with self.assertLogs("aiji.left_hand.mcp_research", level="WARNING"):
+            with self.assertRaises(RuntimeError) as ctx:
+                self._researcher(github).run_once()
         self.assertIn("全部失败", str(ctx.exception))
         self.assertEqual(github.calls, len(mr.QUERIES), "每条 query 都要试一次")
 
@@ -54,6 +55,53 @@ class ResearcherFailureTest(unittest.TestCase):
         warnings = [r for r in logs.records if r.levelname == "WARNING"]
         self.assertEqual(len(warnings), 1, "同样的失败只留一条 warning")
         self.assertGreaterEqual(len(logs.records), len(mr.QUERIES))
+
+
+class GitHubClientParseTest(unittest.TestCase):
+    """限流页/代理错误页常是 200 + HTML，报错要能看懂，不能只丢 JSONDecodeError。"""
+
+    def _client_with(self, body: bytes):
+        return mr.GitHubClient(token=""), body
+
+    def test_non_json_body_gives_readable_error(self):
+        from unittest import mock
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self, size=-1):  # noqa: ARG002
+                return b"<html><body>rate limited</body></html>"
+
+        client, _ = self._client_with(b"")
+        with mock.patch.object(mr.net, "urlopen", return_value=FakeResponse()):
+            with self.assertRaises(RuntimeError) as ctx:
+                client.search_repositories("memory")
+        message = str(ctx.exception)
+        self.assertIn("不是 JSON", message)
+        self.assertIn("rate limited", message, "要把响应开头带出来，方便判断是不是限流页")
+        self.assertNotIn("Expecting value", message)
+
+    def test_json_but_not_object_is_rejected(self):
+        from unittest import mock
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self, size=-1):  # noqa: ARG002
+                return b"[1, 2, 3]"
+
+        client, _ = self._client_with(b"")
+        with mock.patch.object(mr.net, "urlopen", return_value=FakeResponse()):
+            with self.assertRaises(TypeError):
+                client.search_repositories("memory")
 
 
 class LoopBackoffTest(unittest.TestCase):

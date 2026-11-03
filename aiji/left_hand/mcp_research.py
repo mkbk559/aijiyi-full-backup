@@ -176,7 +176,13 @@ class GitHubClient:
             raise RuntimeError(f"GitHub HTTP {exc.code}") from exc
         except Exception as exc:
             raise RuntimeError(f"GitHub request failed: {exc}") from exc
-        value = json.loads(body)
+        try:
+            value = json.loads(body)
+        except ValueError as exc:
+            # 限流页/代理错误页常是 HTML：给一句能看懂的错，别把
+            # "Expecting value: line 1 column 1" 直接丢进告警里。
+            head = body[:80].decode("utf-8", "replace").replace("\n", " ")
+            raise RuntimeError(f"GitHub 返回的不是 JSON（{head!r}）") from exc
         if not isinstance(value, dict):
             raise TypeError("GitHub returned a non-object response")
         return value

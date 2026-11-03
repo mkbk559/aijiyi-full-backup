@@ -56,5 +56,22 @@ class HandleErrorTest(unittest.TestCase):
         self.assertEqual(dbg.call_count, 0)
 
 
+class ListenBacklogTest(unittest.TestCase):
+    """socketserver 默认 backlog=5，实测 8 线程并发就让 p95 从 29ms 跳到 522ms。
+
+    522 ≈ Windows 的 SYN 重传间隔：连接在 backlog 里排不下，客户端在重传。
+    这条断言防的是"有人把 request_queue_size 那一行删掉/改小"。
+    """
+
+    def test_backlog_is_raised_above_socketserver_default(self):
+        import socketserver
+
+        self.assertGreater(
+            srv.AijiHTTPServer.request_queue_size,
+            socketserver.TCPServer.request_queue_size,
+            "请求队列必须大于 socketserver 默认值（5）")
+        self.assertGreaterEqual(srv.AijiHTTPServer.request_queue_size, 64)
+
+
 if __name__ == "__main__":
     unittest.main()
