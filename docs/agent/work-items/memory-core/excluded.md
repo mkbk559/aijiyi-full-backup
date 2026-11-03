@@ -964,3 +964,21 @@ humanize 用例复现了）。run_suite 已改成把 traceback 存进 JSON
 这些表的写入本来都由 store 层封装，**裸 INSERT 只有测试会做**，所以这个坑
 每次写控制台类测试都会重踩。以后再往这些表塞数据，先
 `PRAGMA table_info(<表>)` 看一眼。
+
+## 130. 函数内 `import wave` 时，测试要 patch 真模块而不是补丁模块（2026-11-03）
+
+`voice_service._audio_seconds` / `_limit_peak` 里都是**函数内**
+`import wave`。想伪造"采样率 0"只能 patch `wave.open`，写
+`mock.patch.object(vs.wave, "open")` 会 `AttributeError: module has no attribute
+'wave'`（模块命名空间里根本没有这个名字）。
+**规则**：patch 的目标必须是"被调用时所在命名空间里的名字"——函数内 import 的
+模块只能用全局模块对象（`import wave` 后 patch `wave.open`）。
+
+## 131. 断言命令数组的下标前，先数清有几个参数（2026-11-03）
+
+伪造 `_postprocess` 的 `subprocess.run` 时我按"参数序号"写死
+`command[3] == output`、`command[5] == pitch`，实际数组是
+`["conv.exe","--in",src,"--out",output,"--pitch","4","--profile","p"]`，
+于是断言指向了 `--pitch` 这个字面量。**正确写法**是按 token 定位：
+`command[command.index("--out") + 1]`。同理，写产物也要按 token 找路径，
+否则假执行器会把文件写到 cwd 下一个叫 `--out` 的文件里。
