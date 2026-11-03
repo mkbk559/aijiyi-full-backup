@@ -1021,3 +1021,38 @@ humanize 用例复现了）。run_suite 已改成把 traceback 存进 JSON
 **教训**：名字相近的路径最容易靠印象写错（`/api/turns` vs `/api/recent-turns`、
 `/api/stats` vs `/stats`、`/api/memory/library` vs `/api/memories`）。
 探接口前先 grep 路由表，别拿记忆当文档。
+
+## 135. 静态 SQL 审计只能当 review 清单（2026-11-03）
+
+`tools/audit_identity_sql.py` 用 AST 扫 SQL 字面量，输出
+`no_where 20 / filtered_other 83 / insert_missing 8 / by_id 21 / ok 63`。
+逐个看下来 **没有一条是真的串号**：`insert_missing` 的 8 条全是非身份表
+（`being_*` 按 persona、`instance` 是进程心跳），`no_where`/`filtered_other`
+大多是 janitor 清理、growth 计数、`stats()` 全库统计。
+根因：很多查询是 `f"SELECT ... WHERE {w}"` + `ident.where()`，
+条件在**运行时**拼出来，静态看不见。
+所以它的定位是"改 WHERE 前先扫一眼"的清单，`--strict` 才当门禁；
+真正的隔离保证靠 `tests/test_identity_isolation.py`（双身份对撞、行为级）。
+**教训**：别把"扫不出问题"当成"没有问题"——尤其当条件由运行时拼装时。
+
+## 136. store 层的几个签名陷阱（2026-11-03）
+
+写身份隔离测试时连撞四次签名错误，都是"凭印象写"：
+- `FactDraft` 只有 `subject/predicate/object/text/confidence/kind/extra`——**没有** `mentions`
+- `upsert_profile(conn, ident, key, value)` 是"一个键一条"，不是整份 dict
+- `log_reflection` 的 deltas 是 `list[dict]`，不是 dict
+- `last_injection_with_feedback` 返回 `(id, item_ids)` 元组，不是 dict
+- `recent_turns` 返回 **dict 列表**，不是 dataclass（`t.content` 会 AttributeError）
+**规则**：给 store 层写测试前先 `inspect.signature()` 打印一遍，别猜。
+
+## 137. 401/404 早退不读请求体 → 客户端拿到 RST（2026-11-03 修复）
+
+`_unauthorized()` 直接 `close_connection = True` 回 401，不读请求体；404 同理。
+客户端在写 120 KB body 时服务端关连接，Windows 给
+`ConnectionAbortedError: [WinError 10053]`——**连状态码都拿不到**。
+A/B 实测（`.tmp/ab_finish_body.py`，证据归档 224221-ab-finish-body-rst）：
+关掉修复 8 次里 5 次中断、3 次拿到 401；打开修复 8/8 都是 401。
+413 分支早就写了 `_drain` 保护（注释都写清了原因），401/404 却漏了——
+同一个坑修了一处，别的出口没同步。
+**教训**：给"早退路径"打补丁时，把所有早退出口列一遍；`_send/_send_html/_unauthorized`
+这类统一出口才是该动手的地方。
