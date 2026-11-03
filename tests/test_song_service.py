@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from aiji.heart.song_service import SongError, SongService
+from aiji.heart.song_service import SongError, SongJob, SongService
 from aiji.heart.voice_service import VoiceRegistry
 
 
@@ -91,15 +91,19 @@ class SongServiceTest(unittest.TestCase):
             })
 
     def test_completed_job_survives_service_restart(self):
+        # 不要用 submit()：它会立刻起工作线程去下载并自己落盘，测试对 job 的改动
+        # 会和线程的状态竞争（2026-11-03：以前之所以"过"，是因为 _persist 抛
+        # FileNotFoundError 把工作线程打死了，属于靠 bug 蒙对）。这里直接造一份
+        # 完成态快照，只验"重启后能从磁盘读回成品"。
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             service = _service(root)
+            service.cache_root.mkdir(parents=True, exist_ok=True)
             output = service.cache_root / "abc123.mp3"
             output.write_bytes(b"audio")
-            job = service.submit("晴天", profile_id="dafeiyu")
-            job.status = "done"
-            job.stage = "完成"
-            job.output = str(output)
+            job = SongJob(id="abc123", source="晴天", profile_id="dafeiyu",
+                          pitch=0, max_seconds=60, status="done", stage="完成",
+                          output=str(output))
             service._persist(job)
 
             restarted = SongService(service.voices, data_root=root)

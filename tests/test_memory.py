@@ -747,7 +747,10 @@ class TestRecognize(TmpDB):
         self.assertFalse(env.usable)  # 不喂抽取：视频不做理解
 
     def test_link_title(self):
-        r = self.r(fetcher=lambda url: "<html><title>知乎 - 有问题就会有答案</title></html>")
+        # DNS 也注入：这条用例曾经因为本机网络抖一下（zhihu.com 解析失败）
+        # 就从 ok 变 error，属于"测试依赖真实外网"的坑。
+        r = self.r(fetcher=lambda url: "<html><title>知乎 - 有问题就会有答案</title></html>",
+                   resolver=lambda host: ["93.184.216.34"])
         env = r.recognize(Item("link", url="https://www.zhihu.com/question/1"))
         self.assertEqual(env.status, "ok")
         self.assertEqual(env.text, "知乎 - 有问题就会有答案")

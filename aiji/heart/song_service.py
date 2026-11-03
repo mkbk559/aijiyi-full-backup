@@ -8,6 +8,7 @@ mixes the result and exposes a completed audio file for the QQ plugin.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -26,6 +27,8 @@ from typing import Any
 from aiji.throat.net_guard import UrlGuardError, validate_public_http_url
 from aiji.heart.voice_service import VoiceError, VoiceRegistry
 from aiji import net
+
+logger = logging.getLogger(__name__)
 
 
 def _default_separator() -> str:
@@ -148,13 +151,24 @@ class SongService:
                 continue
 
     def _persist(self, job: SongJob) -> None:
+        """落一份任务快照。目录被清掉（临时目录回收/人工清理）要能自愈。
+
+        之前这里直接 `temp.write_text()`：`jobs_root` 一旦不存在就抛
+        `FileNotFoundError`，异常从 `_pump` 的 `finally` 抛出，整条歌曲队列线程
+        静默死掉、任务丢失（2026-11-03 全量日志里真实抓到过）。
+        """
         target = self.jobs_root / f"{job.id}.json"
         temp = target.with_suffix(".json.tmp")
-        temp.write_text(
-            json.dumps(asdict(job), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        os.replace(temp, target)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temp.write_text(
+                json.dumps(asdict(job), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(temp, target)
+        except OSError as exc:      # 落盘失败不能拖垮队列：任务还在内存里
+            self._persist_errors = int(getattr(self, "_persist_errors", 0)) + 1
+            logger.warning("song job 快照落盘失败（%s）：%s", target, exc)
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import time
 import os
 import shutil
 import threading
@@ -723,8 +724,19 @@ class TestOpenAIChatCompletions(unittest.TestCase):
 
         fake = FakeStickers()
         self.server.RequestHandlerClass.stickers = fake
-        payload = self.post_json("/api/stickers/update", {})
+        # 默认是异步（首次联网 27 s，同步会把控制台卡死）：立刻回 started，后台跑。
+        started = self.post_json("/api/stickers/update", {})
+        self.assertTrue(started["started"])
+        for _ in range(100):           # 等后台线程把 fake.updated 跑起来
+            if fake.updated:
+                break
+            time.sleep(0.02)
         self.assertEqual(fake.updated, 1)
+        self.assertFalse(self.server.sticker_job["running"]) if hasattr(
+            self.server, "sticker_job") else None
+        # 要同步结果就带 ?wait=1（脚本/自检用）
+        payload = self.post_json("/api/stickers/update?wait=1", {})
+        self.assertEqual(fake.updated, 2)
         self.assertEqual(payload["added"], 3)
 
     def test_server_runs_bounded_life_loop(self):

@@ -257,14 +257,23 @@ class TestConsoleAPI(unittest.TestCase):
                         fake_probe):
             first = self.post("/api/being/checkup/live", body)
             second = self.post("/api/being/checkup/live", body)
-            fresh = self.post("/api/being/checkup/live", {**body, "refresh": True})
-        self.assertEqual(len(calls), 2, "第二次同身份调用应命中缓存")
+            # refresh 已经不再同步等（33.8 s 会把控制台卡死）：立刻回过期缓存，
+            # 后台再刷新。所以刷新后的新结果要等一下才看得到。
+            stale = self.post("/api/being/checkup/live", {**body, "refresh": True})
+            for _ in range(150):
+                if len(calls) >= 2:
+                    break
+                time.sleep(0.02)
+            warmed = self.post("/api/being/checkup/live", body)
+        self.assertEqual(len(calls), 2, "refresh 触发一次后台刷新")
         self.assertFalse(first["cached"])
         self.assertTrue(second["cached"])
+        self.assertFalse(second["stale"])
         self.assertEqual(second["probe"], 1)
         self.assertGreaterEqual(second["age_s"], 0.0)
-        self.assertFalse(fresh["cached"])
-        self.assertEqual(fresh["probe"], 2)
+        self.assertTrue(stale["cached"], "refresh 时先回缓存，不阻塞")
+        self.assertTrue(stale["refresh_requested"], "refresh 只是排一个后台任务")
+        self.assertEqual(warmed["probe"], 2, "后台刷新后的结果要能被下一次读到")
 
 
 if __name__ == "__main__":

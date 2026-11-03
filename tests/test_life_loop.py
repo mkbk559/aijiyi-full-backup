@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import shutil
-import tempfile
 import time
 import unittest
-from pathlib import Path
 
 from aiji.endocrine.being import BeingStore
 from aiji.hippocampus.db import DB
 from aiji.endocrine.life_loop import LifeLoop
+from tests._tempdir import make_tmp
 
 
 def noon() -> float:
@@ -19,13 +17,12 @@ def noon() -> float:
 
 class LifeLoopTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="aiji-life-loop-"))
+        self.tmp = make_tmp(self, "aiji-life-loop-")
         self.db = DB(self.tmp / "life.db")
         self.store = BeingStore(self.db, persona="sunba")
 
     def tearDown(self):
         self.db.close()
-        shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_self_activity_creates_own_event_and_schedules_next_tick(self):
         event = self.store.advance_life(now=noon(), roll=0.2)

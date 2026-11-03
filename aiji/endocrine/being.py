@@ -371,6 +371,13 @@ class BeingStore:
         current = time.time() if now is None else float(now)
         row = self.db.read(
             "SELECT state FROM being_state WHERE persona=?", (self.persona,))
+        if not row:
+            # 换人格不该等于失忆：这个 persona 还没落过状态时，继承**最近一份**
+            # 状态（好感/信任/默契/心情都是"我们俩的关系"，不是某个标签的私有物）。
+            # 以前这里直接 BeingState() 重置 → 换个 persona 名字就"什么都不记得了"
+            # （2026-11-03 审计：换人格失忆的根因）。
+            row = self.db.read(
+                "SELECT state FROM being_state ORDER BY updated_at DESC LIMIT 1")
         try:
             state = BeingState.from_dict(json.loads(row[0]["state"])) if row else BeingState()
         except (TypeError, ValueError):
@@ -556,11 +563,24 @@ class BeingStore:
             return int(cur.lastrowid)
 
     def events(self, *, limit: int = 5) -> list[dict[str, Any]]:
-        return [
+        """最近发生的事。当前 persona 还没记过事时，回落到最近的整体历史——
+
+        "昨天你说要考试"这种事属于这段关系，不该因为改了 persona 名字就抹掉。
+        """
+        rows = [
             dict(row) for row in self.db.read(
                 "SELECT kind,summary,valence_delta,energy_delta,created_at"
                 " FROM being_event WHERE persona=? ORDER BY id DESC LIMIT ?",
                 (self.persona, max(1, int(limit))),
+            )
+        ]
+        if rows:
+            return rows
+        return [
+            dict(row) for row in self.db.read(
+                "SELECT kind,summary,valence_delta,energy_delta,created_at"
+                " FROM being_event ORDER BY id DESC LIMIT ?",
+                (max(1, int(limit)),),
             )
         ]
 

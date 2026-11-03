@@ -87,7 +87,7 @@ SYSTEMS = [
                    ["社交", "/api/social"], ["点歌任务", "/v1/songs"]],
         "acts": [["合成一条语音", "POST", "/v1/audio/speech", [["input", "这条是控制台合成的"]]],
                  ["切换声线", "POST", "/v1/voices/use", [["profile", "dafeiyu"]]],
-                 ["刷新表情包", "POST", "/api/stickers/update", []],
+                 ["刷新表情包（后台跑，立刻返回）", "POST", "/api/stickers/update", []],
                  ["发一条空间说说", "POST", "/api/social/qzone/publish",
                   [["content", "今天状态不错"]]]],
     },

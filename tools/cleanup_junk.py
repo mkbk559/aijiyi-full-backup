@@ -19,11 +19,21 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 KEEP_IN_TMP = {"research", "pdf"}
 KEEP_DIST_PREFIX = "aiji-0.8.3"
+
+
+def _label(p: Path) -> str:
+    """打印用路径：仓库内用相对路径，仓库外（%TEMP%）用绝对路径。"""
+    try:
+        return str(p.relative_to(ROOT))
+    except ValueError:
+        return str(p)
 
 
 def size_of(p: Path) -> int:
@@ -56,6 +66,22 @@ def collect() -> list[Path]:
         out += [p for p in tmp.iterdir() if p.name not in KEEP_IN_TMP]
     for pat in ("aiji-style-*", "aiji-being-checkup-*", "aiji-life-loop-*", "tmp*"):
         out += [p for p in ROOT.glob(pat) if p.is_dir()]
+    # 系统 TEMP 里的测试残留（`tempfile.mkdtemp()` 建在 %TEMP%，Windows 上 sqlite
+    # 句柄一顶住 rmtree 就删不掉，实测堆了 331 个目录、82 MB）。只清我们自己的前缀，
+    # 且只清 1 小时以前的，避免误删正在跑的用例。
+    temp_root = Path(tempfile.gettempdir())
+    cutoff = time.time() - 3600
+    for pat in ("aiji-style-*", "aiji-life-loop-*", "aiji-being-checkup-*", "aiji-test-*"):
+        for p in temp_root.glob(pat):
+            try:
+                if p.is_dir() and p.stat().st_mtime < cutoff:
+                    out.append(p)
+            except OSError:
+                continue
+    # 体检用的临时库目录（仓库内，可再生成）
+    checkup = ROOT / "data" / "temp"
+    if checkup.is_dir():
+        out += [p for p in checkup.iterdir() if p.is_dir()]
     dist = ROOT / "dist"
     if dist.is_dir():
         out += [p for p in dist.iterdir() if not p.name.startswith(KEEP_DIST_PREFIX)]
@@ -93,11 +119,11 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     p.unlink()
                 freed += n
-                print(f"DEL  {p.relative_to(ROOT)}  ({n/1024/1024:.1f} MB)")
+                print(f"DEL  {_label(p)}  ({n/1024/1024:.1f} MB)")
             except OSError as exc:
-                failed.append((str(p.relative_to(ROOT)), f"{type(exc).__name__}: {exc}"))
+                failed.append((_label(p), f"{type(exc).__name__}: {exc}"))
         else:
-            print(f"WOULD {p.relative_to(ROOT)}  ({n/1024/1024:.1f} MB)")
+            print(f"WOULD {_label(p)}  ({n/1024/1024:.1f} MB)")
 
     print(f"\n候选 {len(targets)} 项，合计 {total/1024/1024:.1f} MB"
           f"，实际删除 {freed/1024/1024:.1f} MB")

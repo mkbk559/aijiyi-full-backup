@@ -708,3 +708,30 @@ v1 用"真实天 × aging_rate（30 角色天/真实天）"算年龄，六阶段
 生产 xp 前后都是 0.0（跑前跑后各读一次文件）。教训：**任何"全局单例状态 + 每轮写"的设计，
 先证明它在并发/测试隔离下不会串账**，否则用户看到的是数据被莫名其妙改掉。
 
+## 101. 「一次性脚本归档」差点删掉还在跑的东西（2026-11-03）
+
+为了清理 `tools/` 的 111 个脚本，我写了个"零引用 = 可归档"的扫描，把 10 个搬进
+`tools/archive/`。全量跑立刻报 `tests.test_data_repair` 导入失败：
+它用的是 `from tools.repair_data import ...`，而扫描只匹配了 `repair_data.py`
+（带扩展名）这个字面量，**漏掉了不带扩展名的引用**。
+修法：复核脚本改成用 `stem` 做词边界正则再扫一遍，`repair_data.py` 搬回。
+教训：**"没人引用"这类判定，匹配规则本身要先被验证**（用已知必被引用的文件当正样本）。
+
+## 102. 「靠 bug 过」的测试：`_persist` 崩溃其实在掩盖竞态（2026-11-03）
+
+`song_service._persist` 里 `temp.write_text()` 在 `jobs_root` 不存在时抛
+`FileNotFoundError`，从 `_pump` 的 `finally` 冒出去，把整条歌曲队列线程打死
+（`suite_v13.log` 里抓到过）。
+修 `_persist`（目录自愈 + OSError 只记日志）之后，
+`test_completed_job_survives_service_restart` 反而挂了：它 `submit()` 之后手工把 job
+改成 done，而工作线程这时才真正跑起来、把自己的状态写回去覆盖它。
+也就是说这个测试以前"过"，是因为线程早被打死了。
+判断一个测试是否可信，除了看它绿没绿，还要问**它是靠什么机制绿的**。
+
+## 103. 「Windows 上 rmtree 静默失败」不是忘了清理（2026-11-03）
+
+`test_life_loop` / `test_style_rewrite` 的 `tearDown` 里本来就有
+`shutil.rmtree(..., ignore_errors=True)`，但 SQLite 句柄还没释放，删除静默失败，
+`%TEMP%` 攒了 331 个目录 / 82.3 MB。改成 `tests/_tempdir.py::make_tmp()`（重试 + atexit 兜底）
+后跑完 22 个用例，计数 333 → 333。
+教训：`ignore_errors=True` 等于把失败藏起来；要么重试，要么把失败计数暴露出来。

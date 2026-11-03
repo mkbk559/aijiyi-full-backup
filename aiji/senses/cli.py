@@ -149,6 +149,52 @@ def cmd_media(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_media_gc(args: argparse.Namespace) -> int:
+    """清掉"没有任何文字结论"的失败媒体行。
+
+    只删 `status in (unsupported/error/timeout/empty)` **且** `text` 为空的：
+    这些行本来就喂不进抽取层，留着只是行数（2026-11-03 体检：7 668 行里
+    5 690 行非 ok，其中 unsupported/error/timeout 共 2 007 行基本都没文字）。
+    `low_confidence` 有文字、只是不可信，一律保留。
+    """
+    m = _memory(args)
+    try:
+        db_path = m.settings.db_path
+        db = sqlite3.connect(str(db_path))
+        try:
+            rows = db.execute(
+                "SELECT status, COUNT(*) FROM media GROUP BY status ORDER BY 2 DESC"
+            ).fetchall()
+            before = {str(k): int(v) for k, v in rows}
+            dead = ("unsupported", "error", "timeout", "empty")
+            marks = ",".join("?" * len(dead))
+            n = db.execute(
+                f"SELECT COUNT(*) FROM media WHERE status IN ({marks})"
+                " AND (text IS NULL OR TRIM(text) = '')", dead).fetchone()[0]
+            report = {"db": str(db_path), "before": before, "deletable": int(n),
+                      "applied": False}
+            if args.apply and n:
+                db.execute(
+                    f"DELETE FROM media WHERE status IN ({marks})"
+                    " AND (text IS NULL OR TRIM(text) = '')", dead)
+                db.commit()
+                db.execute("VACUUM")
+                after = db.execute(
+                    "SELECT status, COUNT(*) FROM media GROUP BY status ORDER BY 2 DESC"
+                ).fetchall()
+                report["applied"] = True
+                report["deleted"] = int(n)
+                report["after"] = {str(k): int(v) for k, v in after}
+            else:
+                report["hint"] = "加 --apply 才真的删"
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        finally:
+            db.close()
+    finally:
+        m.close()
+    return 0
+
+
 def cmd_accounts(args: argparse.Namespace) -> int:
     m = _memory(args)
     try:
@@ -398,6 +444,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--limit", type=int, default=20)
     _add_identity(sp)
     sp.set_defaults(func=cmd_media)
+
+    sp = sub.add_parser("media-gc", help="清理没有文字结论的失败媒体行（默认只看不删）")
+    sp.add_argument("--apply", action="store_true")
+    sp.set_defaults(func=cmd_media_gc)
 
     sp = sub.add_parser("accounts", help="列出已知身份")
     sp.set_defaults(func=cmd_accounts)

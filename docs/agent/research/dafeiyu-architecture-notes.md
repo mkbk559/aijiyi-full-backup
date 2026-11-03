@@ -1,3 +1,8 @@
+> **历史文档（设定已废弃）**：这里的「大肥鱼 / 鱼缸」是 2026-11-03 之前的人设，
+> 那一天已整体替换为「玛卡巴卡」（约 6 岁半的小孩，见
+> `docs/agent/design/persona-child-2026-11-03.md`），相关记忆与素材均已清空。
+> 本文只作当时的决策/研究记录，不要当作现行设定。
+
 # 「大肥鱼」生命体架构 — DeepSeek 分享对话存档
 
 来源：https://chat.deepseek.com/share/ifko6xwwo002uowk8h（JS 渲染页，2026-10-29 用 Playwright 抓取正文，全文 1301 行，抓取证据：`C:\Users\22166\.dsh\evidence\2026-10-29\113944-fetch-ds-share-playwright-17578e\`）。

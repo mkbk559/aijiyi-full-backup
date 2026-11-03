@@ -141,12 +141,17 @@ class Recognizers:
         fetcher: Callable[[str], str] | None = None,
         timeout_s: float = 2.0,
         min_confidence: float = 0.5,
+        resolver: Callable[[str], list[str]] | None = None,
     ):
         self.ocr = ocr
         self.asr = asr
         self.fetcher = fetcher or _default_fetch
         self.timeout_s = timeout_s
         self.min_confidence = min_confidence
+        # 链接要过 SSRF 守卫（会解析域名）。把 resolver 做成可注入的：
+        # 测试/离线环境不该因为 DNS 不通就判定"识别失败"（2026-11-03 实测：
+        # test_link_title 在本机网络抖一下就从 ok 变成 error）。
+        self.resolver = resolver
         self.calls = 0
         self.by_status: dict[str, int] = {}
 
@@ -252,7 +257,7 @@ class Recognizers:
             return Envelope("link", item.ref, "", 0.0, "unsupported", "link",
                             meta={"reason": "not_a_url"})
         try:
-            validate_public_http_url(url)
+            validate_public_http_url(url, resolver=self.resolver)
         except UrlGuardError as exc:
             return Envelope("link", item.ref, "", 0.0, "error", "link",
                             meta={"reason": exc.code, "url": url})

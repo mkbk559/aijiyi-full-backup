@@ -23,11 +23,13 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import mimetypes
 import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -44,6 +46,8 @@ from aiji.hippocampus.memory import Memory
 from aiji.brain.pool import PoolExhausted
 from aiji.hippocampus.store import Ident
 from aiji.skeleton.paths import ROOT, WEB_DIR
+
+logger = logging.getLogger(__name__)
 
 _QUERY = re.compile(r"[?&]([^=]+)=([^&]*)")
 _PROTECTED_EXACT = frozenset((
@@ -622,7 +626,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "not_found"})
 
     def do_POST(self) -> None:  # noqa: N802
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
+        qs = {k: v[0] for k, v in parse_qs(parsed.query).items()}
         if not self._authorized(path):
             return self._unauthorized()
         body = self._body()
@@ -817,11 +823,36 @@ class _Handler(BaseHTTPRequestHandler):
                     code, payload = self._social_error(exc)
                     return self._send(code, payload)
             if path == "/api/stickers/update":
-                try:
-                    return self._send(200, self.stickers.update())
-                except Exception as exc:  # noqa: BLE001
-                    code, payload = self._sticker_error(exc)
-                    return self._send(code, payload)
+                # 首次更新要联网下载，实测 27 s（route_smoke 2026-11-03）——同步会把
+                # 控制台卡死。默认改成"后台跑、立刻返回"，要等结果就带 ?wait=1。
+                if str(qs.get("wait") or "") in ("1", "true", "yes"):
+                    try:
+                        return self._send(200, self.stickers.update())
+                    except Exception as exc:  # noqa: BLE001
+                        code, payload = self._sticker_error(exc)
+                        return self._send(code, payload)
+                job = getattr(self.server, "sticker_job", None)
+                if job and job.get("running"):
+                    return self._send(200, {"started": False, "running": True,
+                                            "at": job.get("at"),
+                                            "last_update": self.stickers.snapshot()["last_update"]})
+                started_at = time.time()
+
+                def _run_update(srv=self.server) -> None:
+                    err = None
+                    payload: dict = {}
+                    try:
+                        payload = self.stickers.update()
+                    except Exception as exc:  # noqa: BLE001
+                        err = f"{type(exc).__name__}: {exc}"
+                    finally:
+                        srv.sticker_job = {"running": False, "error": err,
+                                           "at": time.time(), "result": payload}
+
+                self.server.sticker_job = {"running": True, "error": None, "at": started_at}
+                threading.Thread(target=_run_update, name="aiji-sticker-update",
+                                 daemon=True).start()
+                return self._send(200, {"started": True, "running": True, "at": started_at})
             if path == "/api/stickers/import":
                 try:
                     result = self.stickers.import_image(
@@ -836,7 +867,8 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._send(code, payload)
             if path == "/api/being/checkup/live":
                 # 这个探针要克隆整库 + 跑真模型，实测 33.8 s（route_smoke 2026-11-03）。
-                # 结果按身份缓存 10 分钟，重复点不再等；要新的就传 {"refresh": true}。
+                # 策略：有缓存就先返回（哪怕过期，标 stale），后台再刷新——
+                # 只有"从来没有过缓存"的第一次调用才会真的等。
                 from aiji.endocrine.being_checkup import BeingCheckup
                 ident = self._ident(body)
                 key = (ident.platform, ident.platform_user_id, ident.scope)
@@ -844,14 +876,35 @@ class _Handler(BaseHTTPRequestHandler):
                 if cache is None:  # 测试里可能用裸 ThreadingHTTPServer
                     cache = {}
                     self.server.checkup_cache = cache
+                refreshing = getattr(self.server, "checkup_refreshing", None)
+                if refreshing is None:
+                    refreshing = set()
+                    self.server.checkup_refreshing = refreshing
                 hit = cache.get(key)
                 now = time.time()
-                if hit and not body.get("refresh") and now - hit[0] < 600:
-                    return self._send(200, {**hit[1], "cached": True,
+                fresh = bool(hit) and now - hit[0] < 600
+
+                def _refresh(srv=self.server) -> None:
+                    try:
+                        result = BeingCheckup(self.memory).live_probe(ident)
+                        cache[key] = (time.time(), result)
+                    except Exception as exc:  # noqa: BLE001 - 后台刷新失败不能影响响应
+                        logger.warning("being checkup 刷新失败：%s", exc)
+                    finally:
+                        refreshing.discard(key)
+
+                if hit and (fresh or not body.get("refresh")):
+                    want_refresh = bool(body.get("refresh")) or not fresh
+                    if want_refresh and key not in refreshing:
+                        refreshing.add(key)
+                        threading.Thread(target=_refresh, name="aiji-checkup-refresh",
+                                         daemon=True).start()
+                    return self._send(200, {**hit[1], "cached": True, "stale": not fresh,
+                                            "refresh_requested": want_refresh,
                                             "age_s": round(now - hit[0], 1)})
                 result = BeingCheckup(self.memory).live_probe(ident)
                 cache[key] = (now, result)
-                return self._send(200, {**result, "cached": False})
+                return self._send(200, {**result, "cached": False, "stale": False})
             if path == "/api/mcp/research":
                 research = getattr(self.memory, "mcp_research_loop", None)
                 if research is None:

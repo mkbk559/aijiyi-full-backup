@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import shutil
-import tempfile
 import unittest
-from pathlib import Path
 from typing import ClassVar
 
 from aiji.right_hand.config import Settings
@@ -13,6 +10,7 @@ from aiji.brain.head import Head
 from aiji.hippocampus.memory import Memory
 from aiji.hippocampus import store
 from aiji.hippocampus.store import FactDraft, Ident, add_fact
+from tests._tempdir import make_tmp
 
 
 class SequencePool:
@@ -35,7 +33,7 @@ class SequencePool:
 
 class StyleRewriteTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="aiji-style-"))
+        self.tmp = make_tmp(self, "aiji-style-")
         self.memory = Memory(Settings(
             db_path=self.tmp / "style.db",
             routes=(),
@@ -49,7 +47,6 @@ class StyleRewriteTest(unittest.TestCase):
 
     def tearDown(self):
         self.memory.close()
-        shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_rewrites_fixed_filler_phrase_once(self):
         self.memory.pool = SequencePool([
