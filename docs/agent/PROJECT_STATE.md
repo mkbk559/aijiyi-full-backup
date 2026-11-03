@@ -69,6 +69,17 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **自我迭代第 1 轮：先补测量，再修量出来的**（用户：「自我迭代，不要问我，直到所有问题消失」）。
+  证据 `docs/agent/evidence/self-iterate-round1-2026-11-03.md`。要点：
+  ①新增 `tools/archcheck/console_render.py`（无头浏览器真渲染，11 导航/无 JS 错误/DOM 大于静态文件）
+  并纠正"控制台有 ECharts 无自动化测试"的旧结论（页面里根本没有图表，那是桌宠版遗留）；
+  ②新增 `tools/archcheck/doc_ref_check.py`（只查现行文档，66 处引用 0 漂移），
+  修 `borrow-plan` 的 `aiji/quota.py`→`aiji/brain/quota.py`、给 `voice-qq-hardening.md` 加历史横幅；
+  ③体检探针串行→并行 34.1 s → 19.7 s，`serve()` 开机预热后点击 0.03 s，
+  预热期间点击改为等它（不再重复克隆库）；预热**不能**放 `make_server()`（测试会跟着打模型）；
+  ④五处沉默异常改成留痕（后期处理/时长/快照/旧歌清理/密钥桥）；
+  ⑤并行化打死了一个按调用顺序发回复的假模型（`FakePool` 改按提示词匹配）。
+  体积复核：`rvc/.venv` 7.2 GB 是 CUDA torch，本机有 RTX 3050，不是垃圾。
 - 2026-11-03 **审计 10 项全清**（用户：「全部修改，顺序你决定」）。逐条证据
   `docs/agent/evidence/audit-fixes-2026-11-03.md`。要点：
   慢接口改异步（`checkup/live` 过期缓存先回 + 后台刷新；`stickers/update` 带 `?wait=1` 才同步）；

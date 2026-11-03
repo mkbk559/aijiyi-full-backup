@@ -241,14 +241,8 @@ class BeingCheckup:
             caveat="这一层禁止自动判定通过。",
         )
 
-    def live_probe(
-        self,
-        ident: Any,
-        *,
-        session: str = "being-checkup",
-    ) -> dict[str, Any]:
-        """Run real model probes against a throwaway DB clone; never write source data."""
-        target = store.Ident.coerce(ident)
+    def _probe_memory(self) -> tuple[Any, Path]:
+        """克隆一份临时库并开一个只读用途的 Memory；调用方负责 close + 删目录。"""
         # 别用默认的 tempfile.mkdtemp()：它建的是 0o700 目录，本机沙箱/ACL 环境下
         # 事后删不掉，实测在 %TEMP% 里留下了 33 个 aiji-being-checkup-* 目录（8.1 MB）。
         # 统一落在仓库内 data/temp（0o777，可删，已 gitignore）。
@@ -279,7 +273,23 @@ class BeingCheckup:
             engines="none",
         )
         probe.pool = self.memory.pool
-        preferred = probe.preferred_name(target)
+        return probe, temp_root
+
+    def live_probe(
+        self,
+        ident: Any,
+        *,
+        session: str = "being-checkup",
+    ) -> dict[str, Any]:
+        """Run real model probes against throwaway DB clones; never write source data.
+
+        三个探针**并行**跑（原来是串行，墙钟 34 s 里有大半是排队等模型）。
+        并行的代价是每个探针各克隆一份库（约 48 MB / 份），比串行慢在 IO、快在等待。
+        """
+        from concurrent.futures import ThreadPoolExecutor
+
+        target = store.Ident.coerce(ident)
+        preferred = self.memory.preferred_name(target)
         prompts = [
             {
                 "id": "reverse_memory",
@@ -294,37 +304,40 @@ class BeingCheckup:
                 "prompt": "你能直接写一段可以运行的 Python 排序代码吗？",
             },
         ]
-        probes: list[dict[str, Any]] = []
-        try:
+        started = time.perf_counter()
+
+        def _run(item: dict[str, Any]) -> dict[str, Any]:
             from aiji.brain.head import Head
 
-            for item in prompts:
-                try:
-                    reply = Head(probe).reply(
-                        [{"role": "user", "content": item["prompt"]}],
-                        target,
-                        session=session,
-                        remember=False,
-                        debounce=False,
-                        enable_tools=False,
-                    )
-                    text = reply.text
-                    route = reply.route
-                    degraded = bool(reply.degraded)
-                except Exception as exc:  # noqa: BLE001
-                    text = f"{type(exc).__name__}: {exc}"
-                    route = "error"
-                    degraded = True
-                probes.append({
-                    **item,
-                    "reply": text,
-                    "route": route,
-                    "degraded": degraded,
-                })
-        finally:
-            probe.close()
-            shutil.rmtree(temp_root, ignore_errors=True)
+            t0 = time.perf_counter()
+            probe, temp_root = self._probe_memory()
+            try:
+                reply = Head(probe).reply(
+                    [{"role": "user", "content": item["prompt"]}],
+                    target,
+                    session=session,
+                    remember=False,
+                    debounce=False,
+                    enable_tools=False,
+                )
+                text, route, degraded = reply.text, reply.route, bool(reply.degraded)
+            except Exception as exc:  # noqa: BLE001
+                text, route, degraded = f"{type(exc).__name__}: {exc}", "error", True
+            finally:
+                probe.close()
+                shutil.rmtree(temp_root, ignore_errors=True)
+            return {
+                **item,
+                "reply": text,
+                "route": route,
+                "degraded": degraded,
+                "elapsed_ms": round((time.perf_counter() - t0) * 1000, 1),
+            }
 
+        with ThreadPoolExecutor(max_workers=len(prompts),
+                                thread_name_prefix="checkup") as pool:
+            probes = list(pool.map(_run, prompts))
+        total_ms = round((time.perf_counter() - started) * 1000, 1)
         by_id = {item["id"]: str(item["reply"] or "") for item in probes}
         name_reply = by_id["reverse_memory"]
         identity_reply = by_id["identity_challenge"]
@@ -366,6 +379,7 @@ class BeingCheckup:
         }
         return {
             "generated_at": self.now(),
+            "elapsed_ms": total_ms,
             "probes": probes,
             "checks": checks,
             "is_human_like_certified": False,

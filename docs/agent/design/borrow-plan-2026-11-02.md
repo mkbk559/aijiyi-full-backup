@@ -274,7 +274,7 @@ memory-brain 的巨石 `bridge.js`/Chroma 双写/DSH preset；手册的"90 天�
 | P2-1 巩固后自检 | `bench/bench_self_test.py`（27 条探针，hit@5/abstain/stale/leak/semantic/short 六项） | ✅ 全过门槛 |
 | P2-2 显式遗忘 | `Memory.forget` / `store.forget_facts` / `aiji forget --id/--like` | ✅ 不可见 + `fact_log` 留痕 |
 | P2-3 自我记忆 | schema v11 `self_memory` + `store.add_self_memory/list/trim` + `aiji self-memory`，200 条上限 | ✅ |
-| P2-4 主动配额 | **已接线**（2026-11-02 续做）：`aiji/quota.py`（`CreditProvider`）+ `Memory.proactive_quota_ok/spend/quota_state` + `head.py` 主动路径闸门 + `Proactive.quota_provider` + `aiji quota [--set N]` | ✅ 见 §9.5 |
+| P2-4 主动配额 | **已接线**（2026-11-02 续做）：`aiji/brain/quota.py`（`CreditProvider`）+ `Memory.proactive_quota_ok/spend/quota_state` + `head.py` 主动路径闸门 + `Proactive.quota_provider` + `aiji quota [--set N]` | ✅ 见 §9.5 |
 
 ### 9.2 实测数字（全部来自归档的机器输出）
 
@@ -311,7 +311,7 @@ memory-brain 的巨石 `bridge.js`/Chroma 双写/DSH preset；手册的"90 天�
 
 **用户口径**：主动搭话的额度不是本地拍的次数，而是**反代那边剩下的积分**。
 
-#### 实现（`aiji/quota.py`）
+#### 实现（`aiji/brain/quota.py`）
 
 ```
 allowed_24h = min( max_cap, floor(remaining * (1 - reserve) / cost_per_msg) )
@@ -369,7 +369,7 @@ python -m aiji.cli quota              # 看"还能主动几次、依据是什么
 | workbuddy `/dashboard` | 200，但**纯 SPA 壳**：HTML 里 `/api/*` 字面量 0 个（`tools/probe_gateway_credits.py` 实测） |
 | workbuddy 真实 chat 响应头 | 仅 `Content-Type/Length/Date/Server/ACAO`，**无 quota 头** |
 | agent2api `3065` 的 `/v1/models` | 200，`credits` 字段可读（**单价可用**） |
-| agent2api 其它余额路径 | 无（`/api/me`、`/v1/usage`、`/balance` 等全部 404/401） |
+| agent2api 其它余额路径 | 无（agent2api 侧的 /api/me、/v1/usage、/balance 等全部 404/401） |
 
 → 结论：**单价能自动读，余额不能**。所以做成"手填 + 自动折算 + 过期可见"，而不是编一个自动余额接口。
 探测脚本留在 `tools/probe_gateway_credits.py` / `tools/probe_gateway_headers.py`，换网关时先跑一遍。

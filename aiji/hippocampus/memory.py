@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import sys
 import time
 import threading
@@ -47,6 +49,8 @@ from aiji.hippocampus.store import Ident
 from aiji.hippocampus.vectors import BruteForceIndex
 from aiji.hippocampus.writer import Writer
 from aiji.skeleton.paths import TOOLS
+
+logger = logging.getLogger(__name__)
 
 
 def _bridge_keys() -> None:
@@ -376,8 +380,9 @@ class Memory:
             needs = [k for k in ("WORKBUDDY_HUB_KEY", "AGENT2API_KEY") if not os.environ.get(k)]
             if needs:
                 _bridge_keys()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            # 桥失败只影响模型可用性、不阻塞打开；但必须留痕，不然只会表现成"模型全线降级"。
+            logger.warning("读取模型密钥桥失败：%s", exc)
         s = Settings.load(config)
         if path is not None:
             s.db_path = Path(path)

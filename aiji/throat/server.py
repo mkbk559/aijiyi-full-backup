@@ -881,6 +881,14 @@ class _Handler(BaseHTTPRequestHandler):
                     refreshing = set()
                     self.server.checkup_refreshing = refreshing
                 hit = cache.get(key)
+                if hit is None:
+                    # 启动预热可能正在跑同一个身份：等它，别再克隆一份 48 MB 的库、
+                    # 再打一遍模型（重复调用既慢又费额度）。
+                    events = getattr(self.server, "checkup_events", None) or {}
+                    event = events.get(key)
+                    if event is not None and not event.is_set():
+                        event.wait(timeout=120)
+                        hit = cache.get(key)
                 now = time.time()
                 fresh = bool(hit) and now - hit[0] < 600
 
@@ -1430,6 +1438,7 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
     })
     srv = AijiHTTPServer((host, port), handler)
     srv.daemon_threads = True
+
     if os.environ.get("AIJI_LIFE_LOOP", "1").strip().lower() not in (
         "0", "false", "off", "no",
     ):
@@ -1487,6 +1496,45 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
 
 def serve(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> None:  # pragma: no cover
     srv = make_server(memory, host, port)
+    # 体检探针要克隆整库 + 3 个真模型调用（并行后实测 19.7 s）。用户点控制台时
+    # 不该干等：启动后就预热默认身份与最近活跃身份的缓存（后台线程，失败只记日志）。
+    if os.environ.get("AIJI_CHECKUP_PREWARM", "1").strip().lower() not in (
+        "0", "false", "off", "no",
+    ):
+        def _prewarm(srv: AijiHTTPServer = srv, mem=memory) -> None:
+            from aiji.endocrine.being_checkup import BeingCheckup
+            from aiji.hippocampus.store import Ident
+
+            keys = [("local", "default", "default")]
+            try:
+                rows = mem.db.read(
+                    "SELECT platform, platform_user_id, scope FROM account "
+                    "ORDER BY updated_at DESC LIMIT 1")
+                keys += [(r["platform"], r["platform_user_id"], r["scope"])
+                         for r in rows]
+            except Exception as exc:  # noqa: BLE001 - 预热不该影响启动
+                logger.warning("体外预热取身份失败：%s", exc)
+            cache = {}
+            events: dict[tuple[str, str, str], threading.Event] = {}
+            srv.checkup_cache = cache
+            srv.checkup_refreshing = set()
+            srv.checkup_events = events
+            for platform, user, scope in dict.fromkeys(keys):
+                event = threading.Event()
+                events[(platform, user, scope)] = event
+                try:
+                    result = BeingCheckup(mem).live_probe(
+                        Ident(platform, user, scope))
+                    cache[(platform, user, scope)] = (time.time(), result)
+                    logger.info("体检缓存预热完成：%s/%s/%s", platform, user, scope)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("体检预热失败 %s/%s/%s：%s",
+                                   platform, user, scope, exc)
+                finally:
+                    event.set()
+
+        threading.Thread(target=_prewarm, name="aiji-checkup-prewarm",
+                         daemon=True).start()
     print(f"aiji listening on http://{host}:{srv.server_address[1]}")
     try:
         srv.serve_forever()

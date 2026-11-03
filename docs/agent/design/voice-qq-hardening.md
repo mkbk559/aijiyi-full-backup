@@ -1,3 +1,8 @@
+> **历史文档（模块路径已过期）**：本文写于 2026-10-30，当时包还是扁平结构
+> （`aiji/head.py`、`aiji/bridge/onebot.py` 等）。2026-11-02 之后已按九大身体系统
+> 重组为 `aiji/{senses,throat,brain,hippocampus,endocrine,heart,left_hand,right_hand,skeleton}/`，
+> 本文里的文件路径只代表当时的位置；结论与取舍仍然有效。
+
 # 底座稳定化 + 语音定制 + QQ/IM 接入 方案
 
 > 2026-10-30。目标：把 AIJiYi 从“能跑的记忆内核 + 控制台”补成“**稳定、能接 QQ、声音可定制**”的个人 AI 底座。

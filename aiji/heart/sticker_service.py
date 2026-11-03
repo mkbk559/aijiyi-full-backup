@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import hashlib
 import ipaddress
 import json
@@ -22,6 +24,8 @@ DEFAULT_STICKER_FEED = (
     "https://cdn.jsdelivr.net/gh/cheems135/dsh-qq-bridge@main/"
     "assets/preset/manifest.json"
 )
+
+logger = logging.getLogger(__name__)
 
 
 class StickerError(RuntimeError):
@@ -340,8 +344,8 @@ class StickerService:
                 "feed_url": self.feed_url,
                 "finished_at": time.time(),
             })
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.warning("表情包失败快照落盘失败：%s", exc)
 
     def _get(self, url: str, *, timeout_s: float | None = None) -> bytes:
         self._validate_public_url(url)

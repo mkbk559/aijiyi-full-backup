@@ -569,7 +569,8 @@ class SongService:
         for path, _mtime in items[max(1, int(keep)):]:
             try:
                 path.unlink()
-            except OSError:
+            except OSError as exc:
+                logger.warning("清理旧歌曲失败（%s）：%s", path.name, exc)
                 continue
 
 

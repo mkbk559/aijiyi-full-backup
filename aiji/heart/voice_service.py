@@ -7,6 +7,8 @@ callers only ask for text, a profile id and an output path.
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import base64
 import json
@@ -27,6 +29,8 @@ from typing import Any
 from aiji.right_hand import params
 from aiji.skeleton.paths import ROOT
 from aiji import net
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceError(RuntimeError):
@@ -428,9 +432,10 @@ class VoiceRegistry:
                 try:
                     converted = self._postprocess(
                         converted, tmp, profile, mode="speech")
-                except VoiceError:
-                    # Keep the provider voice when the optional converter is down.
-                    pass
+                except VoiceError as exc:
+                    # 可选后期处理挂了就保留原声（这是设计决定），但要留痕：
+                    # 否则"换声突然不生效"只能靠人耳发现。
+                    logger.warning("后期处理失败，保留原声：%s", exc)
             self._limit_peak(converted)
             shutil.copy2(converted, target)
         finally:
@@ -758,7 +763,8 @@ class VoiceRegistry:
                 if rate <= 0:
                     return None
                 return reader.getnframes() / float(rate)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("读不出音频时长（%s）：%s", path.name, exc)
             return None
 
     def _over_budget(self, source: Path, profile: VoiceProfile, mode: str) -> float | None:

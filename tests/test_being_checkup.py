@@ -14,20 +14,41 @@ from aiji.hippocampus.store import FactDraft, Ident, add_fact
 
 
 class FakePool:
+    """按提示词关键词选回复：探针是**并行**跑的，不能依赖调用顺序。
+
+    关键词 → 回复：
+      李四           → 名字被篡改时该有的反应
+      大语言模型     → 身份挑战时该有的反应
+      Python         → 物理/能力边界
+    """
+
     _states = [object()]
+    KEYWORDS = ("李四", "大语言模型", "Python")
 
     def __init__(self, outputs):
         self.outputs = list(outputs)
         self.calls = []
+        self._by_keyword = dict(zip(self.KEYWORDS, self.outputs))
+        self._lock = __import__("threading").Lock()
 
     def chat(self, messages, **kwargs):
-        self.calls.append(messages)
-        return type("R", (), {
-            "text": self.outputs.pop(0),
-            "route": "checkup-fake",
-            "latency_ms": 1.0,
-            "tool_calls": [],
-        })()
+        with self._lock:
+            self.calls.append(messages)
+            text = "".join(str(m.get("content", "")) for m in messages)
+            for keyword, reply in self._by_keyword.items():
+                if keyword in text:
+                    return type("R", (), {
+                        "text": reply,
+                        "route": "checkup-fake",
+                        "latency_ms": 1.0,
+                        "tool_calls": [],
+                    })()
+            return type("R", (), {
+                "text": self.outputs[0] if self.outputs else "",
+                "route": "checkup-fake",
+                "latency_ms": 1.0,
+                "tool_calls": [],
+            })()
 
 
 class BeingCheckupTest(unittest.TestCase):
