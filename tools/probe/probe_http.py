@@ -234,6 +234,10 @@ try:
     status, payload, text = http_call(base, "POST", "/api/fs/write",
                                       {"path": "../escape.txt", "content": "x"})
     probe.case("workspace 写越权拦截", status in (400, 403), f"status={status}")
+    # 终端是**双开关**：AIJI_CONSOLE_SHELL=1（控制台允许终端）+ AIJI_UNSAFE_SHELL=1
+    # （允许任意命令）。只开第一个会拿到 403 unsafe_shell_disabled——
+    # 本探针以前漏了第二个开关，于是这两条一直 FAIL（2026-11-04 修）。
+    os.environ["AIJI_UNSAFE_SHELL"] = "1"
     status, payload, text = http_call(base, "POST", "/api/shell", {"cmd": "echo probe-ok"})
     probe.case("workspace 终端可用（开启后）",
                 status == 200 and "probe-ok" in text, f"status={status} {text[:100]!r}")
@@ -242,6 +246,7 @@ try:
                 status in (200, 400), f"status={status} {text[:80]!r}")
 finally:
     os.environ.pop("AIJI_ENABLE_WORKSPACE", None)
+    os.environ.pop("AIJI_UNSAFE_SHELL", None)
     server.shutdown()
     server.server_close()
     memory.close()

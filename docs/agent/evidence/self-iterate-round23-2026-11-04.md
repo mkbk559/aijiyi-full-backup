@@ -88,3 +88,25 @@ A/B 同一份脚本最后两行：旧实现抛 AttributeError，新实现词表 
   出口闸门与"注入内容永不进记忆"的第二层，本轮没有重测那一层
 - `real_engines` 的 100% 是**假引擎**覆盖；真模型质量只在合成样本上验过（excluded #48）
 - 下一轮候选：`server.py` 85%、`sender.py` 89%、`reflect.py` 89%、`being.py` 89%
+
+## 顺带修掉：端点矩阵探针的两条"假失败"（文档漂移）
+
+跑 `tools/probe/probe_http.py`（81 个用例的端点矩阵）拿到 **79/81**，失败的两条都是
+`POST /api/shell → 403 unsafe_shell_disabled`：
+
+```
+[FAIL] workspace 终端可用（开启后）          status=403 '{"error": "unsafe_shell_disabled"}'
+[FAIL] workspace 终端不限制命令（已知边界，仅记录） status=403 '{"error": "unsafe_shell_disabled"}'
+```
+
+原因不是产品坏了，是**探针停在旧的开关模型上**：终端的两个开关都要开
+（`AIJI_CONSOLE_SHELL=1` 放行控制台终端 + `AIJI_UNSAFE_SHELL=1` 允许任意命令），
+探针只开了第一个。这两个开关都是**请求时读环境变量**（`server.py:1142-1147`），
+所以在探针里临时设上就能验，不必另起服务。
+
+修完重跑：**81/81 通过**（归档 `…\012203-probe-http-round23-v2b-9afbc7\stdout.txt`，
+`"cases": 81, "passed": 81, "failed": 0`）。安全默认没动：不设 `AIJI_UNSAFE_SHELL` 仍然是 403。
+
+同一轮里这套矩阵还顺带证明了这些不变量仍然成立：空白 `content` → 400、
+无 token → 401（`/health`、`/` 公开）、`/api/fs` 的四种越权写法全 403、
+`/v1/chat/completions` 与 SSE 流都 200、空 query 不崩且标 `degraded`。
