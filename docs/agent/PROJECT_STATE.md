@@ -69,6 +69,22 @@ python bench/demo_loop.py                                       # 端到端：�
 
 ## 决策日志
 
+- 2026-11-03 **清除"会影响人设"的旧数据（`trait` 表清零）**，证据
+  `docs/agent/evidence/persona-purge-2026-11-03.md`，脚本 `tools/purge_persona_residue.py`。
+  用户：「你决定，还有之前影响人设的全部删除」。
+  口径：人设只由 `persona.CHILD` + `selfhood.FLOOR` + 成长阶段决定；库里描述"他长成什么样"的
+  数据都会把八九岁孩子往旧人格（孙吧抽象话：调侃/自嘲/阴阳/锅碗鱼意象）拽回来。
+  **删**：`trait` 全量 927 行（经过四轮词根清理：成年语感 314 → 吐槽 110 → 反问 170 → 剩余意象 927）；
+  `profile` 里旧名字/旧身份 45 行（大肥鱼/本鱼/蓝毛鲸鱼尾/爸爸养在电脑里的小鱼鱼）；
+  `style` 里 `本鱼` 自指 3 行；`being_*` 的 `persona='sunba'` 4 行；`data/persona/sunba.json`。
+  **保留**：`profile`/`style` 其余 1105/1920 行（记的是对方的事，是"怎么适应这个人"）。
+  **顺带修的真 bug**：①`memory.py` / `being_checkup.py` 的 persona 兜底还是 `"sunba"`（改成 `"child"`）；
+  ②正在跑的服务进程是旧人格起的，内存里 persona=sunba，删完几秒又写回 sunba 行——已用
+  `Stop-Process` + `AIJiYi Console Watchdog` 计划任务重启（新 pid 17780），之后 sunba 归零。
+  **删完真机验证**：`persona_child_live.py --age 8` → `clean_ratio 1.0 / avg 38.8 字 / 8-9 条带儿童特征`；
+  `persona_child_trait_clash.py` → `leak: false`。四份整库备份 + 逐行审计 JSON 可回滚。
+
+
 - 2026-11-03 **成长系统：人格随年龄长大**，设计+证据 `docs/agent/design/growth-2026-11-03.md`。
   用户问"怎么让他持续性成长，不可能一直是儿童人设吧"。
   **做法**：新增 `aiji/brain/growth.py`——**年龄是唯一真源**

@@ -274,7 +274,7 @@ class BeingCheckup:
                 typing_min_ms=0,
                 typing_max_ms=0,
                 sticker_update=False,
-                persona=getattr(self.memory.settings, "persona", "sunba"),
+                persona=getattr(self.memory.settings, "persona", "child"),
             ),
             engines="none",
         )

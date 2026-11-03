@@ -448,6 +448,10 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         self.assertNotIn("AI 早去写周报", prompt)
 
     def test_prompt_lists_recent_replies_as_expressions_to_avoid(self):
+        # 测的是"薄客户端不回传历史时，服务端从 turn 表补最近对话，
+        # 让模型看到自己上一句、别复读"。所以必须 history=True——
+        # 以前这里写 False，只能靠"刚写的 turn 恰好被抽成记忆"混过去，
+        # 抽取消耗一慢就红（2026-11-03 全量里偶发失败）。
         session = "repeat-guard"
         self.memory.turn(self.ident, session, "user", "上一轮")
         self.memory.turn(
@@ -456,7 +460,7 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         body = {
             "model": "aiji",
             "messages": [{"role": "user", "content": "再说一句"}],
-            "aiji": {"persona": "sunba", "history": False},
+            "aiji": {"persona": "sunba", "history": True, "history_limit": 20},
         }
         request = urllib.request.Request(
             self.base + "/v1/chat/completions",
@@ -472,9 +476,13 @@ class TestOpenAIChatCompletions(unittest.TestCase):
         )
         with urllib.request.urlopen(request, timeout=10):
             pass
-        prompt = json.dumps(self.pool.calls[-1], ensure_ascii=False)
-        self.assertIn("这句话刚刚已经说过了", prompt)
-        self.assertIn("不要复用", prompt)
+        # 只在"这一轮聊天"的提示词上断言：后台反思/摘要也会调同一个池子，
+        # 它们可能排在后面，取 calls[-1] 会偶发失败（2026-11-03 全量跑里翻过一次车）。
+        prompts = [json.dumps(call, ensure_ascii=False) for call in self.pool.calls]
+        chat = next((p for p in reversed(prompts) if "再说一句" in p), "")
+        self.assertTrue(chat, "没有捕获到本轮聊天提示词")
+        self.assertIn("这句话刚刚已经说过了", chat)
+        self.assertIn("不要复用", chat)
 
     def test_voice_and_song_endpoints_are_exposed(self):
         with urllib.request.urlopen(self.base + "/v1/voices", timeout=10) as response:

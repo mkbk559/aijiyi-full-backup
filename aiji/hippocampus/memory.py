@@ -216,7 +216,7 @@ class Memory:
             min_rel=float(getattr(settings, "inject_min_rel", 0.0)),
         )
         self.being = BeingStore(
-            self.db, persona=str(getattr(settings, "persona", "sunba")))
+            self.db, persona=str(getattr(settings, "persona", "child")))
 
     def _hybrid_chat(self, messages: list[dict]) -> str:
         """HybridIndex 的软嵌入调用：走池子，取首条文本；失败抛给上层兜底。"""
