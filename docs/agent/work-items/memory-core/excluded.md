@@ -1083,3 +1083,26 @@ A/B 实测（`.tmp/ab_finish_body.py`，证据归档 224221-ab-finish-body-rst�
 
 同一个坑的通用教训：**写"禁止某模式"的测试时，必须同时写一条"检查器能抓到该模式"
 的自测**，否则改坏了也没人知道。
+
+## 140. 一条空白消息也算一条对话（2026-11-03 修复）
+
+`server.py::_clip_text` 只做截断、不 strip，于是 `"   "` 是真值，一路穿过
+`if not content: 400` 进了 `memory.turn(...)`，返回 202。
+写 `/turns` 的"空内容要 400"用例时才撞出来（`Ran 32 tests ... FAIL: 202 != 400`）。
+危害不是"脏数据"这么轻：空白轮次会占对话格、参与 `turn_count`（决定摘要触发点）、
+进反思批次。修法：`_clip_text` 先 strip（`original_chars` 仍报原始长度），
+`/ingest` 的 text 分支补同样的空白检查。
+**教训**：判"有没有内容"必须对 `str.strip()` 之后的串判断，
+`if not value` 只挡住 `""`。
+
+## 141. 面板字段名靠猜必错，先把真实响应打出来（2026-11-03）
+
+写路由测试时 6 个面板的期望字段全错：`/api/memories` 返回
+`identity/items/query`（没有 `total`）、`/api/self` 是 `floor/global_traits/prefix/traits`、
+`/api/proactive` 是 `items`、`/api/being/checkup` 是
+`overall_score/verdict/layers/verified_layers/is_human_like_certified`、
+`/recall` 回的是 `hits` 不是 `items`、
+`_social_error`/`_audio_error` 的错误体是**嵌套**的 `{"error": {"code": …, "message": …}}`
+（不是扁平的 `{"error": "code"}`）。
+**规则**：写"响应形状"断言前，先跑一个探测脚本把真实 JSON 打出来
+（`.tmp/probe_routes.py` 就是这么来的），别按记忆写。

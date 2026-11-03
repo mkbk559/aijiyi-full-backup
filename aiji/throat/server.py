@@ -174,11 +174,17 @@ class _PayloadTooLarge(Exception):
 
 
 def _clip_text(value: Any, limit: int = 32_768) -> tuple[str, dict[str, Any]]:
-    """截断超长文本并如实回报（不静默丢内容）。"""
-    text = str(value or "")
+    """截断超长文本并如实回报（不静默丢内容）。
+
+    两端空白一律去掉：纯空白内容等于"没说话"。以前 `"   "` 是真值，
+    一路通过 `if not content` 检查，于是**一条空白消息会占掉一格对话**，
+    还会进反思批次（`original_chars` 仍报原始长度，截断信息不丢）。
+    """
+    raw = str(value or "")
+    text = raw.strip()
     if len(text) <= limit:
         return text, {}
-    return text[:limit], {"truncated": True, "original_chars": len(text)}
+    return text[:limit], {"truncated": True, "original_chars": len(raw)}
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -1063,6 +1069,8 @@ class _Handler(BaseHTTPRequestHandler):
                 if kind == "text":
                     text, clipped_text = _clip_text(
                         body.get("text"), self.MAX_TEXT_CHARS)
+                    if not text:
+                        return self._send(400, {"error": "text_required"})
                 if kind != "text" and not (body.get("ref") or body.get("url")):
                     return self._send(400, {"error": "ref_or_url_required"})
                 depth = self.memory.ingest(
