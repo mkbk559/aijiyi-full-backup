@@ -158,22 +158,79 @@ def cmd_bili_login(args: argparse.Namespace) -> int:
 
 
 def cmd_bili_comment(args: argparse.Namespace) -> int:
-    """B 站评论。默认 dry-run；--yes 才真发（限速 60s + 留痕）。"""
+    """B 站评论。默认 dry-run；--yes 才真发（限速 60s + 留痕）。
+
+    --persona：先按玛卡巴卡（六七岁小孩）口吻改写再发；dry-run 会展示改写结果。
+    """
     from aiji.senses import bili_client
     url = " ".join(args.url)
+    message = args.message
+    restyled = None
+    if getattr(args, "persona", False):
+        # 措辞改写优先走运行中的服务（它有配置好的路由），不需要 B 站登录态。
+        try:
+            message, source = bili_client.restyle_comment(
+                message, timeout_s=getattr(args, "style_timeout", 60.0))
+            restyled = {"source": source, "text": message}
+        except bili_client.BiliError:
+            raise
+    cred = None
     try:
-        cred = _bili_cred(args)
+        if args.yes or getattr(args, "cookie_file", "") or getattr(args, "cookies_from_browser", ""):
+            cred = _bili_cred(args)
+        else:
+            # dry-run 且没给 cookie 源：预览改写结果不需要登录态
+            cred = bili_client.BiliCredentials()
         aid = bili_client.resolve_aid(url)
         result = bili_client.post_comment(
-            aid, args.message, cred, confirm=bool(args.yes),
+            aid, message, cred, confirm=bool(args.yes),
             state_dir=pathlib.Path(getattr(args, "state_dir", "data")))
     except bili_client.BiliError as exc:
-        print(json.dumps({"ok": False, "code": exc.code, "error": str(exc)},
+        print(json.dumps({"ok": False, "code": exc.code, "error": str(exc),
+                          "restyled": restyled},
                          ensure_ascii=False, indent=2))
         return 2
     print(json.dumps({
         "ok": result.ok, "dry_run": result.dry_run, "aid": aid,
         "rpid": result.rpid, "message": result.message,
+        "restyled": restyled,
+    }, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_bili_upload(args: argparse.Namespace) -> int:
+    """B 站投稿（发视频）。默认 dry-run（本地预检，无需登录态）；--yes 才真传。"""
+    from aiji.senses import bili_client
+    cred = None
+    if args.yes:
+        try:
+            cred = _bili_cred(args)
+        except bili_client.BiliError as exc:
+            print(json.dumps({"ok": False, "code": exc.code, "error": str(exc)},
+                             ensure_ascii=False, indent=2))
+            return 2
+    elif not (getattr(args, "cookie_file", "") or getattr(args, "cookies_from_browser", "")):
+        # dry-run 且没给 cookie 源：直接本地预检（登录态只在真传时需要）
+        cred = bili_client.BiliCredentials()  # 不可用占位；upload 对 dry-run 不查
+    else:
+        try:
+            cred = _bili_cred(args)
+        except bili_client.BiliError:
+            cred = bili_client.BiliCredentials()
+    try:
+        result = bili_client.upload_video(
+            args.file, args.title, desc=args.desc, cred=cred,
+            confirm=bool(args.yes),
+            state_dir=pathlib.Path(getattr(args, "state_dir", "data")),
+            timeout_s=args.timeout,
+        )
+    except bili_client.BiliError as exc:
+        print(json.dumps({"ok": False, "code": exc.code, "error": str(exc)},
+                         ensure_ascii=False, indent=2))
+        return 2
+    print(json.dumps({
+        "ok": result.ok, "dry_run": result.dry_run, "aid": result.aid,
+        "message": result.message,
     }, ensure_ascii=False, indent=2))
     return 0
 
@@ -582,8 +639,24 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--cookie-file", default="")
     sp.add_argument("--cookies-from-browser", default="")
     sp.add_argument("--yes", action="store_true", help="确认真发（默认只 dry-run）")
+    sp.add_argument("--persona", action="store_true",
+                    help="先按玛卡巴卡口吻改写（走运行中服务）；dry-run 会展示改写结果")
+    sp.add_argument("--style-timeout", type=float, default=60.0)
     sp.add_argument("--state-dir", default="data", help="留痕目录（bili_actions.jsonl）")
+    sp.add_argument("--session", default="default")
+    _add_identity(sp)
     sp.set_defaults(func=cmd_bili_comment)
+
+    sp = sub.add_parser("bili-upload", help="B 站投稿（发视频）：默认 dry-run，--yes 才真传")
+    sp.add_argument("file", help="视频文件路径（mp4 等）")
+    sp.add_argument("title", help="投稿标题（≤80 字）")
+    sp.add_argument("--desc", default="", help="投稿简介")
+    sp.add_argument("--cookie-file", default="")
+    sp.add_argument("--cookies-from-browser", default="")
+    sp.add_argument("--yes", action="store_true", help="确认真传（默认只本地预检）")
+    sp.add_argument("--timeout", type=float, default=300.0, help="分片上传超时")
+    sp.add_argument("--state-dir", default="data")
+    sp.set_defaults(func=cmd_bili_upload)
 
     sp = sub.add_parser("inject", help="生成给主模型的软引导块（不生成回复）")
     sp.add_argument("query", nargs="+")

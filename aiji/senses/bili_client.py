@@ -195,16 +195,18 @@ def post_comment(
 
     限速与留痕都在真发路径；dry-run 不写留痕、不占限速窗口。
     """
-    if not cred.usable:
-        raise BiliError("not_logged_in", "没有可用登录态（SESSDATA/bili_jct 缺失）")
     message = message.strip()
     if not message:
         raise BiliError("empty_message", "评论内容为空")
     if len(message) > 1000:
         raise BiliError("message_too_long", f"评论 {len(message)} 字，B 站上限约 1000")
     if not confirm:
+        # dry-run 是纯本地预演：展示将要发什么，连登录态都不要求
+        # （改写预览要能离线看）。真发才走下面的护栏。
         return CommentResult(ok=False, dry_run=True,
                              message=f"[dry-run] 将在 av{aid} 下评论：{message}")
+    if not cred.usable:
+        raise BiliError("not_logged_in", "没有可用登录态（SESSDATA/bili_jct 缺失）")
     # 限速：读留痕文件里最后一次真发时间
     t = time.time() if now is None else now
     log = (state_dir or Path("data")) / "bili_actions.jsonl"
@@ -262,8 +264,213 @@ def _log_action(state_dir: Path, entry: dict) -> None:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+# ---- 投稿（发视频） ----
+# API 事实（bilibili-API-collect，写路径待真 cookie 实测，读取路径已验证）：
+# 1) 预检 GET /preupload?name=&size=（upcdn）→ {upos_uri, auth, endpoints, biz_id…}
+# 2) 上传 PUT {endpoints[k]}/{upos_uri}，header X-Up-Auth=auth，分片 {start,end}/{total}
+# 3) 完成 POST {os}/uploads/{upos_uri}?outputs&profile=upcdn_v2&auth=
+# 4) 提交 POST /x/vu/channel/web/submit/v2（archive: 标题/分P/描述；dyn: 动态文本）
+# 5) 排序分片须按序（complete 的 output 按顺序校验）
+CHUNK_SIZE = 8 * 1024 * 1024  # upcdn 分片经验值
+
+
+@dataclass
+class UploadResult:
+    ok: bool
+    dry_run: bool
+    message: str
+    aid: int | None = None
+    raw: dict = field(default_factory=dict)
+
+
+def upload_video(
+    video_path: str | Path,
+    title: str,
+    *,
+    desc: str = "",
+    cred: BiliCredentials,
+    confirm: bool = False,
+    state_dir: Path | None = None,
+    now: float | None = None,
+    timeout_s: float = 300.0,
+) -> UploadResult:
+    """投稿一个视频。confirm=False 时只做本地预检（文件/大小/标题）。
+
+    真发流程：预检 → 直传（≤CHUNK_SIZE）或分片上传 → complete → submit。
+    投稿比评论重得多：即使 confirm=True，也必须先过预检（标题/文件存在/大小）。
+    """
+    video_path = Path(video_path)
+    if not video_path.exists():
+        raise BiliError("video_file_missing", f"视频文件不存在：{video_path}")
+    size = video_path.stat().st_size
+    if size == 0:
+        raise BiliError("video_file_empty", "视频文件是空的")
+    if not title.strip():
+        raise BiliError("empty_title", "投稿标题为空")
+    if len(title) > 80:
+        raise BiliError("title_too_long", f"标题 {len(title)} 字，B 站上限 80")
+    if size > 8 * 1024 * 1024 * 1024:
+        raise BiliError("video_too_large", f"{size/2**30:.1f} GB 超过 B 站上限 8GB")
+    if not confirm:
+        n_chunks = max(1, (size + CHUNK_SIZE - 1) // CHUNK_SIZE)
+        return UploadResult(
+            ok=False, dry_run=True,
+            message=(f"[dry-run] 将投稿《{title}》"
+                     f"（{size/1024/1024:.1f} MB，{n_chunks} 个分片）"))
+    if not cred.usable:
+        raise BiliError("not_logged_in", "投稿需要登录态（SESSDATA/bili_jct 缺失）")
+    t = time.time() if now is None else now
+    # 预检（预签名）
+    query = urllib.parse.urlencode({"name": video_path.name, "size": size})
+    pre = _get_json(
+        f"https://member.bilibili.com/preupload?{query}",
+        cookie=cred.cookie_header())
+    upos_uri = pre.get("upos_uri") or ""
+    auth = pre.get("auth") or ""
+    endpoints = pre.get("endpoints") or []
+    if not upos_uri or not auth or not endpoints:
+        raise BiliError("preupload_failed",
+                        f"预检失败：{json.dumps(pre, ensure_ascii=False)[:200]}")
+    biz_id = pre.get("biz_id")
+    base = f"https:{endpoints[0]}/{upos_uri}"
+    data = video_path.read_bytes()
+    total = len(data)
+    # 分片上传（按序，PUT）
+    chunks = [data[i:i + CHUNK_SIZE] for i in range(0, total, CHUNK_SIZE)] or [b""]
+    parts: list[int] = []
+    for idx, chunk in enumerate(chunks):
+        req = urllib.request.Request(
+            f"{base}?partNumber={idx + 1}&uploadId=&total={len(chunks)}",
+            data=chunk, method="PUT", headers={
+                "User-Agent": UA, "X-Up-Auth": auth,
+                "Cookie": cred.cookie_header()})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_s) as r:
+                payload = json.loads(r.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as exc:
+            raise BiliError("chunk_upload_error",
+                            f"分片 {idx + 1} HTTP {exc.code}") from exc
+        ok = payload.get("OK") == 1 or payload.get("ok") == 1
+        if not ok:
+            raise BiliError("chunk_upload_rejected",
+                            f"分片 {idx + 1} 被拒：{payload}")
+        parts.append(idx + 1)
+    # complete
+    comp_q = urllib.parse.urlencode({
+        "name": video_path.name, "profile": "upcdn_v2", "biz_id": biz_id,
+    })
+    req = urllib.request.Request(
+        f"{base}?outputs=1&output=json&{comp_q}", data=b"", method="POST",
+        headers={"User-Agent": UA, "X-Up-Auth": auth,
+                 "Cookie": cred.cookie_header()})
+    with urllib.request.urlopen(req, timeout=timeout_s) as r:
+        comp = json.loads(r.read().decode("utf-8", "replace"))
+    if "OK" not in comp and comp.get("ok") != 1:
+        raise BiliError("complete_failed", f"complete 被拒：{comp}")
+    # submit（投稿元数据）
+    videos = [{"filename": f"n0_{video_path.stem}.mp4",
+               "title": video_path.stem, "desc": "", "cid": biz_id}]
+    form = {"json": json.dumps({"copyright": 1, "videos": videos, "source": "",
+                                "cover": "", "title": title, "tag": "日常",
+                                "desc_format_id": 0, "desc": desc,
+                                "dynamic": "", "interactive": 0,
+                                "no_reprint": 1, "open_elec": 0,
+                                "dolby": 0, "lossless_music": 0})}
+
+    def _submit_once() -> dict:
+        body = urllib.parse.urlencode(form).encode("utf-8")
+        req = urllib.request.Request(
+            "https://member.bilibili.com/x/vu/channel/web/submit/v2",
+            data=body, headers={
+                "User-Agent": UA,
+                "Referer": "https://member.bilibili.com/platform/upload/video/frame",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Cookie": cred.cookie_header()})
+        with urllib.request.urlopen(req, timeout=timeout_s) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+
+    try:
+        payload = _submit_once()
+    except urllib.error.HTTPError as exc:
+        raise BiliError("submit_http_error", f"投稿接口 HTTP {exc.code}") from exc
+    code = payload.get("code")
+    ok = code == 0
+    aid = None
+    try:
+        aid = int(payload["data"]["aid"])
+    except (KeyError, TypeError, ValueError):
+        pass
+    _log_action(state_dir or Path("data"), {
+        "ts": t, "action": "upload", "title": title, "file": str(video_path),
+        "size": size, "ok": ok, "code": code, "aid": aid,
+        "message_brief": payload.get("message", ""),
+    })
+    if not ok:
+        raise BiliError("submit_rejected",
+                        f"投稿被拒 code={code} message={payload.get('message')}")
+    return UploadResult(ok=True, dry_run=False,
+                        message=f"投稿成功：av{aid}", aid=aid, raw=payload)
+
+
+# ---- 评论措辞（persona 过一遍再发） ----
+
+def restyle_comment(text: str, pool=None, *,
+                    endpoint: str = "http://127.0.0.1:8787",
+                    timeout_s: float = 60.0) -> tuple[str, str]:
+    """把要发的评论按玛卡巴卡（六七岁小孩）的口吻改写。
+
+    路线（2026-11-04 实测归档 112257）：
+    1) 传了 pool → 直接用（进程内，比如服务自己调）；
+    2) 没传 pool → 调运行中服务的 /v1/chat/completions（服务有配置好的路由）；
+    3) 都不行 → 返回原文（heuristic）——护栏是 dry-run 默认，不算静默失败。
+
+    实测输出："这个视频的剪辑手法非常专业，节奏把控得恰到好处。"
+    → "哇好厉害！一点都不无聊，咻一下就看完啦！"
+    """
+    text = text.strip()
+    if not text:
+        raise BiliError("empty_message", "评论内容为空")
+    from aiji.brain.persona import CHILD
+
+    sys_prompt = (
+        "你是玛卡巴卡，六七岁的小孩。把用户给你的评论改写成你会发在视频下的评论。\n"
+        "要求：\n"
+        "- 句子短（3–12 个字），口语，可以用叠词和语气词（呀/啦/嘛/哇）\n"
+        "- 可以有问句（“为什么呀”）\n"
+        "- 不用成语、书面语、专业词；不说“作为/我认为/建议”\n"
+        "- 不攻击任何人；不碰性别地域政治\n"
+        "- 只输出改写后的评论本身，不要任何解释、引号或前后缀\n"
+        f"{CHILD}\n")
+    messages = [{"role": "system", "content": sys_prompt},
+                {"role": "user", "content": f"改写这条评论：{text}"}]
+    raw: str = ""
+    if pool is not None:
+        try:
+            res = pool.chat(messages, timeout_s=timeout_s)
+            raw = str(getattr(res, "text", "") or "")
+        except Exception:  # noqa: BLE001
+            raw = ""
+    else:
+        try:
+            body = json.dumps({"model": "default", "messages": messages,
+                               "max_tokens": 200}, ensure_ascii=False).encode("utf-8")
+            req = urllib.request.Request(
+                f"{endpoint.rstrip('/')}/v1/chat/completions", data=body,
+                headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout_s) as r:
+                payload = json.loads(r.read().decode("utf-8", "replace"))
+            raw = str(((payload.get("choices") or [{}])[0].get("message")
+                       or {}).get("content") or "")
+        except Exception:  # noqa: BLE001 - 服务不在/超时 → 原文兜底
+            raw = ""
+    out = raw.strip().strip('"').strip("'")
+    if not out or len(out) > 1000:
+        return text, "heuristic"
+    return out, "model"
+
+
 __all__ = [
-    "BiliCredentials", "BiliError", "CommentResult",
+    "BiliCredentials", "BiliError", "CommentResult", "UploadResult",
     "bv_to_av", "check_login", "credentials_from_browser", "parse_cookie_jar",
-    "post_comment", "resolve_aid",
+    "post_comment", "resolve_aid", "restyle_comment", "upload_video",
 ]

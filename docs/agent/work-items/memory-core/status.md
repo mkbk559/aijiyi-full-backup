@@ -14,3 +14,17 @@
 - 机器上 Edge 无 B 站登录态（DPAPI 拒绝=预期）——评论真发待用户开账号后实测，
   写路径已备好 12 条离线测试（dry-run/限速/留痕/拒绝处理）。
 - 画面理解边界（诚实）：RapidOCR 只读**字**；看懂画面内容仍需多模态模型，没做。
+
+## 第 26 轮（2026-11-04 中午）：B 站投稿 + 评论 persona 化
+
+- `aiji bili-upload <file> <title>`：预检（文件/标题/大小/8GB 上限）→ 分片上传
+  （CHUNK_SIZE=8MB 按序 PUT）→ complete → submit v2。默认 dry-run（本地预检
+  不需要登录态）；--yes 才真传；留痕 bili_actions.jsonl。写路径待真 cookie 实测。
+- `aiji bili-comment --persona`：评论先按玛卡巴卡（六七岁）口吻改写再发。
+  改写走运行中服务的 /v1/chat/completions（excluded #169：CLI 进程里路由是空的）。
+  实测："这个视频拍得真好" → "哇，拍得好好看呀！我看了两遍啦！"（agent2api）。
+  dry-run 预览连登录态都不要——改写效果离线可看。
+- dry-run 语义统一：评论/投稿的 dry-run 都是纯本地预演（不要求 cookie），
+  真发才要登录态。post_comment 的 strip 误删差点让测试真发（excluded #168）。
+- writer 视频知识兜底两处重复提成 _video_knowledge_fallback（主路径/关停路径共用）。
+- tests/test_bili_client.py 23 条全绿（上传 5 + 改写 5 + 评论 13）。

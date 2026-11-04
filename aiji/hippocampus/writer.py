@@ -250,14 +250,7 @@ class Writer:
         self._handle_text_offline(job)
         # 视频的知识兜底在关停路径同样要落（否则"关停兜底救回来的写入"
         # 反而少了可召回的 knowledge 行——103451 e2e 实测）。
-        if item.kind == "video" and isinstance(item.extra.get("video_info"), dict):
-            info = item.extra["video_info"]
-            subject = str(info.get("uploader") or info.get("video_id") or "视频")[:40]
-            with self.db.tx() as c:
-                store.add_fact(c, job.ident, FactDraft(
-                    subject=subject, predicate="视频", object=(env.text or "")[:200],
-                    text=(env.text or "")[:500], confidence=0.6, kind="knowledge",
-                ), source=f"video:{item.ref}", source_kind="ingest")
+        self._video_knowledge_fallback(job, env.text)
 
     # ---- 提交（主链路：只做内存操作） ----
 
@@ -438,17 +431,25 @@ class Writer:
                      learn_style=False, force_heuristic=self._ambient_backlog(job.ident))
         # 视频是**第三方知识源**（标题/UP主/简介），不是用户的个人事实：
         # 模型抽取常判"没有可抽的用户事实"（实测 agent2api 返回空 facts），
-        # 但学到的内容必须可召回——再落一条 knowledge fact 兜底，
-        # subject 用 UP 主/视频号，内容是整段学习文本（FTS + 语义索引都能搜到）。
-        if item.kind == "video" and isinstance(item.extra.get("video_info"), dict):
-            info = item.extra["video_info"]
-            subject = str(info.get("uploader") or info.get("video_id") or "视频")[:40]
-            with self.db.tx() as c:
-                store.add_fact(c, job.ident, FactDraft(
-                    subject=subject, predicate="视频", object=env.text[:200],
-                    text=env.text[:500], confidence=0.6, kind="knowledge",
-                ), source=f"video:{item.ref}", source_kind="ingest")
+        # 但学到的内容必须可召回——再落一条 knowledge fact 兜底。
+        self._video_knowledge_fallback(job, env.text)
         self._maybe_summarize(job.ident, job.session)
+
+    def _video_knowledge_fallback(self, job: "Job", text: str) -> None:
+        """视频学习内容的 knowledge 兜底（主路径与关停兜底路径共用，勿复制）。"""
+        item = job.item
+        if item is None or item.kind != "video":
+            return
+        if not isinstance(item.extra.get("video_info"), dict):
+            return
+        info = item.extra["video_info"]
+        subject = str(info.get("uploader") or info.get("video_id") or "视频")[:40]
+        body = text or ""
+        with self.db.tx() as c:
+            store.add_fact(c, job.ident, FactDraft(
+                subject=subject, predicate="视频", object=body[:200],
+                text=body[:500], confidence=0.6, kind="knowledge",
+            ), source=f"video:{item.ref}", source_kind="ingest")
 
     def _ambient_backlog(self, ident: Ident) -> bool:
         return (

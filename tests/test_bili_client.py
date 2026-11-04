@@ -153,16 +153,134 @@ class PostCommentTest(unittest.TestCase):
 
     def test_empty_and_too_long_messages(self):
         root = pathlib.Path(make_tmp(self, "bili-msg"))
-        with self.assertRaises(bc.BiliError):
-            bc.post_comment(1, "   ", self.CRED, confirm=True, state_dir=root)
+        # 空内容在 dry-run 前就被拒（无需登录态）。空白串要靠 strip 拦——
+        # 2026-11-04 教训：strip 被误删时这个用例会带着可用 cred+confirm
+        # 摸到真网络；套件的"0 次外网请求"巡检会当场抓住。
+        with self.assertRaises(bc.BiliError) as ctx:
+            bc.post_comment(1, "   ", bc.BiliCredentials(), state_dir=root)
+        self.assertEqual(ctx.exception.code, "empty_message")
         with self.assertRaises(bc.BiliError):
             bc.post_comment(1, "啊" * 1001, self.CRED, confirm=True, state_dir=root)
 
-    def test_without_login_even_dry_run_fails(self):
+    def test_dry_run_works_without_login(self):
+        # 2026-11-04 设计变化：dry-run 是纯本地预演（含 persona 改写预览），
+        # 不要求登录态；真发才要。
         root = pathlib.Path(make_tmp(self, "bili-nologin"))
+        result = bc.post_comment(1, "x", bc.BiliCredentials(), state_dir=root)
+        self.assertTrue(result.dry_run)
+        self.assertIn("[dry-run]", result.message)
+
+    def test_confirm_without_login_fails(self):
+        root = pathlib.Path(make_tmp(self, "bili-nologin2"))
         with self.assertRaises(bc.BiliError) as ctx:
-            bc.post_comment(1, "x", bc.BiliCredentials(), state_dir=root)
+            bc.post_comment(1, "x", bc.BiliCredentials(), confirm=True,
+                            state_dir=root)
         self.assertEqual(ctx.exception.code, "not_logged_in")
+
+
+class UploadTest(unittest.TestCase):
+    CRED = bc.BiliCredentials(sessdata="s", bili_jct="j", dedeuserid="1")
+
+    def _video(self, tmp: pathlib.Path, size: int) -> pathlib.Path:
+        p = tmp / "v.mp4"
+        p.write_bytes(b"x" * size)
+        return p
+
+    def test_dry_run_needs_no_login(self):
+        root = pathlib.Path(make_tmp(self, "bili-up-dry"))
+        video = self._video(root, 1000)
+        result = bc.upload_video(
+            video, "标题", cred=bc.BiliCredentials(), state_dir=root)
+        self.assertTrue(result.dry_run)
+        self.assertIn("1 个分片", result.message)
+        self.assertFalse((root / "bili_actions.jsonl").exists())
+
+    def test_dry_run_reports_multiple_chunks(self):
+        root = pathlib.Path(make_tmp(self, "bili-up-chunks"))
+        video = self._video(root, bc.CHUNK_SIZE * 2 + 5)
+        result = bc.upload_video(
+            video, "标题", cred=bc.BiliCredentials(), state_dir=root)
+        self.assertIn("3 个分片", result.message)
+
+    def test_missing_file_and_bad_titles(self):
+        root = pathlib.Path(make_tmp(self, "bili-up-bad"))
+        with self.assertRaises(bc.BiliError) as ctx:
+            bc.upload_video(root / "nope.mp4", "t", cred=self.CRED, state_dir=root)
+        self.assertEqual(ctx.exception.code, "video_file_missing")
+        video = self._video(root, 10)
+        with self.assertRaises(bc.BiliError) as ctx:
+            bc.upload_video(video, "  ", cred=self.CRED, state_dir=root)
+        self.assertEqual(ctx.exception.code, "empty_title")
+        with self.assertRaises(bc.BiliError) as ctx:
+            bc.upload_video(video, "标" * 81, cred=self.CRED, state_dir=root)
+        self.assertEqual(ctx.exception.code, "title_too_long")
+
+    def test_confirm_without_login_is_rejected(self):
+        root = pathlib.Path(make_tmp(self, "bili-up-nologin"))
+        video = self._video(root, 10)
+        with self.assertRaises(bc.BiliError) as ctx:
+            bc.upload_video(video, "t", cred=bc.BiliCredentials(),
+                            confirm=True, state_dir=root)
+        self.assertEqual(ctx.exception.code, "not_logged_in")
+
+
+class RestyleTest(unittest.TestCase):
+    def test_no_pool_and_no_service_returns_original(self):
+        # endpoint 指向不可达端口：服务兜底失败 → 原文（heuristic）
+        text, source = bc.restyle_comment(
+            "这个视频拍得真好", endpoint="http://127.0.0.1:1", timeout_s=0.5)
+        self.assertEqual(text, "这个视频拍得真好")
+        self.assertEqual(source, "heuristic")
+
+    def test_service_endpoint_rewrites(self):
+        class Resp:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def read(self):
+                return json.dumps(self._payload).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            return Resp({"choices": [{"message": {"content": '"哇好好看呀"'}}]})
+
+        with mock.patch.object(bc.urllib.request, "urlopen", fake_urlopen):
+            text, source = bc.restyle_comment("好看", endpoint="http://x")
+        self.assertEqual(text, "哇好好看呀")
+        self.assertEqual(source, "model")
+
+    def test_pool_result_is_stripped(self):
+        class Pool:
+            def chat(self, messages, timeout_s=30.0):
+                return type("R", (), {"text": '"哇好好看呀"'})()
+        text, source = bc.restyle_comment("好看", Pool())
+        self.assertEqual(text, "哇好好看呀")
+        self.assertEqual(source, "model")
+
+    def test_empty_pool_reply_falls_back(self):
+        class Pool:
+            def chat(self, messages, timeout_s=30.0):
+                return type("R", (), {"text": ""})()
+        text, source = bc.restyle_comment("好看", Pool())
+        self.assertEqual(text, "好看")
+        self.assertEqual(source, "heuristic")
+
+    def test_pool_exception_falls_back(self):
+        class Pool:
+            def chat(self, messages, timeout_s=30.0):
+                raise RuntimeError("pool down")
+        text, source = bc.restyle_comment("好看", Pool())
+        self.assertEqual(text, "好看")
+        self.assertEqual(source, "heuristic")
+
+    def test_empty_input_raises(self):
+        with self.assertRaises(bc.BiliError):
+            bc.restyle_comment("   ")
 
 
 if __name__ == "__main__":

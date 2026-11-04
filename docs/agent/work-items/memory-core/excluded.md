@@ -1312,3 +1312,21 @@ CLI 层把"元数据 + 听到的内容 + 画面里看到的字"拼进 text 传�
 `bv_to_av("BV1GJ411x7h7")` 算出 80433022，我断言 97630895（凭记忆）——官方
 view API 实测 aid=80433022（归档 105242-check-aid）。**算法 + 官方 API 对拍**
 才是有效验证；"我记得是对的常量"不是证据。
+
+## 168. 测试里 confirm=True + 可用凭据且不 mock 网络的用例，删错一行就是真外发（2026-11-04 第 26 轮）
+
+`post_comment` 的 `message.strip()` 在重构 dry-run 顺序时被误删。结果
+`test_empty_and_too_long_messages`（`"   "` 空白串 + `confirm=True` + 可用凭据、
+**没 mock 网络**）直接摸到了真发路径——只是因为机器上没有 B 站 cookie 才没真发出去。
+两处修复：(a) strip 恢复；(b) 测试注释里写明"故意不 mock"的原因——套件的
+"0 次外网请求"巡检是最后一道网。**教训：护栏类代码的重构，先看测试有没有
+危险组合（confirm+cred+无 mock），再动顺序。**
+
+## 169. 模型池路由只活在服务进程的环境变量里（AIJI_ROUTES），CLI 单跑拿不到
+
+CLI 进程里 `Settings.load()` 出来 routes=0（example 配置的路由 key 全靠环境变量，
+而 AIJI_ROUTES 只在计划任务拉起的服务进程里）。`restyle_comment` 最初想自己开
+Memory 拿池——池是空的。修：走运行中服务的 `/v1/chat/completions`（服务有配置好
+的路由），实测改写成功（112257 归档："这个视频的剪辑手法非常专业" →
+"哇好厉害！一点都不无聊，咻一下就看完啦！"）。进程内池仍然支持（传 pool 参数），
+服务不可达时原文兜底（heuristic）。
