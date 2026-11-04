@@ -1330,3 +1330,18 @@ Memory 拿池——池是空的。修：走运行中服务的 `/v1/chat/completi
 的路由），实测改写成功（112257 归档："这个视频的剪辑手法非常专业" →
 "哇好厉害！一点都不无聊，咻一下就看完啦！"）。进程内池仍然支持（传 pool 参数），
 服务不可达时原文兜底（heuristic）。
+
+## 170. ruff --fix 会删掉"当时未使用"的 import——分两次写的测试文件会摔在第二段
+
+tests/test_video_orchestration.py 第一段写 listen/look（`make_tmp` 用了 3 处），
+ruff --fix 后 import 被裁剪；第二段补 UploadOrchestrationTest 又用 `make_tmp`
+→ F821 全 class 报错。**教训：多段追加测试文件时，每段跑完 ruff 都要确认
+没误删后续还要用的 import**（本例补回 `from tests._tempdir import make_tmp`）。
+
+## 171. `git check-ignore <目录>` 返回 False ≠ 里面有东西没被忽略——要看 -v 逐条
+
+体积审计时 `git check-ignore voice-engine` 说"没忽略"（exit 1），差点得出
+"10GB 要进库"的误判。实际 `.gitignore` 里是 `voice-engine/**/.venv/`、
+`voice-engine/rvc/` 这类**内容模式**：目录本身不匹配，内容全被覆盖。
+`git ls-files voice-engine` = 0 个跟踪文件才是判定依据。
+**教训：判"会不会进库"看 ls-files / add -n，别只看 check-ignore 的目录名匹配。**

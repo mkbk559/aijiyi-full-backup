@@ -28,3 +28,20 @@
   真发才要登录态。post_comment 的 strip 误删差点让测试真发（excluded #168）。
 - writer 视频知识兜底两处重复提成 _video_knowledge_fallback（主路径/关停路径共用）。
 - tests/test_bili_client.py 23 条全绿（上传 5 + 改写 5 + 评论 13）。
+
+## 第 27 轮（2026-11-04 下午）：视频/投稿编排的离线测试补齐
+
+- 审计发现覆盖缺口：video_ingest 58.9%、bili_client 65.3%（子进程编排与
+  错误分支没锁住，只有真机 e2e 背书）。
+- 新增 tests/test_video_orchestration.py（19 条，全 mock，0 外网）：
+  - listen_video：参数编排（bestaudio/16k）、cookies 转发、下载失败/无音频/
+    ffmpeg 缺失的错误码映射；
+  - look_video：抽帧去重、帧数上限真生效、下载失败/无帧；
+  - check_login：无 cookie / 解析 nav / HTTP 412 映射；
+  - resolve_aid：av 直传 / BV→av=80433022 / 坏 id 拒绝；
+  - upload_video 真传路径：preupload→分片 PUT→complete→submit 的调用顺序、
+    分片被拒 / preupload 失败 / submit 被拒（且留痕）。
+- 双文件覆盖：video_ingest 92.7%、bili_client 90.7%（三模块口径）。
+- 全量 v62 = 1366 ok / 0 / 0，覆盖率 93%，外网请求 0。
+- 体积审计：voice-engine 10.3GB（rvc venv 7.2GB + assets 2.1GB）为本地工具链，
+  .gitignore 内容模式全部覆盖，git 零跟踪（excluded #171 记录 check-ignore 误判）。
