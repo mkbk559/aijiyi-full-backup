@@ -1522,3 +1522,19 @@ AIJI_QQ_SPLIT_REPLY 默认 0→1、MIN_CHARS 60→30（长句一条发→按句�
 验证：probe 私聊「今天好累呀」→"哎呀，玛卡巴卡也累了呢。你今天做了什么，那么累
 呀？要不要休息一下，喝点水？"（叠词+追问+关心，儿童腔）。
 **教训：人格类配置绝不能在客户端硬编码覆盖服务端默认——两处"真相源"必有一处烂掉。**
+
+## 184. 记忆全清 + 联网三工具（2026-11-05 02:00 用户拍板"全部重塑"）
+
+用户三项指控全部成立并处理：
+1. **"小孩子为什么知道这么多"** → 旧记忆 21726 条事实里全是成人世界语料
+   （孙吧梗、群聊黑话、用户画像），child 人设 prompt 再好也被记忆拉回成人腔。
+   **处理**：`wipe_memory.py` 清空全部记忆表（turn 25696/fact 21726/
+   turn_archive 13719/summary/reflection/style/trait/profile/being_*/life_card/
+   injection/media/outbox/send_queue/event_log/heart_state），重建 FTS 索引，
+   VACUUM。保留：account（B站/QQ 登录态）、表结构。
+   重塑后首答："我叫玛卡巴卡呀！你叫什么名字呀？"（10 字，标准小孩）。
+2. **"长句没有拆分细一点"** → AIJI_QQ_SPLIT_MIN_CHARS 60→30 已在前一轮改。
+3. **"B站/联网/MCP 都没接"** → OPENAI_TOOLS 原来只有文件/终端/桌面 8 个工具。
+   新增 web_search（Bing 免 key）/fetch_url（net_guard 校验+HTML转文本）/
+   bili_search（B 站 api+完整浏览器头防 412）。全只读免审批。真机 4/4 绿。
+   MCP 研究循环（mcp_research）是后台任务不是对话工具，已在跑。
