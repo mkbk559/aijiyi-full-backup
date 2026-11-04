@@ -98,6 +98,8 @@ if (-not $astrbot -and (Test-Path -LiteralPath $astrbotPython)) {
                 qq_heart_silence = 'AIJI_HEART_SILENCE'
                 qq_heart_cooldown = 'AIJI_HEART_COOLDOWN'
                 qq_heart_daily = 'AIJI_HEART_DAILY'
+                qq_sticker_chance = 'AIJI_STICKER_CHANCE'
+                qq_sticker_mood_chance = 'AIJI_STICKER_MOOD_CHANCE'
             }
             foreach ($name in $qqMap.Keys) {
                 $value = $qqSettings.$name
