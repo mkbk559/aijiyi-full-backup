@@ -1268,3 +1268,47 @@ v58 套件里 `test_cli.test_remember_then_recall` 间歇性失败（3 次挂 1 
   worker 稍后醒来重复写不会出重复行。
 - **教训**：并发丢数据的复现测试要同时覆盖"队列里没轮到"和"worker 手里没跑完"
   两种状态；第一直觉修的往往是看得见的那层。
+
+## 165. Recognizers._video 无视 item.text 从头重建学习文本（2026-11-04 第 25 轮）
+
+CLI 层把"元数据 + 听到的内容 + 画面里看到的字"拼进 text 传给 ingest，
+`_video()` 却只看 `video_info` 重新拼一份——`--listen/--look` 的成果全部静默丢失
+（media text 卡在 214 字）。修：调用方给过 text 就优先用，没有才从 video_info 重建。
+教训：**合成文本的层不能比下游更"聪明"**；改 CLI 三次都没用，是因为真正的分叉点
+在 recognize 层。
+
+## 166. 临时目录的 finally 清理把返回值也删了（listen_video 第一版）
+
+`fetch_audio_wav` 返回 wav 路径、`finally` 里 rmtree workdir——调用方拿到路径时
+文件已经没了（101303 e2e：`No such file or directory: ...clip.wav`）。
+修：改成 `listen_video(url) -> (text, conf)`，转写在函数内完成，wav 不跨函数存活。
+教训：**返回"路径"的函数不许自己清理路径指向的东西**；要么返回内容，要么把整个
+"取内容"的过程收进函数里。
+
+## 167. 凭记忆写的测试常量（BV↔av 对照）是错的，算法是对的
+
+`bv_to_av("BV1GJ411x7h7")` 算出 80433022，我断言 97630895（凭记忆）——官方
+view API 实测 aid=80433022（归档 105242-check-aid）。**算法 + 官方 API 对拍**
+才是有效验证；"我记得是对的常量"不是证据。
+
+## 165. Recognizers._video 无视 item.text 从头重建学习文本（2026-11-04 第 25 轮）
+
+CLI 层把"元数据 + 听到的内容 + 画面里看到的字"拼进 text 传给 ingest，
+`_video()` 却只看 `video_info` 重新拼一份——`--listen/--look` 的成果全部静默丢失
+（media text 卡在 214 字）。修：调用方给过 text 就优先用，没有才从 video_info 重建。
+教训：**合成文本的层不能比下游更"聪明"**；改 CLI 三次都没用，是因为真正的分叉点
+在 recognize 层。
+
+## 166. 临时目录的 finally 清理把返回值也删了（listen_video 第一版）
+
+`fetch_audio_wav` 返回 wav 路径、`finally` 里 rmtree workdir——调用方拿到路径时
+文件已经没了（101303 e2e：`No such file or directory: ...clip.wav`）。
+修：改成 `listen_video(url) -> (text, conf)`，转写在函数内完成，wav 不跨函数存活。
+教训：**返回"路径"的函数不许自己清理路径指向的东西**；要么返回内容，要么把整个
+"取内容"的过程收进函数里。
+
+## 167. 凭记忆写的测试常量（BV↔av 对照）是错的，算法是对的
+
+`bv_to_av("BV1GJ411x7h7")` 算出 80433022，我断言 97630895（凭记忆）——官方
+view API 实测 aid=80433022（归档 105242-check-aid）。**算法 + 官方 API 对拍**
+才是有效验证；"我记得是对的常量"不是证据。

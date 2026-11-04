@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import sqlite3
 import sys
 import time
@@ -21,6 +22,8 @@ from aiji.senses.video_ingest import (
     build_learn_text,
     fetch_video_info,
     learning_plan,
+    listen_video,
+    look_video,
 )
 
 
@@ -43,7 +46,11 @@ def _add_identity(p: argparse.ArgumentParser) -> None:
 
 
 def cmd_learn_video(args: argparse.Namespace) -> int:
-    """看视频学习：抓元数据（+字幕计划）→ 走同一条记忆抽取管线。"""
+    """看视频学习：抓元数据（+字幕计划）→ 走同一条记忆抽取管线。
+
+    --listen N：把视频音轨的前 N 分钟转写出来（FunASR）一起进记忆——
+    B 站绝大多数视频没有 CC 字幕（探针 100056/100018 实测），"听"是通用路线。
+    """
     m = _memory(args)
     try:
         try:
@@ -62,19 +69,113 @@ def cmd_learn_video(args: argparse.Namespace) -> int:
             "video_info": info.to_dict(),
             "plan_mode": plan["mode"],
         }
+        heard = None
+        saw = None
+        if args.look > 0:
+            try:
+                saw_text, saw_conf = look_video(
+                    " ".join(args.url), frames=args.look,
+                    timeout_s=args.timeout * 4,
+                    cookies_from_browser=args.cookies_from_browser,
+                )
+            except VideoIngestError as exc:
+                saw = {"error": exc.code, "detail": str(exc)}
+            except Exception as exc:  # noqa: BLE001 - OCR 引擎缺依赖时降级
+                saw = {"error": "ocr_failed", "detail": str(exc)[:200]}
+            else:
+                saw = {"frames": args.look, "confidence": round(saw_conf, 2),
+                       "chars": len(saw_text)}
+                if saw_text:
+                    text = text + "\n\n画面里看到的字：\n" + saw_text
+                    extra["saw"] = saw
+        if args.listen > 0:
+            try:
+                heard_text, conf = listen_video(
+                    " ".join(args.url), seconds=args.listen * 60.0,
+                    timeout_s=args.timeout * 4,
+                    cookies_from_browser=args.cookies_from_browser,
+                )
+            except VideoIngestError as exc:
+                print(json.dumps({"ok": False, "code": exc.code,
+                                  "error": f"音频路线失败：{exc}"},
+                                 ensure_ascii=False), file=sys.stderr)
+                # 元数据已经拿到了：音频失败降级为只学元数据，不算整条失败
+                heard = {"error": exc.code, "detail": str(exc)}
+            except Exception as exc:  # noqa: BLE001 - ASR 引擎缺依赖时降级
+                heard = {"error": "asr_failed", "detail": str(exc)[:200]}
+            else:
+                heard = {"seconds_planned": args.listen * 60,
+                         "confidence": round(conf, 2),
+                         "chars": len(heard_text)}
+                if heard_text:
+                    text = text + "\n\n听到的内容：\n" + heard_text
+                    extra["heard"] = heard
         ident = _ident(args)
         m.ingest(ident, kind="video", ref=info.video_id or info.webpage_url,
-                 text=text, url=info.webpage_url, session=args.session, extra=extra)
+                 text=text[:4000], url=info.webpage_url,
+                 session=args.session, extra=extra)
         ok = m.flush(args.flush_timeout)
         print(json.dumps({
             "ok": True, "flushed": ok,
             "video": info.to_dict(),
             "plan": plan,
+            "heard": heard,
+            "saw": saw,
             "text_chars": len(text),
         }, ensure_ascii=False, indent=2))
         return 0
     finally:
         m.close()
+
+
+def _bili_cred(args):
+    """按 --cookie-file > --cookies-from-browser 的顺序拿凭据。"""
+    from aiji.senses import bili_client
+    if getattr(args, "cookie_file", ""):
+        return bili_client.parse_cookie_jar(args.cookie_file)
+    if getattr(args, "cookies_from_browser", ""):
+        return bili_client.credentials_from_browser(
+            args.cookies_from_browser,
+            " ".join(getattr(args, "url", ["https://www.bilibili.com"])))
+    raise bili_client.BiliError(
+        "no_cookie_source",
+        "需要 --cookie-file <jar> 或 --cookies-from-browser edge/chrome "
+        "（先在浏览器里登录 B 站）")
+
+
+def cmd_bili_login(args: argparse.Namespace) -> int:
+    """查 B 站登录态（玛卡巴卡的账号是否可用）。无副作用。"""
+    from aiji.senses import bili_client
+    try:
+        cred = _bili_cred(args)
+        info = bili_client.check_login(cred)
+    except bili_client.BiliError as exc:
+        print(json.dumps({"ok": False, "code": exc.code, "error": str(exc)},
+                         ensure_ascii=False, indent=2))
+        return 2
+    print(json.dumps({"ok": True, **info}, ensure_ascii=False, indent=2))
+    return 0 if info.get("is_login") else 3
+
+
+def cmd_bili_comment(args: argparse.Namespace) -> int:
+    """B 站评论。默认 dry-run；--yes 才真发（限速 60s + 留痕）。"""
+    from aiji.senses import bili_client
+    url = " ".join(args.url)
+    try:
+        cred = _bili_cred(args)
+        aid = bili_client.resolve_aid(url)
+        result = bili_client.post_comment(
+            aid, args.message, cred, confirm=bool(args.yes),
+            state_dir=pathlib.Path(getattr(args, "state_dir", "data")))
+    except bili_client.BiliError as exc:
+        print(json.dumps({"ok": False, "code": exc.code, "error": str(exc)},
+                         ensure_ascii=False, indent=2))
+        return 2
+    print(json.dumps({
+        "ok": result.ok, "dry_run": result.dry_run, "aid": aid,
+        "rpid": result.rpid, "message": result.message,
+    }, ensure_ascii=False, indent=2))
+    return 0
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -460,10 +561,29 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--timeout", type=float, default=60.0, help="yt-dlp 拉取超时（秒）")
     sp.add_argument("--cookies-from-browser", default="",
                     help="需要登录态的站点从浏览器拿 cookie：edge / chrome / firefox")
+    sp.add_argument("--listen", type=float, default=0.0,
+                    help="把音轨前 N 分钟转写进记忆（FunASR 听）；0=只学元数据")
+    sp.add_argument("--look", type=int, default=0,
+                    help="抽 N 帧用 OCR 读画面文字进记忆（标题板/PPT）；0=不看画面")
     sp.add_argument("--session", default="default")
     sp.add_argument("--flush-timeout", type=float, default=20.0)
     _add_identity(sp)
     sp.set_defaults(func=cmd_learn_video)
+
+    sp = sub.add_parser("bili-login", help="检查 B 站登录态（玛卡巴卡的账号）")
+    sp.add_argument("--cookie-file", default="", help="Netscape cookie jar（yt-dlp 导出）")
+    sp.add_argument("--cookies-from-browser", default="",
+                    help="从浏览器拿 cookie：edge / chrome / firefox")
+    sp.set_defaults(func=cmd_bili_login)
+
+    sp = sub.add_parser("bili-comment", help="B 站评论：默认 dry-run，--yes 才真发")
+    sp.add_argument("url", nargs="+", help="视频链接")
+    sp.add_argument("message", help="评论内容（建议先过 persona 措辞）")
+    sp.add_argument("--cookie-file", default="")
+    sp.add_argument("--cookies-from-browser", default="")
+    sp.add_argument("--yes", action="store_true", help="确认真发（默认只 dry-run）")
+    sp.add_argument("--state-dir", default="data", help="留痕目录（bili_actions.jsonl）")
+    sp.set_defaults(func=cmd_bili_comment)
 
     sp = sub.add_parser("inject", help="生成给主模型的软引导块（不生成回复）")
     sp.add_argument("query", nargs="+")

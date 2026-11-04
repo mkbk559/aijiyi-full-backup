@@ -275,16 +275,21 @@ class Recognizers:
         # 标题/UP主/简介/标签合成文本 → 走**同一条**抽取管线（和聊天文字一样）。
         raw_info = item.extra.get("video_info")
         if isinstance(raw_info, dict) and raw_info.get("title"):
-            parts = [f"【视频】{raw_info.get('title')}"]
-            if raw_info.get("uploader"):
-                parts.append(f"UP主/作者：{raw_info['uploader']}")
-            if raw_info.get("tags"):
-                parts.append(f"标签：{'、'.join(str(t) for t in raw_info['tags'][:8])}")
-            if raw_info.get("description"):
-                parts.append(f"简介：{str(raw_info['description'])[:600]}")
-            if raw_info.get("webpage_url"):
-                parts.append(f"链接：{raw_info['webpage_url']}")
-            text = "\n".join(parts)
+            # 调用方合成好的学习文本（元数据 + "听到的内容" + "画面里看到的字"）
+            # 优先——2026-11-04 教训：这里曾经无视 item.text 从头重建，
+            # 把 --listen/--look 的成果全丢了（CLI 层怎么改都进不了库）。
+            text = (item.text or "").strip()
+            if not text:
+                parts = [f"【视频】{raw_info.get('title')}"]
+                if raw_info.get("uploader"):
+                    parts.append(f"UP主/作者：{raw_info['uploader']}")
+                if raw_info.get("tags"):
+                    parts.append(f"标签：{'、'.join(str(t) for t in raw_info['tags'][:8])}")
+                if raw_info.get("description"):
+                    parts.append(f"简介：{str(raw_info['description'])[:600]}")
+                if raw_info.get("webpage_url"):
+                    parts.append(f"链接：{raw_info['webpage_url']}")
+                text = "\n".join(parts)
             return Envelope("video", item.ref, text, 0.9, "ok", "yt-dlp-meta",
                             meta={"url": item.url, "video_id": raw_info.get("video_id"),
                                   "duration_s": raw_info.get("duration_s"),

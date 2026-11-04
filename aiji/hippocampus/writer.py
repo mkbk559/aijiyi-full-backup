@@ -248,6 +248,16 @@ class Writer:
             self.stats.unrecognized += 1
             return
         self._handle_text_offline(job)
+        # 视频的知识兜底在关停路径同样要落（否则"关停兜底救回来的写入"
+        # 反而少了可召回的 knowledge 行——103451 e2e 实测）。
+        if item.kind == "video" and isinstance(item.extra.get("video_info"), dict):
+            info = item.extra["video_info"]
+            subject = str(info.get("uploader") or info.get("video_id") or "视频")[:40]
+            with self.db.tx() as c:
+                store.add_fact(c, job.ident, FactDraft(
+                    subject=subject, predicate="视频", object=(env.text or "")[:200],
+                    text=(env.text or "")[:500], confidence=0.6, kind="knowledge",
+                ), source=f"video:{item.ref}", source_kind="ingest")
 
     # ---- 提交（主链路：只做内存操作） ----
 
