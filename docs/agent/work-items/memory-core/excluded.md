@@ -1372,3 +1372,19 @@ dedup_merged=6 / links_capped=93；(b) server 后台线程（AIJI_JANITOR 门默
 租约单实例），生产首轮日志数字与 CLI 完全一致。
 **教训：文档里每个"已落/已跑通"都要能回答"谁在什么循环里调它"——
 `unwired_engines.py` 每轮审计跑一次，别靠读文档。**
+
+## 174. 冒烟探针的"严格度"要跟设计对齐，否则信号被假阳淹没（2026-11-04 第 29 轮）
+
+route_smoke 的规则是"坏输入不许 2xx、一律不许 5xx"。第一次全量跑报 8 个 bad，
+逐一到 server.py 对线后发现**全是设计行为**：
+- 7 个"空 body 也 200"：/recall /inject 是查询可选读（空 query→空结果），
+  /feedback /flush 是幂等无操作，/api/being/checkup/live /api/mcp/research
+  /api/stickers/update 是状态报告型（各自有 env 门）；而真正写状态的
+  /ingest /remember /turns /media 都正确 4xx。
+- onebot 503 not_configured（L1192）、mcp/research 503 mcp_unavailable（L996）：
+  可选子系统未启动时的显式错误（注释明说"别静默"），不是崩溃。
+
+修法不是放宽成"5xx 都放过"，而是**精确 allowlist**：POST_ALLOW_2XX 白名单 +
+DESIGNED_503 按"路径+错误词"对齐——错误词对不上的 5xx 照样打回。
+校准后 59 条路由 bad=0。**教训：探针报忧要先证明忧是真的；证明不了就把
+设计预期编码进探针，别让假阳训练人忽略它。**

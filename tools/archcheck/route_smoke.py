@@ -24,6 +24,22 @@ BASE = f"http://127.0.0.1:{PORT}"
 
 # 需要显式给点东西才不 400 的 GET（其余 GET 一律要求 200 + JSON）
 GET_ALLOW_400 = {"/media", "/api/fs/raw", "/api/fs/read", "/api/recent-turns"}
+# 设计如此的"坏输入也 2xx"（2026-11-04 校准，excluded #174）：
+#   /recall /inject 空 query → 空结果（查询可选读）；/feedback /flush 空 body →
+#   幂等无操作；/api/being/checkup/live /api/mcp/research /api/stickers/update
+#   → 状态报告型（各自有 env 门，本冒烟环境里不会真触发动作）。
+POST_ALLOW_2XX = {
+    "/feedback", "/flush", "/inject", "/recall",
+    "/api/being/checkup/live", "/api/mcp/research", "/api/stickers/update",
+}
+# 设计如此的 503（可选子系统未启动时的显式错误，不是崩溃）——按"路径+错误词"
+# 精确对齐：真崩溃的 5xx 文本对不上，仍会被打回。
+#   /v1/gateway/onebot → not_configured（server.py L1192，QQ 走 AstrBot 侧时不配置是常态）
+#   /api/mcp/research → mcp_unavailable（server.py L996，注册表/研究循环没起来）
+DESIGNED_503 = {
+    "/v1/gateway/onebot": "not_configured",
+    "/api/mcp/research": "mcp_unavailable",
+}
 # 会改状态的 POST：只发空 body，验证"坏输入不 5xx"，不发真数据
 POST_ROUTES = [
     "/api/being/checkup/live", "/api/fs/write", "/api/mcp/research", "/api/shell",
@@ -77,12 +93,18 @@ def call(path: str, method: str = "GET", body: bytes | None = None):
             parsed = "<invalid json>"
     verdict = "ok"
     if code >= 500:
-        verdict = "5xx"
+        if (isinstance(parsed, dict)
+                and DESIGNED_503.get(path)
+                and DESIGNED_503[path] in (str(parsed.get("error"))
+                                           + str(parsed.get("status")))):
+            verdict = "ok"  # 设计内 503（可选子系统未启动，显式错误词对上）
+        else:
+            verdict = "5xx"
     elif method == "GET" and code == 200 and parsed is None:
         verdict = "not-json"
     elif method == "GET" and code == 400 and path not in GET_ALLOW_400:
         verdict = "400"
-    elif method == "POST" and code < 400:
+    elif method == "POST" and code < 400 and path not in POST_ALLOW_2XX:
         verdict = "2xx-on-bad-input"  # 空 body 还成功 → 校验缺失，值得看
     err = ""
     if isinstance(parsed, dict):

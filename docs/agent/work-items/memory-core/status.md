@@ -59,3 +59,14 @@
 - Proactive 判定为"建成未接线，接线是产品决策"（会打扰用户），不删不接，
   机器可见 + handler_failed 已锁（excluded #172）。
 - borrow-plan §9 加修订注："已跑通"指函数级；运行时 2026-11-04 才补。
+
+## 第 29 轮（2026-11-04 午后）：全维度复审——产品面零待修，探针校准一处
+
+- unwired_engines 复扫：只剩 Proactive（决策待定，机器可见）✅
+- 服务日志 0 错误；DB integrity ok、WAL 4.1MB、归档 13719 条未到 90 天 ✅
+- bench_recall：quiet p99 41ms / under_write p99 53ms（预算 100ms，0 降级）✅
+- 控制台运行簿页 + 27 个 API 引用全通（/api/fs 403=工作区门按设计关闭；
+  5 个"BAD"是 GET 探 POST-only 路由的假阳，route_smoke 本来就管它们）✅
+- route_smoke 校准（excluded #174）：POST_ALLOW_2XX + DESIGNED_503 精确对齐
+  设计预期 → 59 条路由 bad=0；真回归（对不上的错误词）仍会被打回。
+- 产品面本轮零待修；连续干净的确认轮在下一轮。
