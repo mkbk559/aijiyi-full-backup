@@ -45,3 +45,17 @@
 - 全量 v62 = 1366 ok / 0 / 0，覆盖率 93%，外网请求 0。
 - 体积审计：voice-engine 10.3GB（rvc venv 7.2GB + assets 2.1GB）为本地工具链，
   .gitignore 内容模式全部覆盖，git 零跟踪（excluded #171 记录 check-ignore 误判）。
+
+## 第 28 轮（2026-11-04 午后）：死引擎审计 → Janitor 接线 + Proactive 判定
+
+- 端点延迟全绿（最慢 /health 136ms）；7 处吞异常排查，修 1 处真吞
+  （proactive handler 崩溃静默 → 计数+日志，excluded #172）。
+- 新工具 `tools/archcheck/unwired_engines.py`（AST 级"只有测试引用"检测，
+  修正版吸取 wiring_audit 的模块内引用教训）→ 扫出 Proactive + Janitor。
+- **Janitor 接线**（代谢清理运行时，borrow-plan P0-2/P0-3 的执行者）：
+  server 后台线程（AIJI_JANITOR 默认开，AIJI_JANITOR_POLL=900s，租约单实例）
+  + `aiji janitor` 手动命令。生产首轮 dedup_merged=6 / links_capped=93，
+  CLI 拷贝库与生产线程两路径数字一致（excluded #173）。
+- Proactive 判定为"建成未接线，接线是产品决策"（会打扰用户），不删不接，
+  机器可见 + handler_failed 已锁（excluded #172）。
+- borrow-plan §9 加修订注："已跑通"指函数级；运行时 2026-11-04 才补。

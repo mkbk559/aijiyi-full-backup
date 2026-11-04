@@ -252,6 +252,13 @@ memory-brain 的巨石 `bridge.js`/Chroma 双写/DSH preset；手册的"90 天�
 
 ## 9. 实施状态（2026-11-02 落地，全部已跑通）
 
+> **2026-11-04 修订（第 28 轮审计）**：本节的"已跑通"指**函数与 schema 级**；
+> janitor 运行时（周期性执行者）当时**没接线**——`freeze_facts` 唯一调用方在
+> janitor.py 里，而 Janitor 类生产零引用（tests 33 处）。已于 2026-11-04 补上：
+> server 后台线程（`AIJI_JANITOR` 门，默认开，租约单实例）+ `aiji janitor`
+> 手动命令；生产首轮实测 dedup_merged=6 / links_capped=93（CLI 拷贝库与
+> 生产线程两条路径数字一致）。教训见 excluded #173。
+
 **结论先行：阶段 0 + P0（4 项）+ P1（4 项）+ P2 的四项主体全部落地；
 全量单测 464 条 0 失败**（原 454 条 + 新增 10 条 `tests/test_metabolism.py`）。
 两处**按实测数据打回的方案细节**（弃答门、RRF 默认值）见 §9.3。

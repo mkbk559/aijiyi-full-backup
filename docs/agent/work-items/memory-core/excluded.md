@@ -1345,3 +1345,30 @@ ruff --fix 后 import 被裁剪；第二段补 UploadOrchestrationTest 又用 `m
 `voice-engine/rvc/` 这类**内容模式**：目录本身不匹配，内容全被覆盖。
 `git ls-files voice-engine` = 0 个跟踪文件才是判定依据。
 **教训：判"会不会进库"看 ls-files / add -n，别只看 check-ignore 的目录名匹配。**
+
+## 172. Proactive 引擎建成但从未接线——接线是产品决策，不是缺陷修复（2026-11-04 第 28 轮）
+
+`endocrine/proactive.py` 的 `Proactive`（静默门/额度/退避/outbox 全套，12 条测试）
+从建成（含重构前检查点 ceb7752）起就**只有测试引用**，生产零实例化。
+Heart outbox 管线（heart/dispatch/memory `_heart_reply`）支持 kind="proactive"，
+但生产没有任何代码入队该类事件。field 日志里的 "proactive 发送失败" 来自
+AstrBot 侧（tools/proactive_audit_1h.py 解析的是那条链），与本引擎无关。
+
+**判定**：这不是死代码该删——它是"玛卡巴卡主动发消息"的完整架构（与账号自治
+路线契合）。但接线 = 宠物开始无提示打扰用户，是产品决策。已做：
+`tools/archcheck/unwired_engines.py` 让它机器可见；handler 崩溃计数
+（`stats["handler_failed"]`）+ 测试锁定，接线时直接可用。
+
+## 173. "已落"宣称必须带运行时证据——Janitor 没接线，冻结层在生产没跑过（2026-11-04 第 28 轮）
+
+borrow-plan §9 写"全部已跑通 ✅"，但 `Janitor`（代谢清理 Worker）生产零引用：
+`store.freeze_facts` 唯一调用方在 janitor.py 内部，而 Janitor 类只有测试在用。
+即：冻结层（P0-2）、turn 归档 90 天清除（P0-3）、去重合并、边封顶、WAL 截断
+——**函数/schema 都在，但没有任何循环在跑它们**。"跑通"的 464 条单测全部是
+直接调用函数，不是运行时链路。
+
+**修复（两条独立路径验证）**：(a) `aiji janitor` 手动命令，对生产库拷贝实扫
+dedup_merged=6 / links_capped=93；(b) server 后台线程（AIJI_JANITOR 门默认开、
+租约单实例），生产首轮日志数字与 CLI 完全一致。
+**教训：文档里每个"已落/已跑通"都要能回答"谁在什么循环里调它"——
+`unwired_engines.py` 每轮审计跑一次，别靠读文档。**

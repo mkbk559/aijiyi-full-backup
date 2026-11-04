@@ -206,6 +206,22 @@ class TestProactive(unittest.TestCase):
         self.assertEqual(p.tick([ident], now=t + 160), 0)
         self.assertEqual(p.stats["blocked_cooldown"], 1)
 
+    def test_handler_crash_counts_and_backs_off(self):
+        # 第 28 轮审计：handler 崩溃原本静默（text=None 与"没话说"不可区分）
+        def boom(i):
+            raise RuntimeError("handler 炸了")
+
+        db, h, p = self._mk("crash", silence_seconds=10, cooldown_seconds=1)
+        ident = Ident("qq", "u1")
+        t = 1_000_000.0
+        p.note_event(ident, now=t)
+        p.handler = boom
+        self.assertEqual(p.tick([ident], now=t + 20), 0)
+        self.assertEqual(p.stats["handler_failed"], 1)
+        self.assertEqual(p.stats["refunded"], 1, "崩溃要退还预扣额度")
+        # 崩溃当场不发送（tick=0 已断言），fired 保持 0
+        self.assertEqual(p.stats["fired"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

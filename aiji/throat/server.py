@@ -1568,6 +1568,45 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
         handler.sticker_loop = sticker_loop
         srv.sticker_loop = sticker_loop
         memory.sticker_loop = sticker_loop
+    # 代谢清理 Worker（borrow-plan 1.8 / P0-2、P0-3 的运行时）：冻结低置信陈事实、
+    # 去重合并、关联边封顶、归档 90 天清除、WAL 截断。租约保证多进程单实例。
+    # 默认开；AIJI_JANITOR=0 关（与 AIJI_LIFE_LOOP 同层语义）。
+    if os.environ.get("AIJI_JANITOR", "1").strip().lower() not in (
+        "0", "false", "off", "no",
+    ):
+        poll_seconds = max(
+            60.0, float(os.environ.get("AIJI_JANITOR_POLL", "900")))
+        first_delay_s = max(
+            10.0, float(os.environ.get("AIJI_JANITOR_FIRST_S", "60")))
+
+        def _janitor_loop() -> None:
+            import logging
+
+            from aiji.hippocampus.janitor import Janitor
+
+            log = logging.getLogger("aiji.janitor")
+            stop = threading.Event()
+            srv.janitor_stop = stop  # 供关闭路径（如有）使用
+            if not stop.wait(first_delay_s):
+                try:
+                    summary = Janitor(memory.db).run()
+                    log.info("janitor 首轮：%s", summary)
+                except Exception:  # noqa: BLE001 - 维护线程不许带崩服务
+                    log.exception("janitor 首轮失败")
+            while not stop.wait(poll_seconds):
+                try:
+                    summary = Janitor(memory.db).run()
+                    if summary.get("skipped"):
+                        continue
+                    log.info("janitor：%s", summary)
+                except Exception:  # noqa: BLE001
+                    log.exception("janitor 轮失败")
+
+        janitor_thread = threading.Thread(
+            target=_janitor_loop, name="aiji-janitor", daemon=True)
+        janitor_thread.start()
+        srv.janitor_thread = janitor_thread
+        memory.janitor_thread = janitor_thread
     mcp_config = Path(os.environ.get(
         "AIJI_MCP_CONFIG",
         ROOT / "config" / "mcp_servers.json",

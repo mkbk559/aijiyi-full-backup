@@ -40,7 +40,7 @@ class Proactive:
         self.cooldown = cooldown_seconds
         self.stats = {"fired": 0, "refunded": 0, "blocked_quota": 0,
                       "blocked_silence": 0, "blocked_cooldown": 0, "preempted": 0,
-                      "enqueue_failed": 0}
+                      "enqueue_failed": 0, "handler_failed": 0}
 
     # ---- heart_state 键 ----
     # last_event_ts   persistent：该 scope 最后一次任意事件（判断静默）
@@ -137,7 +137,12 @@ class Proactive:
             try:
                 text = self.handler(ident)
             except Exception:
+                # handler 崩溃不能和"没话说"混在一起：排查黑洞（第 28 轮审计）
                 text = None
+                self.stats["handler_failed"] += 1
+                import traceback
+                print("[proactive] handler 失败:", traceback.format_exc(limit=2),
+                      flush=True)
             gate = check_reply(fit_reply(text, reply_char_limit(ident.platform))) if text else None
             if not text or gate is None or not gate.ok:
                 self._quota_refund(ident, old_window)  # 拦截/放弃 → 退还

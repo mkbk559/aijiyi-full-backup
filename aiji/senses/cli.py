@@ -483,6 +483,23 @@ def cmd_archive(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_janitor(args: argparse.Namespace) -> int:
+    """手动跑一轮代谢清理（冻结/去重/边封顶/归档清除/WAL 截断）。
+
+    服务端后台线程跑的是同一套（AIJI_JANITOR 门）；这个命令用于
+    运维验证与证据采集——输出 run() 的统计 dict。
+    """
+    from aiji.hippocampus.janitor import Janitor
+    m = _memory(args)
+    try:
+        j = Janitor(m.db)
+        summary = j.run()
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    finally:
+        m.close()
+    return 0
+
+
 def cmd_self_memory(args: argparse.Namespace) -> int:
     """自我记忆（她自己的事）：不带参数=列出；带 --add=写一条。"""
     m = _memory(args)
@@ -718,6 +735,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--limit", type=int, default=50)
     _add_identity(sp)
     sp.set_defaults(func=cmd_archive)
+
+    sp = sub.add_parser("janitor", help="手动跑一轮代谢清理（输出统计）")
+    sp.set_defaults(func=cmd_janitor)
 
     sp = sub.add_parser("self-memory", help="自我记忆：列表 / --add 写一条")
     sp.add_argument("--add", default="")
