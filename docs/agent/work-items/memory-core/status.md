@@ -132,3 +132,14 @@ route_smoke 59 条 bad=0；模型池降级但 agent2api 存活（真机 completi
 1. QQ 重扫码（进行中，QR 轮询挂后台）
 2. B 站投稿真传（等真素材）
 3. 真实拍摄/录音质量未验；公网免费模型池需出网机
+
+## 2026-11-04 晚间续：主动消息上线 + 模型池可用性根治
+
+- 主动引擎首发实测 fired=2（用户 sent / 1761395614 403 dead）→ 随即修两个洞：
+  degraded 兜底话不投递（server.py handler 查 res.degraded）、send_fatal scope 冷却 7 天（commit 09cac3b）。
+- 用户反馈"还是一样的"→ 真根因 excluded #180：死 Clash 代理拖垮 4 条公网路由 +
+  attempts_per_route=1 让独活路由 22% 空回复率直接变兜底话。
+  修法 commit fe55f23：cli.py 代理自愈 + 每路由重试 3。重启实测 zhipu-flash 11/11、
+  真回复"嘿，玛卡巴卡在这呢！"。
+- 遗留：workbuddy 网关进程没起（8788 拒连，Electron 应用未开）——池子里它只在
+  应用运行时可用，不影响其他路由。下次主动消息验证：schedule-777bce46（23:50 检查）。
