@@ -1697,9 +1697,13 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
                     log.exception("proactive 首轮失败")
             while not stop.wait(poll_seconds):
                 try:
+                    before = dict(proactor.stats)
                     fired = proactor.tick(_proactive_idents())
-                    if fired:
-                        log.info("proactive fired=%s stats=%s", fired, proactor.stats)
+                    delta = {k: proactor.stats[k] - v
+                             for k, v in before.items() if proactor.stats[k] != v}
+                    # 每轮必记：否则"为什么一直不发"只能靠猜（2026-11-04 深夜排查教训）
+                    log.info("proactive tick fired=%s delta=%s stats=%s",
+                             fired, delta or "{}", proactor.stats)
                 except Exception:  # noqa: BLE001
                     log.exception("proactive 轮失败")
 
