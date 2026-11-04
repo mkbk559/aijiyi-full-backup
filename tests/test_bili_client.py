@@ -247,6 +247,10 @@ class RestyleTest(unittest.TestCase):
                 return False
 
         def fake_urlopen(req, timeout=None):
+            # 锁定隔离声明：改写必须独立 session + 不进记忆（excluded #175）
+            payload = json.loads(bytes(req.data).decode("utf-8"))
+            assert payload.get("session") == "restyle", payload.get("session")
+            assert payload.get("aiji", {}).get("remember") is False
             return Resp({"choices": [{"message": {"content": '"哇好好看呀"'}}]})
 
         with mock.patch.object(bc.urllib.request, "urlopen", fake_urlopen):

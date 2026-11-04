@@ -100,3 +100,35 @@ excluded #150–#174；真险情两起被巡检网住（#168 测试真发路径�
 3. `data/voices/makabaka` 786MB 取舍；
 4. 真实拍摄/录音质量未验（当前只在合成样本上验过）；
 5. 公网免费模型池验证（需出网机器，项目档案遗留项）。
+
+## 2026-11-04 用户会话（B 站真机 + Proactive 接线 + 资产清理）
+
+用户三条指令：B 站登录验证、让玛卡巴卡主动发消息、删 voices/makabaka（786MB 没用就删）。
+
+**B 站真机全链路（QR 登录，Edge cookie 三条提取路全灭见 excluded #175）**：
+- 登录：QR API 实测，`data/bili_cookies.jar`（isLogin=true, mid 1402977803, Lv2）
+- 评论真发：BV1GJ411x7h7《Never Gonna Give You Up》rpid 322895379680，
+  legacy replies API 双验（count 239803，first/latest 命中）
+- restyle 隔离修复 + 真机复验（excluded #176）：同输入 → 玛卡巴卡口吻
+- 投稿真传：**主动押后**（公网视频发合成内容，留待真素材；边界已记录）
+
+**Proactive 引擎上线（用户拍板"玛卡巴卡开始主动发消息"）**：
+- server.py 接线 `aiji-proactive` 线程：onebot_api 配置门 + AIJI_PROACTIVE=0 关；
+  静默 30min/额度 24h×3/退避 ×2^n；ident = 近 14 天非 CLI 非群 scope
+- note_event 钩子进 _chat_completion（机器会话 restyle/proactive 不重置静默）
+- 投递链 Heart→OneBot 需要 NapCat httpServers:3000 → 排障三层（excluded #177），
+  QQ 登录态丢失需用户重扫 QR（唯一人工序，等待中）
+
+**资产清理（用户拍板）**：
+- `data/voices/makabaka` 787MB 已删（610MB 训练中间产物 + 166MB RVC 权重，
+  CPU RTF≈1.6-2.1 运行时常态跳过 → 实际无用）；active_voice.txt → edge-default；
+  实测 GET /v1/voices 200，edge-default ready=True
+- 计划任务 "AIJiYi CookieExport" 已删；.tmp/edge_profile junction 确认已自清
+
+**验证**：受影响测试面 106 条（1 挂 = hermetic 集合声明，已修）；hermetic+wiring 6/6；
+route_smoke 59 条 bad=0；模型池降级但 agent2api 存活（真机 completion "在的"）。
+
+**剩余边界（只有用户能解）**：
+1. QQ 重扫码（进行中，QR 轮询挂后台）
+2. B 站投稿真传（等真素材）
+3. 真实拍摄/录音质量未验；公网免费模型池需出网机

@@ -27,3 +27,9 @@ logs/
 
 # 测试里 tempfile.TemporaryDirectory() 在本机删不掉时会在这里留 tmpXXXXXX/（见 excluded #88）
 tmp*/
+
+# 运行时配置（含 OneBot token 等密钥，不进仓库；config/aiji.example.json 是无害示例）
+config/runtime.json
+
+# Vision Router 会话产物（截图/二维码等，会话态不入库）
+.dsh-vision-router/

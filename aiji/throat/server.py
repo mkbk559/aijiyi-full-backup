@@ -1367,6 +1367,16 @@ class _Handler(BaseHTTPRequestHandler):
                           "type": "service_unavailable", "code": "model_unavailable"},
             })
 
+        # 任何真实对话（哪怕 remember=False）都算"TA 说过话"：重置主动沉默计时。
+        # 静默基准是"用户最后一句话"，不是"记得住的那句话"（Proactive 接线 2026-11-04）。
+        # 机器会话（改写/主动生成）不算人说话——否则刚发过主动的 scope 永不静默。
+        proactor = getattr(self.memory, "proactive", None)
+        if proactor is not None and not str(session).startswith(("restyle", "proactive")):
+            try:
+                proactor.note_event(ident)
+            except Exception:  # noqa: BLE001 - 钩子坏了不阻塞对话
+                pass
+
         if body.get("stream"):
             return self._stream_chat(reply, body)
 
@@ -1607,6 +1617,76 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
         janitor_thread.start()
         srv.janitor_thread = janitor_thread
         memory.janitor_thread = janitor_thread
+    # Proactive engine 接线（用户 2026-11-04 拍板：让玛卡巴卡主动开口）。
+    # 只在 onebot_api 已配置时才启动——没有可投递通道的主动消息只会空烧额度。
+    # 默认开；AIJI_PROACTIVE=0 关（与 AIJI_LIFE_LOOP 同层语义）。
+    if (bool(getattr(memory.settings, "onebot_api", ""))
+            and os.environ.get("AIJI_PROACTIVE", "1").strip().lower() not in (
+                "0", "false", "off", "no")):
+        from aiji.brain.head import Head
+        from aiji.endocrine.proactive import Proactive
+
+        poll_seconds = max(30.0, float(os.environ.get("AIJI_PROACTIVE_POLL", "300")))
+        first_delay_s = max(10.0, float(os.environ.get("AIJI_PROACTIVE_FIRST_S", "120")))
+
+        def _proactive_handler(ident):
+            # 让玛卡巴卡自己生成"想主动说的一句话"；NOOP = 没话说（引擎走退避）
+            res = Head(memory).reply(
+                [{"role": "user", "content":
+                  "你已经有一会儿没有收到TA的消息了。如果现在你有想主动对TA说的话，"
+                  "直接说出来（一两句短的就好）；没有想说的话，就只回复 NOOP。"}],
+                ident, session="proactive", remember=False, debounce=False,
+                enable_tools=False)
+            text = str(getattr(res, "text", "") or "").strip()
+            if not text or text.upper().startswith("NOOP"):
+                return None
+            return text
+
+        def _proactive_idents():
+            # 近 14 天有真实对话的 scope（群不算——往群里主动发消息是骚扰）。
+            # platform=cli 是本地工具不算联系人。
+            cutoff = time.time() - 14 * 86400.0
+            try:
+                rows = memory.db.conn().execute(
+                    "SELECT DISTINCT platform, platform_user_id, scope FROM turn "
+                    "WHERE ts >= ? AND platform != 'cli' "
+                    "AND scope NOT LIKE 'group:%' ORDER BY id DESC LIMIT 8",
+                    (cutoff,)).fetchall()
+            except Exception:  # noqa: BLE001 - 维护线程不许带崩服务
+                return []
+            return [Ident(platform=str(r[0]), platform_user_id=str(r[1]),
+                          scope=str(r[2] or "default")) for r in rows]
+
+        proactor = Proactive(memory.heart, _proactive_handler)
+        memory.proactive = proactor
+
+        def _proactive_loop() -> None:
+            import logging
+
+            log = logging.getLogger("aiji.proactive")
+            stop = threading.Event()
+            srv.proactive_stop = stop
+            if not stop.wait(first_delay_s):
+                try:
+                    fired = proactor.tick(_proactive_idents())
+                    if fired:
+                        log.info("proactive 首轮 fired=%s stats=%s",
+                                 fired, proactor.stats)
+                except Exception:  # noqa: BLE001
+                    log.exception("proactive 首轮失败")
+            while not stop.wait(poll_seconds):
+                try:
+                    fired = proactor.tick(_proactive_idents())
+                    if fired:
+                        log.info("proactive fired=%s stats=%s", fired, proactor.stats)
+                except Exception:  # noqa: BLE001
+                    log.exception("proactive 轮失败")
+
+        proactive_thread = threading.Thread(
+            target=_proactive_loop, name="aiji-proactive", daemon=True)
+        proactive_thread.start()
+        srv.proactive_thread = proactive_thread
+        memory.proactive_thread = proactive_thread
     mcp_config = Path(os.environ.get(
         "AIJI_MCP_CONFIG",
         ROOT / "config" / "mcp_servers.json",

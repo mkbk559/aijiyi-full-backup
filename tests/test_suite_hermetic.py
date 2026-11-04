@@ -30,7 +30,8 @@ class HermeticDefaultsTest(unittest.TestCase):
     def test_defaults_are_declared_and_applied(self):
         self.assertEqual(
             set(tests_pkg.HERMETIC_DEFAULTS),
-            {"AIJI_LIFE_LOOP", "AIJI_MCP_RESEARCH_LOOP", "AIJI_STICKER_UPDATE"},
+            {"AIJI_LIFE_LOOP", "AIJI_MCP_RESEARCH_LOOP", "AIJI_STICKER_UPDATE",
+             "AIJI_JANITOR", "AIJI_PROACTIVE"},
         )
         for key, value in tests_pkg.HERMETIC_DEFAULTS.items():
             self.assertEqual(os.environ.get(key), value,

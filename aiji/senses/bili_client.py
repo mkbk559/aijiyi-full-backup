@@ -452,8 +452,15 @@ def restyle_comment(text: str, pool=None, *,
             raw = ""
     else:
         try:
-            body = json.dumps({"model": "default", "messages": messages,
-                               "max_tokens": 200}, ensure_ascii=False).encode("utf-8")
+            # 2026-11-04 修正：必须声明独立 session + 关闭记忆/工具——
+            # _chat_completion 默认 remember=True 且 session=default，
+            # 改写请求会被注入会话上下文（实测改出"刚才没接上，等我一下"
+            # 这种接聊天的话而不是改写），还把改写任务写进 turn 表污染记忆。
+            body = json.dumps({
+                "model": "default", "messages": messages,
+                "max_tokens": 200, "session": "restyle",
+                "aiji": {"remember": False, "tools": False},
+            }, ensure_ascii=False).encode("utf-8")
             req = urllib.request.Request(
                 f"{endpoint.rstrip('/')}/v1/chat/completions", data=body,
                 headers={"Content-Type": "application/json"})

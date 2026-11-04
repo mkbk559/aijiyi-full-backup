@@ -71,6 +71,10 @@ if (-not $napcat -and (Test-Path -LiteralPath $napcatExe)) {
     $env:NAPCAT_INJECT_PATH = Join-Path $napcatRoot 'NapCatWinBootHook.dll'
     $env:NAPCAT_LAUNCHER_PATH = $napcatExe
     $env:NAPCAT_MAIN_PATH = Join-Path $napcatRoot 'napcat.mjs'
+    # WebUI JWT 签名密钥：默认是进程随机值，重启即换，WebUI API 无法从外部自动化；
+    # 固定下来后（仅本机 127.0.0.1），AIJiYi 可经 WebUI API 改 OneBot 网络配置。
+    # （2026-11-04：OneBot HTTP 服务器 3000 就是靠这把钥匙热开出来的。）
+    $env:NAPCAT_WEBUI_JWT_SECRET_KEY = 'aiji-webui-hmac-key-2026'
     Start-Process -FilePath $napcatExe `
         -ArgumentList 'D:\QQNT\QQ.exe', (Join-Path $napcatRoot 'NapCatWinBootHook.dll') `
         -WorkingDirectory $napcatRoot -WindowStyle Hidden

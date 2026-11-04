@@ -1388,3 +1388,53 @@ route_smoke 的规则是"坏输入不许 2xx、一律不许 5xx"。第一次全�
 DESIGNED_503 按"路径+错误词"对齐——错误词对不上的 5xx 照样打回。
 校准后 59 条路由 bad=0。**教训：探针报忧要先证明忧是真的；证明不了就把
 设计预期编码进探针，别让假阳训练人忽略它。**
+
+## 175. Edge 156 cookie 三条提取路全部死路——QR 登录才是正解（2026-11-04 用户会话实测）
+
+假设"用户在 Edge 登录 B 站后，把 cookie 弄出来就能给 `aiji` 用"。三条路全被
+Edge 156 的 App-Bound Encryption（ABE）堵死：
+1. **直接读 Cookies DB**：Edge 运行时独占锁（WinError 32）；关掉 Edge 再读，
+   DPAPI 解密失败（"Failed to decrypt with DPAPI" #10927）——ABE 把密钥绑在
+   Edge 的 app-bound 服务上，即使用户级计划任务（非沙箱）也解不开。
+2. **CDP（--remote-debugging-port）**：必须显式 `--user-data-dir`（默认目录拒绝
+   开调试端口）；用 junction（mklink /J）骗过了端口限制，但 ABE 把 cookie 解密
+   绑定在**解析后的真实路径**上，junction 目录里 cookie=0。
+3. **计划任务以用户身份导出**：同样 DPAPI 失败——不是沙箱问题，是 ABE 设计如此。
+
+**正解**：B 站 QR 登录 API（`/x/passport-login/web/qrcode/generate` + poll），
+外层 code=0 只是信封，真实状态在 `data.code`（86101 未扫/86090 已扫/86038 过期
+/0 确认）；成功返回的是 crossDomain **ticket URL**，不是 SESSDATA 参数——用
+CookieJar GET 一次才落 cookie（第一次 ticket 被失败解析白白消耗，扫了两次码）。
+`data/bili_cookies.jar` 792B 实测 `is_login=true`（mid 1402977803）。
+遗留：计划任务 "AIJiYi CookieExport"（本次已删）+ `.tmp/edge_profile` junction
+（脚本的 finally 已自清）。
+
+## 176. restyle 走 /v1/chat/completions 不声明 session 会被记忆注入污染（2026-11-04 实测）
+
+`restyle_comment` 走服务 HTTP 路线时，`_chat_completion` 默认
+`remember=True, session="default"`：改写请求被注入当前聊天上下文 + 写进 turn 表。
+实测输入"改写这条评论：这个视频的剪辑手法非常专业…"，输出"刚才没接上，等我一下。"
+——模型在接聊天，不是在改写；且污染了记忆。
+**修法**：body 显式 `"session": "restyle", "aiji": {"remember": false, "tools": false}`
+（endpoint 断言进 test_bili_client）。修后实测同输入 →
+"剪得好顺呀，我看得好舒服，一点都不乱啦！"（归档 112257/本轮 raw_run）。
+
+## 177. NapCat OneBot HTTP server 开不出来，三层原因层层嵌套（2026-11-04 一下午）
+
+假设"改 onebot11_<uin>.json 加 httpServers，重启就好"。实测三层：
+1. **QQ 根本没登录**：OneBot 网络（含 httpServers）只在 QQ 登录成功后初始化。
+   重启后 QQ 卡 `waiting_qrcode`，所有端口排查都是无效功。诊断入口：
+   WebUI API `POST /api/auth/login {hash: sha256(token+".napcat")}` 拿 Credential →
+   `POST /api/QQLogin/CheckLoginStatus` 看 `isLogin/loginPhase`（这比翻日志快，
+   NapCat 的 fileLog 默认关，logs/ 里只有 1 字节的特性标记文件）。
+2. **重启即双开**：netstat 把 TIME_WAIT 也当"端口在"→ 脚本没等到真停就拉起
+   → 两个 NapCatWinBootMain + 16 个 QQ。port_open 必须只认 LISTENING 行，
+   且启动前 tasklist 双确认。watchdog（ensure_console）每 5 分钟跑，它会在
+   你等的窗口里替你拉起第二个实例——**要么改 watchdog，要么别自己拉**。
+3. **GetConfig 404**：WebUI 路由 `Fn.use("/OB11Config", Jf)` 全是 **POST**
+   （GET 一律 404 "Cannot GET"）；登录 body 字段名是 `hash` 不是 `token`。
+
+修复落点：`ensure_console.ps1` 加 `NAPCAT_WEBUI_JWT_SECRET_KEY`（固定密钥，
+WebUI API 可自动化）+ port 检查只认 LISTENING；QQ 登录态靠用户扫 QR（唯一人工序）。
+**教训：外部进程的行为先问"它自己认为自己在什么状态"（WebUI API 有状态端点），
+别从端口反推状态。**

@@ -18,6 +18,8 @@ HERMETIC_DEFAULTS = {
     "AIJI_LIFE_LOOP": "0",
     "AIJI_MCP_RESEARCH_LOOP": "0",
     "AIJI_STICKER_UPDATE": "0",
+    "AIJI_JANITOR": "0",
+    "AIJI_PROACTIVE": "0",
 }
 
 for _key, _value in HERMETIC_DEFAULTS.items():
