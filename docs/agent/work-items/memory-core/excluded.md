@@ -1460,3 +1460,22 @@ Proactive 首发实测：`fired=2`，其中给用户的 `刚才没接上，等�
 让今天拍板的"开始主动发消息"立即生效；之后的 note_event 由钩子自然维护。
 另外：引擎 fire 成功后会自调 `note_event`（L171）——主动消息本身重置静默计时，
 加上 cooldown ×2^n 退避，天然防止连环主动。
+
+## 180. 死代理拖垮全部公网模型路由——"玛卡巴卡老回兜底话"的真正根因（2026-11-04）
+
+用户反馈"还是一样的"：私聊两次（21:08"怎么样"、22:17"晚上好"）都收到
+"刚才没接上，等我一下。"（Head FALLBACK）。排查：
+- 池子 6 路由只有 agent2api 活（123/157，且空回复率高）；workbuddy 网关**进程没起**
+  （127.0.0.1:8788 拒绝连接，D:\WorkBuddy 是 Electron 应用，hub 只在应用运行时在）。
+- 用户环境变量**四级代理全指向死掉的 Clash(7897)**（HTTP/HTTPS/大小写各一对），
+  urllib 会把所有非 localhost 请求交给拒绝连接的端口 → 4 条公网路由全灭。
+  **清掉代理直连后 open.bigmodel.cn / openrouter.ai / pollinations / siliconflow 全部可达**。
+- Pool 每 route 只试 1 次（attempts_per_route=1）：独活路由 22% 的空回复率
+  直接变成"整条请求 PoolExhausted → 兜底话"。
+
+**修法**：(1) cli.py `_heal_dead_proxy()`：serve 前探代理端口，拒绝就清本进程四件套
+（Clash 活着时尊重）；(2) memory.py ModelPool(attempts_per_route=3)；
+(3) 测试 test_pool_retries_each_route 锁定接线。
+**效果（重启后 2 分钟实测）**：zhipu-flash 11/11 全胜，真实回复
+"嘿，玛卡巴卡在这呢！"（archive 230157-routes-healthy 后续 raw_run）。
+**教训：环境级故障（死代理）会伪装成"模型全灭/服务降级"；先分清直连还是走代理。**

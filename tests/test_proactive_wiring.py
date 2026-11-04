@@ -94,6 +94,13 @@ class ProactiveWiringTest(unittest.TestCase):
         memory, _ = self._boot(onebot_api="", env={"AIJI_PROACTIVE": "1"})
         self.assertFalse(hasattr(memory, "proactive"))
 
+    def test_pool_retries_each_route(self):
+        """独活路由（agent2api）的瞬时失败/空回复必须重试，否则整条请求掉进
+        兜底话「刚才没接上，等我一下。」（2026-11-04 用户实测反馈）。
+        这里必须用真 Memory（_boot 会把 pool 换成 _FakePool，测不到接线）。"""
+        memory = _memory(self)
+        self.assertGreaterEqual(memory.pool.attempts_per_route, 3)
+
     def test_degraded_handler_output_never_becomes_proactive_message(self):
         """池子全灭时 Head 兜底"刚才没接上，等我一下。"（degraded=True）。
         主动消息绝不允许把这种占位话发给真人（2026-11-04 实测发出去过一条）。

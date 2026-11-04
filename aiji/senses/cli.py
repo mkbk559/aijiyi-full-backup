@@ -235,10 +235,43 @@ def cmd_bili_upload(args: argparse.Namespace) -> int:
     return 0
 
 
+def _heal_dead_proxy() -> None:
+    """本机常年挂着 Clash 一类代理（HTTP(S)_PROXY=127.0.0.1:7897）。
+
+    代理进程死了但环境变量还挂着时，urllib 会把**所有**非 localhost 请求交给一个
+    拒绝连接的端口——模型池的公网路由（zhipu/siliconflow/openrouter/pollinations）
+    全灭，只剩本机两个反代，表现就是"玛卡巴卡老回兜底话"（2026-11-04 实测）。
+    启动时探一次代理端口：拒绝就清掉本进程四件套（子进程也干净）；活着就尊重。
+    """
+    raw = (os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") or "").strip()
+    if not raw:
+        return
+    import socket
+    import urllib.parse
+
+    url = raw if "://" in raw else f"http://{raw}"
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or 7897
+    except ValueError:
+        return
+    try:
+        with socket.create_connection((host, port), timeout=0.8):
+            return  # 代理活着：尊重用户环境
+    except OSError:
+        pass
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        os.environ.pop(key, None)
+    print(f"proxy {raw} unreachable; cleared HTTP(S)_PROXY for this process",
+          file=sys.stderr)
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     from aiji.endocrine.presence import PresenceServer
     from aiji.throat.server import serve
 
+    _heal_dead_proxy()
     m = _memory(args)
     presence = None
     try:

@@ -103,7 +103,10 @@ class Memory:
             index=index,
             rank_mode=getattr(settings, "rank_mode", "weighted"),
         )
-        self.pool = ModelPool(settings.routes)
+        # attempts_per_route=3：独活路由（agent2api ~78% 成功率）对空回复/瞬时失败
+        # 重试下去才不致整条请求掉进兜底话——用户的体验是"老回'刚才没接上'"
+        # （2026-11-04 实测 agent2api 123/157；空回复是 retryable）
+        self.pool = ModelPool(settings.routes, attempts_per_route=3)
         if getattr(self, "_hybrid", None) is not None and self.pool._states:
             # Attach semantic chat before rebuilding so existing facts get LLM dims.
             self._hybrid._chat = self._hybrid_chat
