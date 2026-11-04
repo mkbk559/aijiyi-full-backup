@@ -129,6 +129,9 @@ $runtimeConfig = Join-Path $projectRoot 'config\runtime.json'
 $launchArgs = @('-m', 'aiji.senses.cli')
 if (Test-Path -LiteralPath $runtimeConfig) { $launchArgs += @('--config', $runtimeConfig) }
 $launchArgs += 'serve'
+# 服务端 Proactive 引擎关闭（2026-11-05）：aiji_memory 插件里已有一套更成熟的
+# 主动搭话（静默 2h + 冷却 6h + 语音/表情包），两边同开会双重打扰。详见 excluded #181。
+$env:AIJI_PROACTIVE = '0'
 Rotate-Log (Join-Path $dataDir 'console.out.log')
 Rotate-Log (Join-Path $dataDir 'console.err.log')
 Start-Process -FilePath $pythonExe `
