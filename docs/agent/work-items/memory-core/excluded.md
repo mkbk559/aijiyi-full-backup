@@ -1233,3 +1233,38 @@ A/B 实测（`.tmp/ab_finish_body.py`，证据归档 224221-ab-finish-body-rst�
 （`AIJI_CONSOLE_SHELL` 放行控制台终端 + `AIJI_UNSAFE_SHELL` 允许任意命令），
 两者都是请求时读环境变量。补上第二个开关后 **81/81**。
 **教训**：探针/用例报红先分清"产品回归"还是"探针过期"；开关语义变过的地方最容易演变成假失败。
+
+## 161. yt-dlp 默认读 Windows 系统代理，不是环境变量（2026-11-04 第 24 轮）
+
+本机 Clash（7897）常年是死代理，`HTTP_PROXY=` 清空环境变量后 yt-dlp **仍然**连 7897
+——它读的是 Windows 系统代理设置。唯一可靠的办法是显式 `--proxy ""` 强制直连。
+探针归档 `…\083635-video-net-probe-34e6a7`。判定网络问题先分清三层：
+环境变量代理 / 系统代理 / 直连。
+
+## 162. 视频学习：模型抽取判"空"不等于"没学到"（知识兜底）
+
+视频元数据是第三方知识，模型抽取（agent2api 实测）返回空 facts 是**正确判断**
+（不是用户事实），但学过的内容因此完全不进可召回结构——`writer._handle_ingest`
+现在对带 `video_info` 的 ingest 额外落一条 `kind=knowledge` fact。
+诊断归档 `…\085334-diag-auto-1c34e1`（`model_ok=1, heuristic=0` 但 fact=0）。
+
+## 163. Windows 杀进程树很慢，测试的超时预算要给足
+
+`subprocess.run(timeout=1)` 杀 PowerShell 全家（父+子进程）在套件并行时能吃掉
+>10s；单跑能过的用例在套件里 error。修法：客户端 urlopen timeout 10→30s、
+用 `ping -n 5`（小进程树）代替 `powershell Start-Sleep`。断言不变。
+
+## 164. writer.stop() 的旧实现丢数据有两层，第一层修完才看见第二层（2026-11-04 第 24 轮）
+
+v58 套件里 `test_cli.test_remember_then_recall` 间歇性失败（3 次挂 1 次）。
+- **第一层（直觉修法）**：flush 超时后队列里剩的 job 没人管——加了"关停时离线
+  兜底消费队列"。修完单测发现**没修好**。
+- **第二层（真根因）**：`settings.workers` 默认 >1，两个 job 早被 worker 从队列里
+  取走了，卡在 `pool.chat` 的长 sleep 里；stop 的 `join(timeout=2)` 到点就走，
+  CLI 进程退出硬杀 daemon worker——**正在处理的 job 直接消失**。
+  证据归档 `…\093141-debug-dead-pool-5e57a4`（depth=0 但 pending=2，facts=[]）。
+- 修法：`_inflight`（seq→Job）登记在飞任务；stop 等不到 pending 归零时对在飞 job
+  离线兜底落库。幂等性靠 `add_fact` 的 merge 语义（同值再说一遍只 mentions+1），
+  worker 稍后醒来重复写不会出重复行。
+- **教训**：并发丢数据的复现测试要同时覆盖"队列里没轮到"和"worker 手里没跑完"
+  两种状态；第一直觉修的往往是看得见的那层。

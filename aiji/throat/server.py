@@ -362,17 +362,20 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _send_bytes(self, data: bytes, content_type: str, *, cache: int = 0) -> None:
+    def _send_bytes(self, data: bytes, content_type: str) -> None:
+        """按字节返回（音频 / 工作区原文件）。
+
+        一律 `no-store`：这些都是本地随时会变的东西（重新合成的语音、
+        工作区里刚改过的文件），让浏览器缓存住只会让人看到旧内容。
+        以前还有一个 `cache=` 参数和一个 `_send_asset` 帮手，两个都没有调用方
+        ——2026-11-04 删掉（死代码，见 excluded #161）。
+        """
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control",
-                         f"public, max-age={cache}" if cache else "no-store")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
-
-    def _send_asset(self, path: Path, content_type: str) -> None:
-        self._send_bytes(path.read_bytes(), content_type, cache=86400)
 
     @staticmethod
     def _audio_error(exc: Exception) -> tuple[int, dict[str, Any]]:

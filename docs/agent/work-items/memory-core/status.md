@@ -933,3 +933,20 @@ WS 服务端把"连上就断"记成握手失败。改法：先读 netstat（无�
 - `set_extra_tics` 遇 `null` 会 AttributeError（配置可触发，在 Memory 初始化路径上）。
 - 覆盖：`extract.py` 88% → **99%**（51 条），`real_engines.py` 88% → **100%**（25 条）。
 - 数字：全量 **v55 1266 ok / 0 / 0**，整包 **94%**（10024 / 639），外网请求 0。
+
+## 第 24 轮（2026-11-04 上午）：看视频学习（B 站/抖音）
+
+- 新能力：`aiji learn-video <url>`——yt-dlp 元数据 → 同一条记忆抽取管线 + knowledge
+  兜底；e2e 真视频学→召回 14ms 命中（score 0.81）。
+- 边界探明并落地：B 站必须 `--proxy ""`（yt-dlp 读系统代理，excluded #161）；
+  抖音要 `--cookies-from-browser`；MV 只有弹幕无 CC；画面理解不存在（无本地视觉引擎）。
+- 真缺陷：模型对视频文本判空 facts → 学过的内容不可召回（excluded #162），已加知识兜底。
+- 顺带：v57 里我自己新加的 shell 超时用例 error（Windows 杀进程树慢，excluded #163）已修。
+- 离线单测 `tests/test_video_ingest.py` 21 条全绿；`tests/test_http_plumbing.py` 34 条
+  （server.py 84%→87%，删死代码 `_send_asset`）。
+
+## 第 24 轮补记：writer.stop() 关停丢数据（真缺陷）
+
+- v58 的 1 个 error 牵出两层丢数据路径（excluded #164），`_inflight` + 两层离线
+  兜底修复；`tests/test_writer_stop_no_drop.py` 3 条回归；CLI 用例 4/4 稳定。
+- 这也解释了"为什么 CLI 偶发 recall 空"：不是召回坏了，是**当初就没写进去**。

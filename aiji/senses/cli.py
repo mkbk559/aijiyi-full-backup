@@ -16,6 +16,12 @@ from aiji.hippocampus.memory import Memory
 from aiji.brain.quota import sends_last_24h
 from aiji.hippocampus.store import Ident
 from aiji.skeleton.paths import BENCH
+from aiji.senses.video_ingest import (
+    VideoIngestError,
+    build_learn_text,
+    fetch_video_info,
+    learning_plan,
+)
 
 
 def _memory(args: argparse.Namespace) -> Memory:
@@ -34,6 +40,41 @@ def _add_identity(p: argparse.ArgumentParser) -> None:
     p.add_argument("--platform", default=None, help="平台，如 wechat / douyin / cli（默认 local）")
     p.add_argument("--user", dest="user", default=None, help="平台内用户 id（默认 default）")
     p.add_argument("--scope", default=None, help="记忆域，如 personal / work（默认 default）")
+
+
+def cmd_learn_video(args: argparse.Namespace) -> int:
+    """看视频学习：抓元数据（+字幕计划）→ 走同一条记忆抽取管线。"""
+    m = _memory(args)
+    try:
+        try:
+            info = fetch_video_info(
+                " ".join(args.url),
+                timeout_s=args.timeout,
+                cookies_from_browser=args.cookies_from_browser,
+            )
+        except VideoIngestError as exc:
+            print(json.dumps({"ok": False, "code": exc.code, "error": str(exc)},
+                             ensure_ascii=False), file=sys.stderr)
+            return 2
+        plan = learning_plan(info)
+        text = build_learn_text(info)
+        extra = {
+            "video_info": info.to_dict(),
+            "plan_mode": plan["mode"],
+        }
+        ident = _ident(args)
+        m.ingest(ident, kind="video", ref=info.video_id or info.webpage_url,
+                 text=text, url=info.webpage_url, session=args.session, extra=extra)
+        ok = m.flush(args.flush_timeout)
+        print(json.dumps({
+            "ok": True, "flushed": ok,
+            "video": info.to_dict(),
+            "plan": plan,
+            "text_chars": len(text),
+        }, ensure_ascii=False, indent=2))
+        return 0
+    finally:
+        m.close()
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -413,6 +454,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--extra", default=None)
     _add_identity(sp)
     sp.set_defaults(func=cmd_ingest)
+
+    sp = sub.add_parser("learn-video", help="看视频学习：抓 B 站/抖音等视频的元数据与字幕，走同一条记忆管线")
+    sp.add_argument("url", nargs="+", help="视频链接（B 站 BV/av/合集单集、抖音分享链接）")
+    sp.add_argument("--timeout", type=float, default=60.0, help="yt-dlp 拉取超时（秒）")
+    sp.add_argument("--cookies-from-browser", default="",
+                    help="需要登录态的站点从浏览器拿 cookie：edge / chrome / firefox")
+    sp.add_argument("--session", default="default")
+    sp.add_argument("--flush-timeout", type=float, default=20.0)
+    _add_identity(sp)
+    sp.set_defaults(func=cmd_learn_video)
 
     sp = sub.add_parser("inject", help="生成给主模型的软引导块（不生成回复）")
     sp.add_argument("query", nargs="+")

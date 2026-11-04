@@ -271,7 +271,26 @@ class Recognizers:
                         meta={"url": url, "title": title})
 
     def _video(self, item: Item) -> Envelope:
-        # 只存元数据，不做理解。text 留空 => 不进抽取管线。
+        # 调用方（senses.video_ingest）已经用 yt-dlp 提好了结构化信息：
+        # 标题/UP主/简介/标签合成文本 → 走**同一条**抽取管线（和聊天文字一样）。
+        raw_info = item.extra.get("video_info")
+        if isinstance(raw_info, dict) and raw_info.get("title"):
+            parts = [f"【视频】{raw_info.get('title')}"]
+            if raw_info.get("uploader"):
+                parts.append(f"UP主/作者：{raw_info['uploader']}")
+            if raw_info.get("tags"):
+                parts.append(f"标签：{'、'.join(str(t) for t in raw_info['tags'][:8])}")
+            if raw_info.get("description"):
+                parts.append(f"简介：{str(raw_info['description'])[:600]}")
+            if raw_info.get("webpage_url"):
+                parts.append(f"链接：{raw_info['webpage_url']}")
+            text = "\n".join(parts)
+            return Envelope("video", item.ref, text, 0.9, "ok", "yt-dlp-meta",
+                            meta={"url": item.url, "video_id": raw_info.get("video_id"),
+                                  "duration_s": raw_info.get("duration_s"),
+                                  "extractor": raw_info.get("extractor"),
+                                  "plan_mode": item.extra.get("plan_mode")})
+        # 没提信息：只存元数据，不做理解。text 留空 => 不进抽取管线。
         return Envelope("video", item.ref, "", 0.0, "metadata_only", "video-meta",
                         meta={"url": item.url, "mime": item.mime,
                               "size_bytes": item.size_bytes,

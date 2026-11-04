@@ -28,7 +28,7 @@ from typing import Any
 from aiji.hippocampus import store
 from aiji.right_hand.config import Settings
 from aiji.hippocampus.db import DB
-from aiji.hippocampus.extract import Extraction, build_messages, build_summary_messages, heuristic, heuristic_summary, parse
+from aiji.hippocampus.extract import Extraction, FactDraft, build_messages, build_summary_messages, heuristic, heuristic_summary, parse
 from aiji.brain.pool import ModelPool, PoolExhausted
 from aiji.hippocampus.recall import Recaller
 from aiji.hippocampus.recognize import Envelope, Item, Recognizers
@@ -126,6 +126,9 @@ class Writer:
         self._threads: list[threading.Thread] = []
         self._cv = threading.Condition()
         self._pending = 0
+        # 在飞 job（seq -> Job）：关停时 worker 还卡在模型调用里的话，
+        # 用这张表把"已提交但没落库"的文本用 heuristic 兜底补写（幂等：merge）。
+        self._inflight: dict[int, "Job"] = {}
         self._backlog_warned_at = 0.0
         self._closed = False
         self._turn_counts: dict[tuple[str, str, str, str], int] = {}
@@ -146,12 +149,105 @@ class Writer:
         return self
 
     def stop(self, flush_timeout: float = 5.0) -> None:
+        """关停。两层保证"不丢"：
+
+        1. flush 等不到（模型网关慢）时，队列里**剩余**的 job 由本线程离线兜底
+           处理完（heuristic 抽取，不再等模型）；
+        2. worker 手里**正在跑**的 job：放哨兵后等 pending 归零（有上限），
+           不能像旧版 `join(timeout=2)` 到点就走——CLI 进程退出会硬杀 daemon
+           worker，SQLite 事务可能写一半（2026-11-04，v58 套件抓到的间歇性丢数据：
+           remember 走到 close() 时模型还没回，fact 丢失，recall 空）。
+        """
         self.flush(flush_timeout)
         self._closed = True
+        # 队列里还剩的 job：离线兜底逐个处理（heuristic 抽取，不再等模型）。
+        while True:
+            try:
+                job = self._q.get_nowait()
+            except queue.Empty:
+                break
+            if job is None:
+                self._q.task_done()
+                continue
+            key = self._wait_turn(job)
+            try:
+                if job.kind == "ingest" and job.item is not None:
+                    self._handle_ingest_offline(job)
+                else:
+                    self._handle_text_offline(job)
+            except Exception as exc:  # noqa: BLE001 - 兜底处理也失败才走死信
+                self.stats.failed += 1
+                self.stats.last_error = f"{type(exc).__name__}: {exc}"
+                try:
+                    with self.db.tx() as c:
+                        store.enqueue(c, job.ident, "retry",
+                                      job.dead_letter_payload())
+                except Exception:  # noqa: BLE001
+                    traceback.print_exc()
+            finally:
+                self._complete_turn(key, job.seq)
+                self._q.task_done()
+                with self._cv:
+                    self._pending -= 1
+                    self.stats.processed += 1
+                    self._cv.notify_all()
         for _ in self._threads:
             self._q.put(None)
+        # 等 worker 把手里正在跑的 job 收尾（模型调用可能还在路上）。
+        # 上限 = flush_timeout（同样的量级，别在关停路径无限等）。
+        deadline = time.time() + max(flush_timeout, 1.0)
+        with self._cv:
+            while self._pending > 0 and time.time() < deadline:
+                self._cv.wait(timeout=0.1)
+            stuck = list(self._inflight.values())
         for t in self._threads:
-            t.join(timeout=2.0)
+            t.join(timeout=1.0)
+        # 还在飞的 job（worker 卡死在模型调用里，进程退出前最后一次机会）：
+        # 直接离线兜底落库。幂等：add_fact 同值 merge，worker 稍后醒来重复写
+        # 也只会 mentions+1，不会出重复行。
+        for job in stuck:
+            try:
+                if job.kind == "ingest" and job.item is not None:
+                    self._handle_ingest_offline(job)
+                else:
+                    self._handle_text_offline(job)
+                self.stats.heuristic += 1
+                logger.warning("关停兜底：job seq=%s 在模型调用里卡住，已离线落库",
+                               job.seq)
+            except Exception as exc:  # noqa: BLE001
+                self.stats.failed += 1
+                self.stats.last_error = f"stop-fallback:{type(exc).__name__}: {exc}"[:300]
+
+    def _handle_text_offline(self, job: "Job") -> None:
+        """关停兜底：不等模型，直接 heuristic 落库。"""
+        text = job.text or ""
+        if not text.strip():
+            return
+        ext = heuristic(text)
+        with self.db.tx() as c:
+            store.apply_extraction(
+                c, job.ident, ext.facts, ext.profile, style=None,
+                source=job.session, source_kind="heuristic", session=job.session,
+            )
+        self.stats.heuristic += 1
+
+    def _handle_ingest_offline(self, job: "Job") -> None:
+        """关停兜底：识别层照跑（OCR/ASR 可能已在 extra 里带了文本），抽取走规则。"""
+        item = job.item
+        assert item is not None
+        env: Envelope = self.recognizers.recognize(item)
+        with self.db.tx() as c:
+            store.add_media(
+                c, job.ident, kind=item.kind, ref=item.ref or f"{item.kind}-{int(time.time()*1000)}",
+                url=item.url, session=job.session, mime=item.mime, size_bytes=item.size_bytes,
+                text=env.text or None, confidence=env.confidence, status=env.status,
+                recognizer=env.recognizer, elapsed_ms=env.elapsed_ms, extra=env.meta,
+            )
+        self.stats.ingested += 1
+        if not env.usable:
+            self.stats.unrecognized += 1
+            return
+        self._handle_text_offline(job)
 
     # ---- 提交（主链路：只做内存操作） ----
 
@@ -245,6 +341,8 @@ class Writer:
             if job is None:
                 self._q.task_done()
                 return
+            with self._cv:
+                self._inflight[job.seq] = job
             key = self._wait_turn(job)
             try:
                 self._handle(job)
@@ -258,6 +356,8 @@ class Writer:
                 except Exception:  # noqa: BLE001
                     traceback.print_exc()
             finally:
+                with self._cv:
+                    self._inflight.pop(job.seq, None)
                 self._complete_turn(key, job.seq)
                 self._q.task_done()
                 with self._cv:
@@ -326,6 +426,18 @@ class Writer:
         # 之后与文本完全同一条路：不按类型分叉（只有风格学习关掉，见 _ingest）
         self._ingest(env.text, job.ident, job.session, source=f"{item.kind}:{item.ref}",
                      learn_style=False, force_heuristic=self._ambient_backlog(job.ident))
+        # 视频是**第三方知识源**（标题/UP主/简介），不是用户的个人事实：
+        # 模型抽取常判"没有可抽的用户事实"（实测 agent2api 返回空 facts），
+        # 但学到的内容必须可召回——再落一条 knowledge fact 兜底，
+        # subject 用 UP 主/视频号，内容是整段学习文本（FTS + 语义索引都能搜到）。
+        if item.kind == "video" and isinstance(item.extra.get("video_info"), dict):
+            info = item.extra["video_info"]
+            subject = str(info.get("uploader") or info.get("video_id") or "视频")[:40]
+            with self.db.tx() as c:
+                store.add_fact(c, job.ident, FactDraft(
+                    subject=subject, predicate="视频", object=env.text[:200],
+                    text=env.text[:500], confidence=0.6, kind="knowledge",
+                ), source=f"video:{item.ref}", source_kind="ingest")
         self._maybe_summarize(job.ident, job.session)
 
     def _ambient_backlog(self, ident: Ident) -> bool:
