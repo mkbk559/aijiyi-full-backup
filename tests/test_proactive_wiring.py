@@ -94,6 +94,34 @@ class ProactiveWiringTest(unittest.TestCase):
         memory, _ = self._boot(onebot_api="", env={"AIJI_PROACTIVE": "1"})
         self.assertFalse(hasattr(memory, "proactive"))
 
+    def test_degraded_handler_output_never_becomes_proactive_message(self):
+        """池子全灭时 Head 兜底"刚才没接上，等我一下。"（degraded=True）。
+        主动消息绝不允许把这种占位话发给真人（2026-11-04 实测发出去过一条）。
+        handler 看到 degraded 必须返回 None → 引擎退还额度、不投递。"""
+        from aiji.brain.pool import PoolExhausted
+
+        memory, _ = self._boot(onebot_api="http://127.0.0.1:3000",
+                               env={"AIJI_PROACTIVE": "1"})
+
+        class _DeadPool:
+            def chat(self, messages, *, timeout_s=None):
+                raise PoolExhausted("all routes down")
+
+            def stats(self):
+                return []
+
+        memory.pool = _DeadPool()
+        memory.reflective.pool = memory.pool
+        ident = Ident("qq", "10001", "default")
+        memory.heart.state_set(ident, "last_event_ts", 1.0)  # 久远 → 静默满足
+
+        proactor = memory.proactive
+        before = dict(proactor.stats)
+        fired = proactor.tick([ident])
+        self.assertEqual(fired, 0, "degraded 输出不能成为主动消息")
+        self.assertGreaterEqual(proactor.stats["refunded"], before["refunded"])
+        self.assertEqual(proactor.stats["fired"], before["fired"])
+
     def test_chat_resets_silence_but_restyle_does_not(self):
         memory, srv = self._boot(onebot_api="http://127.0.0.1:3000",
                                  env={"AIJI_PROACTIVE": "1"})

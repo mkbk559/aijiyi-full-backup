@@ -1631,6 +1631,8 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
 
         def _proactive_handler(ident):
             # 让玛卡巴卡自己生成"想主动说的一句话"；NOOP = 没话说（引擎走退避）
+            import logging
+
             res = Head(memory).reply(
                 [{"role": "user", "content":
                   "你已经有一会儿没有收到TA的消息了。如果现在你有想主动对TA说的话，"
@@ -1638,20 +1640,37 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
                 ident, session="proactive", remember=False, debounce=False,
                 enable_tools=False)
             text = str(getattr(res, "text", "") or "").strip()
-            if not text or text.upper().startswith("NOOP"):
+            degraded = bool(getattr(res, "degraded", False))
+            logging.getLogger("aiji.proactive").info(
+                "handler(%s/%s/%s) -> %d 字 degraded=%s %r",
+                ident.platform, ident.platform_user_id, ident.scope,
+                len(text), degraded, text[:40])
+            # 降级回复是池子故障的占位话（"刚才没接上，等我一下。"），
+            # 主动消息绝不允许把这种话发给真人——直接视为没话说（额度会退）。
+            if degraded or not text or text.upper().startswith("NOOP"):
                 return None
             return text
 
         def _proactive_idents():
-            # 近 14 天有真实对话的 scope（群不算——往群里主动发消息是骚扰）。
-            # platform=cli 是本地工具不算联系人。
+            # 近 14 天有真实对话的 scope。只认 qq——OneBot HTTP 是唯一投递通道，
+            # local/desktop 这些"平台"没有通道，生成出来只会送不出去。群不算（骚扰）。
+            # 近 7 天 send_fatal（403 等非好友不可达）的 scope 也别再试——
+            # 否则每 5 分钟白烧一次生成和一次投递。
             cutoff = time.time() - 14 * 86400.0
+            fatal_cutoff = time.time() - 7 * 86400.0
             try:
                 rows = memory.db.conn().execute(
                     "SELECT DISTINCT platform, platform_user_id, scope FROM turn "
-                    "WHERE ts >= ? AND platform != 'cli' "
-                    "AND scope NOT LIKE 'group:%' ORDER BY id DESC LIMIT 8",
-                    (cutoff,)).fetchall()
+                    "WHERE ts >= ? AND platform = 'qq' "
+                    "AND scope NOT LIKE 'group:%' "
+                    "AND NOT EXISTS ("
+                    "  SELECT 1 FROM event_log e "
+                    "  WHERE e.kind = 'send_fatal' AND e.ts >= ? "
+                    "    AND e.platform = turn.platform "
+                    "    AND e.platform_user_id = turn.platform_user_id "
+                    "    AND e.scope = turn.scope"
+                    ") ORDER BY id DESC LIMIT 8",
+                    (cutoff, fatal_cutoff)).fetchall()
             except Exception:  # noqa: BLE001 - 维护线程不许带崩服务
                 return []
             return [Ident(platform=str(r[0]), platform_user_id=str(r[1]),
@@ -1668,10 +1687,12 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
             srv.proactive_stop = stop
             if not stop.wait(first_delay_s):
                 try:
-                    fired = proactor.tick(_proactive_idents())
-                    if fired:
-                        log.info("proactive 首轮 fired=%s stats=%s",
-                                 fired, proactor.stats)
+                    idents = _proactive_idents()
+                    log.info("首轮 tick：%d 个候选 %s", len(idents),
+                             [f"{i.platform}/{i.platform_user_id}" for i in idents])
+                    fired = proactor.tick(idents)
+                    log.info("proactive 首轮 fired=%s stats=%s",
+                             fired, proactor.stats)
                 except Exception:  # noqa: BLE001
                     log.exception("proactive 首轮失败")
             while not stop.wait(poll_seconds):

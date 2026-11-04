@@ -1438,3 +1438,25 @@ CookieJar GET 一次才落 cookie（第一次 ticket 被失败解析白白消耗
 WebUI API 可自动化）+ port 检查只认 LISTENING；QQ 登录态靠用户扫 QR（唯一人工序）。
 **教训：外部进程的行为先问"它自己认为自己在什么状态"（WebUI API 有状态端点），
 别从端口反推状态。**
+
+## 178. 主动消息内容必须过"degraded"检查——罐装兜底话会发给真人（2026-11-04 首发实测）
+
+Proactive 首发实测：`fired=2`，其中给用户的 `刚才没接上，等我一下。` 是
+**池子全灭时 Head 的 FALLBACK_TEXT**（degraded=True）——引擎把它当正常主动消息
+发出去了（send_queue status=sent）。另一条给 1761395614 的正常内容被 NapCat
+403（非好友不可达，send_fatal→dead）。
+**修法（server.py 接线层）**：handler 检查 `res.degraded` → True 返回 None
+（引擎自动退还额度）；`_proactive_idents` 增加"近 7 天 send_fatal 的 scope 不再试"
+（否则每 5 分钟白烧生成+投递）。测试：test_degraded_handler_output_never_becomes_proactive_message。
+**教训：任何"发给真人"的出口都要假设上游可能全灭——兜底话是给人看的错误提示，
+不是内容。**
+
+## 179. Proactive 静默基准 note_event 需要回填——新钩子管不了历史（2026-11-04）
+
+首发 tick 全员 `blocked_silence=2`：引擎判定"从没互动过的 scope 不主动搭话"
+（last_event_ts 缺失→不搭话，反骚扰设计正确），但 note_event 钩子今天才上线，
+历史互动只存在 turn 表里。
+**修法**：一次性回填 `last_event_ts = turn.MAX(ts)`（qq 非群 scope）。先跑一次，
+让今天拍板的"开始主动发消息"立即生效；之后的 note_event 由钩子自然维护。
+另外：引擎 fire 成功后会自调 `note_event`（L171）——主动消息本身重置静默计时，
+加上 cooldown ×2^n 退避，天然防止连环主动。
