@@ -123,8 +123,52 @@ OPENAI_TOOLS: list[dict[str, Any]] = [
                 "required": ["keys"],
             },
         },
+    },    # ---- 联网只读工具（2026-11-05 用户：B站/联网/MCP 都要接上）----
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "联网搜索。返回标题+摘要+链接列表。只读，无需审批。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "default": 6},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_url",
+            "description": "抓取一个网页的正文文本（自动剔除脚本/样式）。只读，无需审批。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "max_chars": {"type": "integer", "default": 6000},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "bili_search",
+            "description": "搜索B站视频，返回标题/UP主/链接。只读，无需审批。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string"},
+                    "limit": {"type": "integer", "default": 6},
+                },
+                "required": ["keyword"],
+            },
+        },
     },
 ]
-
 
 __all__ = ["OPENAI_TOOLS", "ToolCall"]
