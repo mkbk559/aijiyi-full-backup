@@ -1370,9 +1370,20 @@ class _Handler(BaseHTTPRequestHandler):
         # 任何真实对话（哪怕 remember=False）都算"TA 说过话"：重置主动沉默计时。
         # 静默基准是"用户最后一句话"，不是"记得住的那句话"（Proactive 接线 2026-11-04）。
         # 机器会话（改写/主动生成）不算人说话——否则刚发过主动的 scope 永不静默。
+        # 2026-11-05 深夜排查：维护任务也在打这个钩子，静默永不过期、主动永不触发——
+        # 每次都记来源，幽灵写入自报家门。
         proactor = getattr(self.memory, "proactive", None)
         if proactor is not None and not str(session).startswith(("restyle", "proactive")):
             try:
+                import traceback
+
+                stack = " <- ".join(
+                    f"{f.filename.split(chr(92))[-1]}:{f.lineno}:{f.name}"
+                    for f in traceback.extract_stack(limit=6)[:-1])
+                logging.getLogger("aiji.proactive").info(
+                    "note_event(%s/%s/%s) session=%s remember=%s stack=%s",
+                    ident.platform, ident.platform_user_id, ident.scope,
+                    session, remember_turn, stack)
                 proactor.note_event(ident)
             except Exception:  # noqa: BLE001 - 钩子坏了不阻塞对话
                 pass
