@@ -97,7 +97,7 @@ class Settings:
     fallback_cooldown_s: float = 60.0
     typing_min_ms: int = 300
     typing_max_ms: int = 1800
-    persona: str = "child"
+    persona: str | None = None
     # 成长引擎 v2：阶段由"学习量（学分）"决定，**没有按时间长大的速率**。
     # persona_stage 直接把阶段钉住（primary/middle/high/university/work，None=按学分走）；
     # persona_age 是兼容旧配置的另一种钉法（按年龄落到对应阶段）。

@@ -17,6 +17,8 @@ API 事实（2026-11-04 探针 104110 验证读取路径；写路径待真 cooki
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import time
 import urllib.error
@@ -24,6 +26,8 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from aiji import net
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/130.0 Safari/537.36")
@@ -115,7 +119,7 @@ def _get_json(url: str, cookie: str = "", timeout: float = 10.0) -> dict:
     req = urllib.request.Request(url, headers={
         "User-Agent": UA, "Referer": "https://www.bilibili.com/",
         **({"Cookie": cookie} if cookie else {})})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with net.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
@@ -234,7 +238,7 @@ def post_comment(
             "Content-Type": "application/x-www-form-urlencoded",
             "Cookie": cred.cookie_header()})
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with net.urlopen(req, timeout=15) as r:
             payload = json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
         raise BiliError("comment_http_error", f"评论接口 HTTP {exc.code}") from exc
@@ -345,7 +349,7 @@ def upload_video(
                 "User-Agent": UA, "X-Up-Auth": auth,
                 "Cookie": cred.cookie_header()})
         try:
-            with urllib.request.urlopen(req, timeout=timeout_s) as r:
+            with net.urlopen(req, timeout=timeout_s) as r:
                 payload = json.loads(r.read().decode("utf-8", "replace"))
         except urllib.error.HTTPError as exc:
             raise BiliError("chunk_upload_error",
@@ -363,7 +367,7 @@ def upload_video(
         f"{base}?outputs=1&output=json&{comp_q}", data=b"", method="POST",
         headers={"User-Agent": UA, "X-Up-Auth": auth,
                  "Cookie": cred.cookie_header()})
-    with urllib.request.urlopen(req, timeout=timeout_s) as r:
+    with net.urlopen(req, timeout=timeout_s) as r:
         comp = json.loads(r.read().decode("utf-8", "replace"))
     if "OK" not in comp and comp.get("ok") != 1:
         raise BiliError("complete_failed", f"complete 被拒：{comp}")
@@ -386,7 +390,7 @@ def upload_video(
                 "Referer": "https://member.bilibili.com/platform/upload/video/frame",
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Cookie": cred.cookie_header()})
-        with urllib.request.urlopen(req, timeout=timeout_s) as r:
+        with net.urlopen(req, timeout=timeout_s) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
 
     try:
@@ -464,7 +468,7 @@ def restyle_comment(text: str, pool=None, *,
             req = urllib.request.Request(
                 f"{endpoint.rstrip('/')}/v1/chat/completions", data=body,
                 headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=timeout_s) as r:
+            with net.urlopen(req, timeout=timeout_s) as r:
                 payload = json.loads(r.read().decode("utf-8", "replace"))
             raw = str(((payload.get("choices") or [{}])[0].get("message")
                        or {}).get("content") or "")
@@ -476,8 +480,185 @@ def restyle_comment(text: str, pool=None, *,
     return out, "model"
 
 
+# ---- 刷内容（学习用）：排行榜 / 视频详情 ----
+# 2026-11-05 选型：**排行榜**（`ranking/v2`）不需要 wbi 签名、不需要登录态，
+# 是"刷视频学习"最稳的入口；推荐流（`wbi/index/top/feed/rcmd`）要 wbi 签名，
+# 换了就得跟签名算法同步，收益不值。搜索接口也要 wbi，同样先不上。
+
+def ranking(limit: int = 10, *, timeout: float = 15.0, cookie: str = "") -> list[dict]:
+    """B 站全站排行榜 / 热门，返回 [{bvid, aid, title, desc, owner, ...}]。
+
+    风控事实（2026-11-05 实测）：不带 cookie 连续请求会被打 `code=-352`（风控校验失败），
+    带登录 cookie（jar 里有 buvid3/b_nut）就正常。`ranking/v2` 被拒时退到 `popular`。
+    """
+    limit = max(1, int(limit))
+    errors: list[str] = []
+    for url in ("https://api.bilibili.com/x/web-interface/ranking/v2?rid=0&type=all",
+                f"https://api.bilibili.com/x/web-interface/popular?ps={limit}&pn=1"):
+        try:
+            data = _get_json(url, cookie=cookie, timeout=timeout)
+        except urllib.error.HTTPError as exc:
+            errors.append(f"{url.split('?')[0]} HTTP {exc.code}")
+            continue
+        if data.get("code") not in (0, None):
+            errors.append(f"code={data.get('code')}")
+            continue
+        rows = ((data.get("data") or {}).get("list")) or []
+        if not rows:
+            errors.append("empty")
+            continue
+        return _feed_rows(rows[:limit])
+    raise BiliError("ranking_failed", "排行榜/热门都拿不到：" + "；".join(errors[:3]))
+
+
+def _feed_rows(rows: list[dict]) -> list[dict]:
+    out = []
+    for row in rows:
+        stat = row.get("stat") or {}
+        out.append({
+            "bvid": str(row.get("bvid") or ""),
+            "aid": row.get("aid"),
+            "title": str(row.get("title") or ""),
+            "desc": str(row.get("desc") or "")[:500],
+            "owner": str((row.get("owner") or {}).get("name") or ""),
+            "mid": (row.get("owner") or {}).get("mid"),
+            "tname": str(row.get("tname") or ""),
+            "url": f"https://www.bilibili.com/video/{row.get('bvid')}",
+            "stat": {k: stat.get(k) for k in ("view", "danmaku", "reply", "like")},
+        })
+    return out
+
+
+def video_detail(bvid: str, *, timeout: float = 15.0) -> dict:
+    """单个视频的公开详情（标题/简介/分P/UP主），供学习管线补上下文。"""
+    data = _get_json(
+        f"https://api.bilibili.com/x/web-interface/view?bvid={urllib.parse.quote(bvid)}",
+        timeout=timeout)
+    if data.get("code") != 0:
+        raise BiliError("view_failed", f"view 接口 code={data.get('code')}")
+    d = data.get("data") or {}
+    return {
+        "bvid": str(d.get("bvid") or bvid),
+        "aid": d.get("aid"),
+        "title": str(d.get("title") or ""),
+        "desc": str(d.get("desc") or "")[:1000],
+        "owner": str((d.get("owner") or {}).get("name") or ""),
+        "duration": d.get("duration"),
+        "pages": [{"page": p.get("page"), "part": p.get("part")}
+                  for p in (d.get("pages") or [])][:20],
+    }
+
+
+# ---- 私信（web_im） ----
+# API 事实：`https://api.vc.bilibili.com/web_im/v1/web_im/send_msg`，
+# form 里 msg 是个嵌套查询串（msg[sender_uid] / msg[receiver_id] / msg[receiver_type]=1
+# / msg[msg_type]=1 / msg[msg_content]={"content": "..."}），csrf=bili_jct。
+# 2026-11-05 第一次接：**读路径（nav/ranking/view）真机验证过，写路径未在真账号上发过**。
+
+def send_dm(mid: int | str, message: str, cred: BiliCredentials, *,
+            confirm: bool = False, state_dir: Path | None = None,
+            now: float | None = None, timeout: float = 20.0) -> CommentResult:
+    """给某个 mid 发一条私信。confirm=False 只预演（连登录态都不要求）。"""
+    message = message.strip()
+    if not message:
+        raise BiliError("empty_message", "私信内容为空")
+    if len(message) > 500:
+        raise BiliError("message_too_long", f"私信 {len(message)} 字，先压到 500 以内")
+    try:
+        receiver = int(mid)
+    except (TypeError, ValueError) as exc:
+        raise BiliError("bad_mid", f"mid 不是数字：{mid!r}") from exc
+    if not confirm:
+        return CommentResult(ok=False, dry_run=True,
+                             message=f"[dry-run] 将私信 {receiver}：{message}")
+    if not cred.usable:
+        raise BiliError("not_logged_in", "私信需要登录态（SESSDATA/bili_jct 缺失）")
+    if not cred.dedeuserid:
+        raise BiliError("unknown_self", "不知道自己的 mid（cookie 里缺 DedeUserID）")
+    t = time.time() if now is None else now
+    dev_id = base64.b32encode(hashlib.sha1(cred.cookie_header().encode()).digest()
+                              ).decode()[:20].lower()
+    form = urllib.parse.urlencode({
+        "msg[sender_uid]": str(cred.dedeuserid),
+        "msg[receiver_id]": str(receiver),
+        "msg[receiver_type]": "1",
+        "msg[msg_type]": "1",
+        "msg[dev_id]": dev_id,
+        "msg[timestamp]": str(int(t)),
+        # 2026-11-05 对照开源 SDK bilibili-api-python 17.4.2（session.py::send_msg）改正：
+        # 字段名是 **msg[content]** 而不是 msg[msg_content]，另外要带 msg_status /
+        # new_face_version。之前一直 -400，很可能就是字段名不对。
+        "msg[content]": json.dumps({"content": message}, ensure_ascii=False),
+        "msg[msg_status]": "0",
+        "msg[new_face_version]": "0",
+        "csrf": cred.bili_jct,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.vc.bilibili.com/web_im/v1/web_im/send_msg", data=form,
+        headers={
+            "User-Agent": UA, "Referer": "https://message.bilibili.com/",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Cookie": cred.cookie_header()})
+    try:
+        with net.urlopen(req, timeout=timeout) as r:
+            payload = json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as exc:
+        raise BiliError("dm_http_error", f"私信接口 HTTP {exc.code}") from exc
+    code = payload.get("code")
+    ok = code == 0
+    _log_action(state_dir or Path("data"), {
+        "ts": t, "action": "dm", "mid": receiver, "ok": ok, "code": code,
+        "message_brief": str(payload.get("message", ""))[:80],
+    })
+    if not ok:
+        raise BiliError("dm_rejected",
+                        f"私信被拒 code={code} message={payload.get('message')}")
+    return CommentResult(ok=True, dry_run=False,
+                         message=f"已私信 {receiver}", raw=payload)
+
+
+def like(aid: int, cred: BiliCredentials, *, confirm: bool = False,
+         state_dir: Path | None = None, now: float | None = None,
+         unlike: bool = False, timeout: float = 15.0) -> dict:
+    """点赞/取消点赞（"今天有互动"的最轻动作）。confirm=False 只预演。"""
+    try:
+        aid = int(aid)
+    except (TypeError, ValueError) as exc:
+        raise BiliError("bad_aid", f"aid 不是数字：{aid!r}") from exc
+    want = 0 if unlike else 1
+    if not confirm:
+        return {"ok": False, "dry_run": True,
+                "message": f"[dry-run] 将{'取消点赞' if unlike else '点赞'} av{aid}"}
+    if not cred.usable:
+        raise BiliError("not_logged_in", "点赞需要登录态")
+    t = time.time() if now is None else now
+    form = urllib.parse.urlencode({
+        "aid": aid, "like": want, "csrf": cred.bili_jct}).encode("utf-8")
+    req = urllib.request.Request(
+        # 2026-11-05 实测：x/v2/view/like 已 404（老接口下线），现行是
+        # x/web-interface/archive/like（表单 aid + like=1/0 + csrf）。
+        "https://api.bilibili.com/x/web-interface/archive/like", data=form, headers={
+            "User-Agent": UA, "Referer": f"https://www.bilibili.com/video/av{aid}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Cookie": cred.cookie_header()})
+    try:
+        with net.urlopen(req, timeout=timeout) as r:
+            payload = json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as exc:
+        raise BiliError("like_http_error", f"点赞接口 HTTP {exc.code}") from exc
+    ok = payload.get("code") == 0
+    _log_action(state_dir or Path("data"), {
+        "ts": t, "action": "unlike" if unlike else "like", "aid": aid, "ok": ok,
+        "code": payload.get("code")})
+    if not ok:
+        raise BiliError("like_rejected",
+                        f"点赞被拒 code={payload.get('code')} {payload.get('message')}")
+    return {"ok": True, "aid": aid, "like": want}
+
+
 __all__ = [
     "BiliCredentials", "BiliError", "CommentResult", "UploadResult",
-    "bv_to_av", "check_login", "credentials_from_browser", "parse_cookie_jar",
-    "post_comment", "resolve_aid", "restyle_comment", "upload_video",
+    "bv_to_av", "check_login", "credentials_from_browser", "like",
+    "parse_cookie_jar", "post_comment", "ranking", "resolve_aid",
+    "restyle_comment", "send_dm", "upload_video", "video_detail",
 ]

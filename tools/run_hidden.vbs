@@ -1,0 +1,3 @@
+' ???????????????? PowerShell???????
+Set sh = CreateObject("WScript.Shell")
+sh.Run "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""D:\AIJiYi\tools\douyin_chat_watchdog.ps1""", 0, False

@@ -482,6 +482,24 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, self.songs.snapshot())
         elif path == "/api/social":
             self._send(200, self.social.snapshot())
+        elif path == "/api/platforms":
+            # 三平台能力矩阵 + 续火花账本（只读；写动作走 CLI，默认 dry-run）
+            payload = {}
+            try:
+                from aiji.heart.platforms import matrix as _platform_matrix
+                from aiji.heart.platforms.registry import build as _build
+                payload = _platform_matrix(_build(dry_run=True))
+            except Exception as exc:  # noqa: BLE001 - 矩阵坏了不该拖垮控制台
+                payload = {"error": f"{type(exc).__name__}: {exc}"[:200]}
+            try:
+                from aiji.heart.platforms.streak import StreakBook
+
+                book = StreakBook(self.memory.db)
+                payload["streak"] = book.summary()
+                payload["streak"]["due_qq"] = book.due("qq", limit=20)
+            except Exception as exc:  # noqa: BLE001
+                payload["streak"] = {"error": f"{type(exc).__name__}: {exc}"[:200]}
+            self._send(200, payload)
         elif path == "/api/stickers":
             payload = {"service": self.stickers.snapshot()}
             if self.sticker_loop is not None:
@@ -710,6 +728,35 @@ class _Handler(BaseHTTPRequestHandler):
                                     "limit_bytes": self.MAX_BODY_BYTES,
                                     "size_bytes": exc.size})
         try:
+            if path in ("/api/voice/transcribe",):
+                # 收语音：给一段音频（本地路径或 http(s) 地址）→ 文字。
+                # 2026-11-06 加这条是因为 `aiji media --kind voice` 那条链会卡死
+                # （同步下载 + 无超时），而 voice_inbox 里这条实测 3 秒出结果。
+                from aiji.heart import voice_inbox as _vi
+
+                url = str(body.get("url") or "").strip()
+                local = str(body.get("path") or "").strip()
+                if url.startswith(("http://", "https://")):
+                    import tempfile as _tf
+                    import urllib.request as _ur
+
+                    opener = _ur.build_opener(_ur.ProxyHandler({}))
+                    try:
+                        with opener.open(url, timeout=15) as resp:
+                            data = resp.read(8 * 1024 * 1024)
+                    except Exception as exc:  # noqa: BLE001
+                        return self._send(400, {"ok": False, "error": f"download_failed: {exc}"})
+                    suffix = ".wav" if data[:4] == b"RIFF" else ".bin"
+                    _tmpdir = Path(__file__).resolve().parents[2] / ".tmp"
+                    _tmpdir.mkdir(parents=True, exist_ok=True)
+                    fd, tmp = _tf.mkstemp(suffix=suffix, dir=str(_tmpdir))
+                    with io.open(fd, "wb") as fh:
+                        fh.write(data)
+                    local = tmp
+                if not local:
+                    return self._send(400, {"ok": False, "error": "path_or_url_required"})
+                result = _vi.transcribe_record(local)
+                return self._send(200, result)
             if path in ("/api/operations/config", "/api/operations/services"):
                 if self.client_address[0] not in ("127.0.0.1", "::1"):
                     return self._send(403, {"error": "local_only"})

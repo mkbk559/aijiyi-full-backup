@@ -200,7 +200,7 @@ class CheckLoginTest(unittest.TestCase):
             def __exit__(self, *a):
                 return False
 
-        with mock.patch.object(bc.urllib.request, "urlopen",
+        with mock.patch.object(bc.net, "urlopen",
                                return_value=Resp()):
             info = bc.check_login(bc.BiliCredentials(sessdata="s"))
         self.assertTrue(info["is_login"])
@@ -212,7 +212,7 @@ class CheckLoginTest(unittest.TestCase):
         import urllib.error
 
         with mock.patch.object(
-                bc.urllib.request, "urlopen",
+                bc.net, "urlopen",
                 side_effect=urllib.error.HTTPError(
                     "u", 412, "Precondition Failed", None, None)):
             with self.assertRaises(bc.BiliError) as ctx:
@@ -298,7 +298,7 @@ class UploadOrchestrationTest(unittest.TestCase):
             {"code": 0, "data": {"aid": 12345}},
         ]
         fake = self._fake_urlopen_factory(responses, record)
-        with mock.patch.object(bc.urllib.request, "urlopen", fake):
+        with mock.patch.object(bc.net, "urlopen", fake):
             result = bc.upload_video(video, "标题", cred=self.CRED,
                                      confirm=True, state_dir=root)
         self.assertTrue(result.ok)
@@ -314,7 +314,7 @@ class UploadOrchestrationTest(unittest.TestCase):
         video = self._video(root)
         record: list = []
         fake = self._fake_urlopen_factory([{}], record)  # 缺 upos_uri/auth
-        with mock.patch.object(bc.urllib.request, "urlopen", fake):
+        with mock.patch.object(bc.net, "urlopen", fake):
             with self.assertRaises(bc.BiliError) as ctx:
                 bc.upload_video(video, "t", cred=self.CRED, confirm=True,
                                 state_dir=root)
@@ -330,7 +330,7 @@ class UploadOrchestrationTest(unittest.TestCase):
             {"OK": 0},  # 分片被拒
         ]
         fake = self._fake_urlopen_factory(responses, record)
-        with mock.patch.object(bc.urllib.request, "urlopen", fake):
+        with mock.patch.object(bc.net, "urlopen", fake):
             with self.assertRaises(bc.BiliError) as ctx:
                 bc.upload_video(video, "t", cred=self.CRED, confirm=True,
                                 state_dir=root)
@@ -348,7 +348,7 @@ class UploadOrchestrationTest(unittest.TestCase):
             {"code": -111, "message": "稿件审核中"},
         ]
         fake = self._fake_urlopen_factory(responses, record)
-        with mock.patch.object(bc.urllib.request, "urlopen", fake):
+        with mock.patch.object(bc.net, "urlopen", fake):
             with self.assertRaises(bc.BiliError) as ctx:
                 bc.upload_video(video, "t", cred=self.CRED, confirm=True,
                                 state_dir=root)

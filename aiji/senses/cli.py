@@ -516,6 +516,38 @@ def cmd_archive(args: argparse.Namespace) -> int:
     return 0
 
 
+def _purge_tmp_workdirs(older_than_s: float = 3600.0) -> dict[str, float]:
+    """删掉测试留下的 `.tmp/test_*` 工作目录。
+
+    2026-11-05 实测：跑一遍全量测试会留下 ~750MB 的 `.tmp/test_*`（最狠的
+    `test_property` 一个就 235MB），堆几次就把盘吃满。测试自己不清理，
+    就由 janitor 兜底，只删超过 1 小时的（不打断正在跑的测试）。
+    """
+    import shutil
+    import time as _t
+    from pathlib import Path as _P
+
+    root = _P(".tmp")
+    freed = 0.0
+    killed = 0
+    if not root.exists():
+        return {"files": 0, "mb": 0.0}
+    cutoff = _t.time() - older_than_s
+    for d in root.glob("test_*"):
+        if not d.is_dir():
+            continue
+        try:
+            if d.stat().st_mtime > cutoff:
+                continue
+            size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+            shutil.rmtree(d, ignore_errors=True)
+            freed += size / (1024 * 1024)
+            killed += 1
+        except Exception:  # noqa: BLE001
+            pass
+    return {"dirs": killed, "mb": round(freed, 1)}
+
+
 def cmd_janitor(args: argparse.Namespace) -> int:
     """手动跑一轮代谢清理（冻结/去重/边封顶/归档清除/WAL 截断）。
 
@@ -527,6 +559,7 @@ def cmd_janitor(args: argparse.Namespace) -> int:
     try:
         j = Janitor(m.db)
         summary = j.run()
+        summary["tmp_workdirs"] = _purge_tmp_workdirs()
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     finally:
         m.close()
@@ -619,6 +652,251 @@ def cmd_bench(args: argparse.Namespace) -> int:
     from bench_recall import run  # type: ignore[import-not-found]
 
     return run(args)
+
+
+# ---- 三平台社交（2026-11-05） ------------------------------------------------
+
+def _social_adapters(args: argparse.Namespace):
+    from aiji.heart.platforms import build
+
+    only = None
+    if getattr(args, "platform", ""):
+        only = (args.platform,)
+    return build(dry_run=not bool(getattr(args, "yes", False)), only=only)
+
+
+def _social_adapter(args: argparse.Namespace):
+    from aiji.heart.platforms import PlatformError
+
+    name = (getattr(args, "platform", "") or "").strip().lower()
+    adapters = _social_adapters(args)
+    if name not in adapters:
+        raise PlatformError("bad_platform", f"不认识的平台：{name!r}",
+                            hint="qq / bilibili / douyin")
+    return adapters[name]
+
+
+def _emit(payload: dict, *, as_json: bool = True) -> None:
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def _opener(peer: str, row: dict, args: argparse.Namespace) -> str:
+    """续火花说什么。优先让运行中的服务按人设生成，失败才用兜底短句。"""
+    if getattr(args, "text", ""):
+        return args.text
+    name = str(getattr(args, "peer_name", "") or "").strip()
+    prompt = (f"你想找{name or '对方'}说句话，随便聊一句，续上你们的连续聊天记录。"
+              f"你们已经连着聊了 {row.get('days', 1)} 天。只输出这一句话。")
+    try:
+        import urllib.request
+
+        body = json.dumps({
+            "model": "default",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 60, "session": "streak",
+            "aiji": {"remember": False, "tools": False},
+        }, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(
+            "http://127.0.0.1:8787/v1/chat/completions", data=body,
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=45) as r:
+            payload = json.loads(r.read().decode("utf-8", "replace"))
+        text = str(((payload.get("choices") or [{}])[0].get("message") or {})
+                   .get("content") or "").strip().strip('"')
+        if text and len(text) <= 80:
+            return text
+    except Exception:  # noqa: BLE001 - 服务不在就兜底
+        pass
+    return "在干嘛呀？"
+
+
+def cmd_social(args: argparse.Namespace) -> int:
+    """统一入口：`aiji social [platform] [action]`。"""
+    from aiji.heart.platforms import matrix, summary_lines
+    from aiji.heart.platforms.base import PlatformError
+
+    platform = (getattr(args, "platform", "") or "").strip().lower()
+    action = (getattr(args, "action", "") or "").strip().lower()
+
+    # 0) 三平台社交自检：目标里的六件事逐项判定 + 数真机成功次数
+    if platform == "selfcheck" or action == "selfcheck":
+        from aiji.heart.platforms import selfcheck
+
+        report = selfcheck.build_report(live=bool(getattr(args, "live", False)))
+        path = selfcheck.save(report)
+        if getattr(args, "as_json", False):
+            _emit({"ok": True, "path": str(path), "report": report})
+        else:
+            _emit({"ok": True, "path": str(path)})
+            print(selfcheck.render(report))
+        return 0
+
+    # 1) 能力矩阵（不连网也能看）
+    if not platform or action in ("", "matrix"):
+        data = matrix(_social_adapters(args), live=bool(getattr(args, "live", False)))
+        if getattr(args, "as_json", False):
+            _emit(data)
+        else:
+            _emit({"platforms": list(data["platforms"]),
+                   "actions": data["actions"]})
+            print("\n".join(summary_lines(data)))
+        return 0
+
+    # 2) 账本（跨平台，不需要适配器）
+    if action in ("streak", "streak-refresh") and platform != "douyin":
+        try:
+            m = _memory(args)
+        except Exception as exc:  # noqa: BLE001
+            raise PlatformError("db_unavailable", f"打不开库：{exc}") from exc
+        from aiji.heart.platforms import StreakBook, observe_turns
+        from aiji.heart.platforms.streak import day_of
+
+        book = StreakBook(m.db)
+        try:
+            if action == "streak-refresh":
+                out = observe_turns(book, m.db, platform=platform, days=3)
+                out["summary"] = book.summary()
+                _emit(out)
+                return 0
+            summary = book.summary()
+            summary["due"] = book.due(platform)
+            if not getattr(args, "touch", False):
+                _emit(summary)
+                return 0
+            keys = [str(r["peer"]) for r in summary["due"]]
+            if getattr(args, "peer", ""):
+                keys = [str(args.peer)]
+            adapter = _social_adapter(args)
+            from aiji.heart.platforms import streak_sweep
+
+            out = streak_sweep(
+                adapter, book, platform=platform, peers=keys,
+                message_for=lambda peer, row: _opener(peer, row, args),
+                limit=int(getattr(args, "limit", 5) or 5),
+                dry_run=not bool(getattr(args, "yes", False)))
+            out["day"] = day_of()
+            _emit(out)
+            return 0 if out["ok"] else 2
+        finally:
+            m.close()
+
+    # 3) 平台动作
+    try:
+        adapter = _social_adapter(args)
+    except PlatformError as exc:
+        _emit(exc.to_dict())
+        return 2
+
+    peer = str(getattr(args, "peer", "") or "")
+    text = str(getattr(args, "text", "") or "")
+    limit = int(getattr(args, "limit", 8) or 8)
+    try:
+        if action == "login":
+            state = adapter.login_state()
+            wait_s = float(getattr(args, "wait", 0) or 0)
+            if (not state.get("is_login")) and wait_s > 0 and hasattr(adapter, "begin_login"):
+                print(json.dumps({"stage": "waiting_for_scan", "qr": "data/temp/douyin-login.png",
+                                  "wait_s": wait_s}, ensure_ascii=False), file=sys.stderr)
+                state = adapter.begin_login(wait_s=wait_s)
+            _emit(state)
+            return 0
+        if action == "friends":
+            _emit({"ok": True, "friends": adapter.friends(limit=limit)})
+            return 0
+        if action == "groups":
+            _emit({"ok": True, "groups": adapter.groups(limit=limit)})
+            return 0
+        if action == "history":
+            kind = "group" if getattr(args, "group", False) else "friend"
+            _emit({"ok": True, "messages": adapter.history(kind, peer, count=limit)})
+            return 0
+        if action == "dm":
+            _emit(adapter.dm(peer, text).to_dict())
+            return 0
+        if action == "group":
+            _emit(adapter.group(peer, text).to_dict())
+            return 0
+        if action == "like":
+            _emit(adapter.like(peer or args.aid, dry_run=None,
+                               unlike=bool(getattr(args, "unlike", False))).to_dict())
+            return 0
+        if action == "create-group":
+            members = [x for x in (getattr(args, "members", "") or "").split(",") if x]
+            _emit(adapter.group_create(text or "玛卡巴卡的小群", members).to_dict())
+            return 0
+        if action == "comment":
+            _emit(adapter.comment(str(getattr(args, "url", "") or ""), text).to_dict())
+            return 0
+        if action == "streak":
+            # 抖音火花：每天一条私信（web 端消息计入火花，见 excluded#217）
+            _emit(adapter.streak(peer, text,
+                                 dry_run=not bool(getattr(args, "yes", False))).to_dict())
+            return 0
+        if action == "watch":
+            # 抖音群聊主动聊天：读群 → 让 aiji 想一句（和 QQ 同一套人格/记忆）→ 发
+            from aiji.heart.platforms import douyin_chat
+
+            group = peer or str(getattr(args, "peer_name", "") or "")
+            if getattr(args, "all", False):
+                # --all：扫所有会话（群 + 私聊），谁有新话回谁；每个会话独立限流
+                out = douyin_chat.run_all(
+                    adapter,
+                    ask=lambda t, s: douyin_chat.http_ask(
+                        t, session_id="douyin:peer:" + (s or "unknown"), sender=s),
+                    self_name="玛卡巴卡的小推车",
+                    dry_run=not bool(getattr(args, "yes", False)),
+                )
+                _emit({"ok": True, "platform": adapter.name, "action": "watch_all",
+                       **out})
+                return 0
+            if not group:
+                _emit({"ok": False, "code": "empty_peer",
+                       "error": "watch 需要 --peer <群名>（或 --all 扫全部会话）"})
+                return 2
+            session_id = f"douyin:group:{group}"
+            rounds = 1 if getattr(args, "once", False) else int(
+                getattr(args, "rounds", 1) or 1)
+            results = []
+            for i in range(rounds):
+                if i:
+                    time.sleep(float(getattr(args, "interval", 60) or 60))
+                results.append(douyin_chat.run_once(
+                    adapter, group,
+                    ask=lambda t, s: douyin_chat.http_ask(t, session_id=session_id,
+                                                          sender=s),
+                    dry_run=not bool(getattr(args, "yes", False))))
+            _emit({"ok": True, "platform": adapter.name, "action": "watch",
+                   "rounds": results})
+            return 0
+        if action in ("feed", "learn"):
+            rows = adapter.feed(limit)
+            if action == "feed" and not getattr(args, "learn", False):
+                _emit({"ok": True, "platform": adapter.name, "count": len(rows),
+                       "items": rows})
+                return 0
+            m = _memory(args)
+            try:
+                from aiji.heart.platforms import learn_feed
+
+                base = _ident(args)
+                ident = type(base)(adapter.name, base.platform_user_id, base.scope)
+                out = learn_feed(adapter, m, ident, limit=limit,
+                                 topic=str(getattr(args, "topic", "") or ""),
+                                 keyword=str(getattr(args, "topic", "") or ""))
+                _emit(out)
+                return 0
+            finally:
+                m.close()
+        raise PlatformError("bad_action", f"{adapter.name} 不支持动作 {action!r}",
+                            hint="matrix / friends / groups / dm / group / comment / "
+                                 "feed / learn / like / streak / login")
+    except PlatformError as exc:
+        _emit(exc.to_dict())
+        return 2
+    except AttributeError as exc:
+        _emit({"ok": False, "code": "unsupported",
+               "error": f"{adapter.name} 没有 {action} 这个动作（{exc}）"})
+        return 2
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -772,6 +1050,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("janitor", help="手动跑一轮代谢清理（输出统计）")
     sp.set_defaults(func=cmd_janitor)
 
+    sp = sub.add_parser("day", help="作息 / 日记 / 发布：plan | now | diary | publish")
+    sp.add_argument("what", choices=["plan", "now", "diary", "publish", "audit"])
+    sp.add_argument("--date", default="", help="日记日期 YYYY-MM-DD（默认今天）")
+    sp.add_argument("--file", default="", help="publish：视频文件路径")
+    sp.add_argument("--title", default="", help="publish：投稿标题")
+    sp.add_argument("--desc", default="", help="publish：简介")
+    sp.add_argument("--yes", action="store_true", help="publish：确认真传")
+    sp.add_argument("--json", dest="as_json", action="store_true")
+    sp.set_defaults(func=cmd_day)
+
     sp = sub.add_parser("self-memory", help="自我记忆：列表 / --add 写一条")
     sp.add_argument("--add", default="")
     sp.add_argument("--kind", default="pref")
@@ -798,6 +1086,41 @@ def build_parser() -> argparse.ArgumentParser:
                     help="先结算一次（默认也会结算，写下来只是让意图明显）")
     sp.set_defaults(func=cmd_grow)
 
+    sp = sub.add_parser(
+        "social",
+        help="三平台社交：能力矩阵 / 私聊群聊 / 发评论 / 刷视频学习 / 续火花（默认 dry-run）")
+    sp.add_argument("platform", nargs="?", default="",
+                    help="qq / bilibili / douyin（留空 = 打印能力矩阵）")
+    sp.add_argument("action", nargs="?", default="",
+                    help="matrix|login|friends|groups|history|dm|group|comment|"
+                         "feed|learn|like|create-group|streak|streak-refresh|watch")
+    sp.add_argument("--peer", default="", help="对方 user_id / group_id / mid / 昵称")
+    sp.add_argument("--text", default="", help="要发的话；续火花留空则由人设现生成")
+    sp.add_argument("--url", default="", help="评论目标（视频链接）")
+    sp.add_argument("--topic", default="", help="刷内容的关键词（抖音=搜索词）")
+    sp.add_argument("--limit", type=int, default=8)
+    sp.add_argument("--members", default="", help="建群成员，逗号分隔 QQ 号")
+    sp.add_argument("--aid", type=int, default=0, help="B 站点赞用")
+    sp.add_argument("--unlike", action="store_true", help="B 站取消点赞（like 的反向，用来做真机往返）")
+    sp.add_argument("--group", action="store_true", help="history：按群聊查")
+    sp.add_argument("--learn", action="store_true", help="feed 抓到内容后顺手写进记忆")
+    sp.add_argument("--live", action="store_true", help="矩阵里顺带查登录/传输状态")
+    sp.add_argument("--touch", action="store_true", help="streak：真的去续（默认只看）")
+    sp.add_argument("--all", action="store_true",
+                    help="watch：扫所有会话（群+私聊），谁有新话回谁")
+    sp.add_argument("--once", action="store_true",
+                    help="watch：只跑一轮（不写这个就按 --rounds 跑）")
+    sp.add_argument("--rounds", type=int, default=1, help="watch：跑几轮")
+    sp.add_argument("--interval", type=float, default=60.0, help="watch：轮次间隔（秒）")
+    sp.add_argument("--peer-name", dest="peer_name", default="")
+    sp.add_argument("--wait", type=float, default=0.0,
+                    help="login：等扫码的秒数（>0 才开有头窗口）")
+    sp.add_argument("--yes", action="store_true", help="确认真发（默认 dry-run）")
+    sp.add_argument("--json", dest="as_json", action="store_true")
+    sp.add_argument("--user", dest="user", default=None)
+    sp.add_argument("--scope", default=None)
+    sp.set_defaults(func=cmd_social)
+
     sp = sub.add_parser("bench", help="召回延迟压测")
     sp.add_argument("--facts", type=int, default=5000)
     sp.add_argument("--queries", type=int, default=200)
@@ -809,7 +1132,90 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _diary_ask(prompt: str) -> str:
+    """问本机的 aiji 服务写日记（走同一套人格/文风）；服务没起就返回空，回退模板。"""
+    import urllib.request
+
+    body = {"model": "aiji", "user": "diary", "stream": False,
+            "messages": [{"role": "user", "content": prompt}],
+            "aiji": {"tools": False, "history": False, "proactive": False}}
+    req = urllib.request.Request(
+        "http://127.0.0.1:8787/v1/chat/completions",
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(req, timeout=180) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return str(data["choices"][0]["message"]["content"] or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def cmd_day(args: Any) -> int:
+    """作息 / 当前在干嘛 / 今天的日记 / 发布。"""
+    from aiji.brain import day as day_mod
+    from aiji.brain import growth as growth_mod
+
+    stage = growth_mod.current().stage()
+    what = args.what
+    if what == "plan":
+        _emit({"ok": True, "stage": stage.id, "day": time.strftime("%Y-%m-%d"),
+               "blocks": day_mod.plan(stage_id=stage.id)})
+        return 0
+    if what == "now":
+        block = day_mod.current_block(stage_id=stage.id)
+        _emit({"ok": True, "stage": stage.id, "now": time.strftime("%H:%M"),
+               "doing": block["what"], "kind": block["kind"], "until": block["end"],
+               "left_min": block["left_min"], "talk": block["talk"]})
+        return 0
+    if what == "diary":
+        day_str = args.date or time.strftime("%Y-%m-%d")
+        material = day_mod.day_facts(_memory(args))
+        text = day_mod.llm_diary(material, stage_label=stage.label, day=day_str,
+                                 ask=_diary_ask)
+        path = day_mod.write_diary(text, day=day_str)
+        _emit({"ok": True, "day": day_str, "path": str(path), "chars": len(text),
+               "turns": material.get("turns", 0),
+               "facts": len(material.get("facts") or []), "preview": text[:160]})
+        return 0
+    if what == "audit":
+        import json as _json
+        from pathlib import Path as _P
+
+        report = day_mod.audit_sends()
+        out_dir = _P("data/audit")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"{report['day']}.json"
+        path.write_text(_json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+        _emit({"ok": True, **report, "path": str(path)})
+        return 0 if report.get("healthy") else 0
+    if what == "publish":
+        targets = day_mod.publish_targets()
+        if not args.file:
+            _emit({"ok": False, "code": "no_file", "targets": targets,
+                   "error": "publish 需要 --file <视频路径>（B 站能投稿，抖音没有投稿入口）"})
+            return 2
+        from aiji.throat import bili_client
+
+        out = bili_client.upload_video(
+            Path(args.file), args.title or f"{time.strftime('%Y-%m-%d')} 日记",
+            args.desc, dry_run=not bool(args.yes))
+        _emit({"ok": bool(getattr(out, "ok", True)), "platform": "bilibili",
+               "targets": targets, "detail": getattr(out, "detail", {})})
+        return 0
+    _emit({"ok": False, "code": "bad_what"})
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
+    # 中文 Windows 的 stdout 默认 GBK：打印 B 站标题（含 \xa0/emoji）会 UnicodeEncodeError
+    # 把整条命令打成 traceback。CLI 输出统一走 UTF-8（管道/文件也一致）。
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     args = build_parser().parse_args(argv)
     return int(args.func(args))
 

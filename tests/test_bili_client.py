@@ -94,7 +94,7 @@ class PostCommentTest(unittest.TestCase):
             resp.__exit__ = lambda s, *a: False
             return resp
 
-        with mock.patch.object(bc.urllib.request, "urlopen", fake_urlopen):
+        with mock.patch.object(bc.net, "urlopen", fake_urlopen):
             result = bc.post_comment(97630895, "你好呀", self.CRED,
                                      confirm=True, state_dir=root,
                                      now=1000.0)
@@ -126,7 +126,7 @@ class PostCommentTest(unittest.TestCase):
             resp.__enter__ = lambda s: s
             resp.__exit__ = lambda s, *a: False
             return resp
-        with mock.patch.object(bc.urllib.request, "urlopen", fake_urlopen):
+        with mock.patch.object(bc.net, "urlopen", fake_urlopen):
             result = bc.post_comment(1, "过会儿再发", self.CRED, confirm=True,
                                      state_dir=root, now=1100.0)
         self.assertTrue(result.ok)
@@ -141,7 +141,7 @@ class PostCommentTest(unittest.TestCase):
             resp.__exit__ = lambda s, *a: False
             return resp
 
-        with mock.patch.object(bc.urllib.request, "urlopen", fake_urlopen):
+        with mock.patch.object(bc.net, "urlopen", fake_urlopen):
             with self.assertRaises(bc.BiliError) as ctx:
                 bc.post_comment(1, "x", self.CRED, confirm=True, state_dir=root)
         self.assertEqual(ctx.exception.code, "comment_rejected")
@@ -253,7 +253,7 @@ class RestyleTest(unittest.TestCase):
             assert payload.get("aiji", {}).get("remember") is False
             return Resp({"choices": [{"message": {"content": '"哇好好看呀"'}}]})
 
-        with mock.patch.object(bc.urllib.request, "urlopen", fake_urlopen):
+        with mock.patch.object(bc.net, "urlopen", fake_urlopen):
             text, source = bc.restyle_comment("好看", endpoint="http://x")
         self.assertEqual(text, "哇好好看呀")
         self.assertEqual(source, "model")
