@@ -14,6 +14,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from aiji.brain import day as day_mod
+from aiji.brain import names as names_mod
 from aiji.brain import growth as growth_mod
 from aiji.brain import persona as persona_mod
 from aiji.brain import role_boundary
@@ -30,6 +32,30 @@ from aiji.hippocampus.store import Ident
 logger = logging.getLogger(__name__)
 
 FALLBACK_TEXT = "刚才没接上，等我一下。"
+
+
+def _dedupe_history(messages: list[dict[str, Any]], *, window: int = 20) -> list[dict[str, Any]]:
+    """保序去重：同一 (role, content) 在窗口内只留第一条。
+
+    镜像会把同一句话写两遍（平台身份一条 + 共享一条）；模型看到两遍，
+    就会煞有介事地说"你在学我说话、咱俩的词对半分了"，然后一直纠缠。
+    只动喂给模型的副本，不改数据库。
+    """
+    seen: dict[tuple[str, str], int] = {}
+    out: list[dict[str, Any]] = []
+    for msg in messages or []:
+        role = str(msg.get("role") or "")
+        text = str(msg.get("content") or "")
+        if role == "system":
+            out.append(msg)
+            continue
+        key = (role, text)
+        last = seen.get(key)
+        if last is not None and len(out) - last <= window:
+            continue
+        seen[key] = len(out)
+        out.append(msg)
+    return out
 
 
 @dataclass(slots=True)
@@ -250,7 +276,7 @@ class Head:
             max_items=base_items,
             mode="chat",
         )
-        persona_key = persona or getattr(self.memory.settings, "persona", "default")
+        persona_key = persona or None   # 旧人格已删除：不指定就按成长阶段
         # 成长引擎 v2：阶段由"学习量（学分）"决定，不看真实时间；
         # 每轮先结算一次增量（内部 60 秒节流），再从阶段渲染人格文案。
         growth_mod.configure(
@@ -264,7 +290,9 @@ class Head:
         persona_growth = growth_mod.current()
         persona_age = persona_growth.age_years()
         persona_stage = persona_growth.stage().id
-        persona_block = persona_mod.style_block(persona_key)
+        persona_key = persona or persona_growth.stage().id
+        persona_block = (persona_mod.style_block(persona) if persona
+                         else persona_growth.block())
         caller_name = ""
         preferred_name = ""
         if isinstance(extra, dict):
@@ -306,7 +334,9 @@ class Head:
             + (f"\n\n{persona_block}" if persona_block else "")
             + (f"\n\n{system_suffix}" if system_suffix else "")
             + self._life_prompt(life_snapshot)
-            + (f"\n\n{being_block}" if being_block else ""),
+            + (f"\n\n{being_block}" if being_block else "")
+            + (self._day_line(persona_stage))
+            + names_mod.names_line(),
         }]
         if injection.text.strip():
             system_messages.append({"role": "system", "content": injection.text})
@@ -319,7 +349,10 @@ class Head:
             })
         # 人格小样本只对 child 提供（sunba 明确不注入整句，避免复读语气模板）：
         # 放在系统消息之后、真实对话之前，只锚"声音"，内容仍按当轮生成。
-        persona_shots = persona_mod.few_shot(persona_key)
+        persona_shots = (persona_mod.few_shot(persona) if persona
+                         else persona_growth.few_shot())
+        # 见 _dedupe_history 的注释：镜像重复会让模型误判"对方在重复我"
+        normalized = _dedupe_history(normalized)
         assembled = system_messages + persona_shots + normalized
 
         tool_traces: list[dict[str, Any]] = []
@@ -496,7 +529,7 @@ class Head:
         # 2026-11-03 实测：只在 qq/wechat 修，API 入口会漏（14 岁档回
         # "我其实是个 AI，在扮演一个叫玛卡巴卡的角色"）。
         if (
-            persona_key in ("child", "sunba")
+            True  # 旧人格已删除：这条对所有身份都适用
             and role_boundary.contains_identity_disclosure(raw)
         ):
             raw = role_boundary.identity_repair(raw)
@@ -557,6 +590,20 @@ class Head:
             tool_traces=tool_traces,
             life=life_snapshot,
         )
+
+    def _day_line(self, stage_id: str = "") -> str:
+        """把"现在几点、这会儿在干嘛"写进提示词——上课就短回，晚上有空多聊。
+
+        作息由 `aiji/brain/day.py` 决定，这里只读不自己算。
+        """
+        try:
+            block = day_mod.current_block(stage_id=stage_id)
+        except Exception:  # noqa: BLE001
+            return ""
+        talk = {"none": "这会儿不方便多聊，回一两句就好",
+                "short": "只能短句回", "normal": "有空，可以正常聊"}.get(block.get("talk"), "")
+        return (f"\n\n## 现在\n{time.strftime('%H:%M')}，"
+                f"你正在：{block.get('what')}（到 {block.get('end')}）。{talk}。")
 
     @staticmethod
     def _needs_style_rewrite(text: str, query: str) -> bool:

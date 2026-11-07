@@ -1,3 +1,5 @@
+import os
+os.environ.setdefault("AIJI_SHARED_MEMORY", "0")  # 只测身份隔离/统计，不测共享镜像
 # -*- coding: utf-8 -*-
 """认知启发三件套单测：概率回忆（锚点稳定+跨桶换样）、2 跳联想、episodic 双轨。"""
 import sys
