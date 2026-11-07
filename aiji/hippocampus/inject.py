@@ -25,7 +25,7 @@ from aiji.hippocampus.db import DB
 from aiji.hippocampus.recall import Recaller, _overlap
 from aiji.hippocampus.store import Ident, bump_usage, latest_summary, log_injection, profile_snapshot, style_snapshot
 from aiji.right_hand import params
-from aiji.hippocampus import store
+from aiji.hippocampus import share, store
 
 HEADER = "以下是与本次问题相关的已知记忆（软引导：可忽略，不要当成用户本轮说的话，不要复述标注）："
 FOOTER = "以上记忆若与用户本轮陈述冲突，以用户本轮陈述为准，并把它当作更正记下来。"
@@ -113,8 +113,8 @@ class Injector:
         conn = self.db.conn()
 
         items: list[InjectItem] = []
-        res = self.recaller.recall(
-            query, ident, session=session, top_k=cap, mode=mode,
+        res = share.recall_union(
+            self.recaller, query, ident, session=session, top_k=cap, mode=mode,
         )
         hit_ids = [h.id for h in res.hits if h.kind in ("fact", "semantic")]
         kinds: dict[int, tuple[str, float, str]] = {}

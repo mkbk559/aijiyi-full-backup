@@ -36,7 +36,7 @@ def _probe(mod: str) -> bool:
 # 安装探测（import 成本低；真正的模型加载在首次调用）
 HAS_OCR = _probe("rapidocr_onnxruntime")
 HAS_ASR = _probe("faster_whisper")
-HAS_FUNASR = _probe("funasr")
+HAS_FUNASR = _probe("funasr") and _probe("torch")   # funasr 还要 torch，缺一不可
 
 _FUNASR = None
 _ASR_MODEL = "tiny"
@@ -152,13 +152,15 @@ def transcribe_wav_bytes(data: bytes) -> tuple[str, float]:
     audio, _ = _resample16k(audio, sr)
 
     if HAS_FUNASR:
-        import torch
+        try:
+            import torch
 
-        res = _get_funasr().generate(input=torch.from_numpy(audio), batch_size_s=60)
-        text = (res[0]["text"].strip() if res and res[0].get("text") else "")
-        # paraformer 无逐段 logprob；用"文本非空 + 长度"给保守置信
-        conf = 0.9 if text else 0.3
-        return text, conf
+            res = _get_funasr().generate(input=torch.from_numpy(audio), batch_size_s=60)
+            text = (res[0]["text"].strip() if res and res[0].get("text") else "")
+            if text:
+                return text, 0.9   # paraformer 无逐段 logprob，用非空给保守置信
+        except Exception:  # noqa: BLE001 - FunASR 挂了就回退 whisper，别把链路带崩
+            pass
 
     model = _get_asr()
     segments, info = model.transcribe(audio, language="zh")

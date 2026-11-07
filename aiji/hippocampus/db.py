@@ -31,7 +31,7 @@ from typing import Iterator
 
 from aiji.right_hand import params
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 # v10：角色自己的全局生活状态、事件轨迹和私密小本子。
 SCHEMA_V10 = """
@@ -423,6 +423,24 @@ CREATE INDEX IF NOT EXISTS idx_self_memory_ident
 """
 
 
+SCHEMA_V12 = """
+-- v12：社交连续性（"续火花"，2026-11-05 三平台社交闭环）
+-- 一次"互动"= 与某个 peer 发生了一轮真实来回（我们发或对方发都算），
+-- 连续天数按**本地日期**算；断一天就归零，但 best 留着（历史最长）。
+CREATE TABLE IF NOT EXISTS streak(
+  platform TEXT NOT NULL,
+  peer TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'friend',
+  last_day TEXT NOT NULL,
+  days INTEGER NOT NULL DEFAULT 1,
+  best INTEGER NOT NULL DEFAULT 1,
+  updated_at REAL NOT NULL,
+  PRIMARY KEY (platform, peer, kind)
+);
+CREATE INDEX IF NOT EXISTS idx_streak_last_day ON streak(platform, last_day);
+"""
+
+
 class DB:
     """每个线程一条连接；写事务全局串行。"""
 
@@ -487,7 +505,14 @@ class DB:
         self._migrate_v8_to_v9(c)
         self._migrate_v9_to_v10(c)
         self._migrate_v10_to_v11(c)
+        self._migrate_v11_to_v12(c)
         c.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        c.commit()
+
+    @staticmethod
+    def _migrate_v11_to_v12(c: sqlite3.Connection) -> None:
+        """v11 → v12：社交连续性账本（续火花）。只加表，不动既有表。"""
+        c.executescript(SCHEMA_V12)
         c.commit()
 
     @staticmethod

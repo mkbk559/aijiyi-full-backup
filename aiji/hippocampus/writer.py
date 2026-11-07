@@ -25,7 +25,7 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any
 
-from aiji.hippocampus import store
+from aiji.hippocampus import share, store
 from aiji.right_hand.config import Settings
 from aiji.hippocampus.db import DB
 from aiji.hippocampus.extract import Extraction, FactDraft, build_messages, build_summary_messages, heuristic, heuristic_summary, parse
@@ -250,7 +250,7 @@ class Writer:
         self._handle_text_offline(job)
         # 视频的知识兜底在关停路径同样要落（否则"关停兜底救回来的写入"
         # 反而少了可召回的 knowledge 行——103451 e2e 实测）。
-        self._video_knowledge_fallback(job, env.text)
+        self._knowledge_fallback(job, env.text)
 
     # ---- 提交（主链路：只做内存操作） ----
 
@@ -377,10 +377,10 @@ class Writer:
                 display_name, labels = self._account_labels(job.extra)
                 store.ensure_account(
                     c, job.ident, display_name=display_name, extra=labels)
-                store.add_turn(c, job.ident, job.session, "user", job.text,
-                               extra=job.extra)
-                store.add_turn(c, job.ident, job.session, "assistant",
-                               str(job.extra.get("assistant") or ""))
+                share.add_turn_pair(c, store, job.ident, job.session, "user", job.text,
+                                    extra=job.extra)
+                share.add_turn_pair(c, store, job.ident, job.session, "assistant",
+                                    str(job.extra.get("assistant") or ""))
             self._bump(job.ident, job.session, "user")
             if job.text.strip():
                 self._ingest(job.text, job.ident, job.session)
@@ -396,7 +396,8 @@ class Writer:
                     c, job.ident, job.session, external_id,
                 ) is not None:
                     return
-                store.add_turn(c, job.ident, job.session, job.role, job.text, extra=job.extra)
+                share.add_turn_pair(c, store, job.ident, job.session, job.role,
+                                    job.text, extra=job.extra)
             self._bump(job.ident, job.session, job.role)
         if job.text.strip():
             self._ingest(
@@ -432,24 +433,40 @@ class Writer:
         # 视频是**第三方知识源**（标题/UP主/简介），不是用户的个人事实：
         # 模型抽取常判"没有可抽的用户事实"（实测 agent2api 返回空 facts），
         # 但学到的内容必须可召回——再落一条 knowledge fact 兜底。
-        self._video_knowledge_fallback(job, env.text)
+        self._knowledge_fallback(job, env.text)
         self._maybe_summarize(job.ident, job.session)
 
-    def _video_knowledge_fallback(self, job: "Job", text: str) -> None:
-        """视频学习内容的 knowledge 兜底（主路径与关停兜底路径共用，勿复制）。"""
+    def _knowledge_fallback(self, job: "Job", text: str) -> None:
+        """第三方知识源的 knowledge 兜底（主路径与关停兜底路径共用，勿复制）。
+
+        两类来源：
+        - `kind="video"` + `extra["video_info"]`：看视频学习（2026-11-04）；
+        - `extra["learn"]=True`：刷内容学习（B 站排行榜/抖音推荐，2026-11-05）。
+          这两类内容的共同点是"不是用户说的话"，模型抽取常判"没有用户事实"，
+          但学到的内容必须可召回——所以统一落一条 knowledge fact。
+        """
         item = job.item
-        if item is None or item.kind != "video":
+        if item is None:
             return
-        if not isinstance(item.extra.get("video_info"), dict):
+        if item.kind != "video" and not item.extra.get("learn"):
             return
-        info = item.extra["video_info"]
-        subject = str(info.get("uploader") or info.get("video_id") or "视频")[:40]
+        info = item.extra.get("video_info")
+        if not isinstance(info, dict):
+            if not item.extra.get("learn"):
+                return
+            info = {}
+        subject = str(
+            info.get("uploader") or info.get("video_id")
+            or item.extra.get("source") or "刷到的内容")[:40]
         body = text or ""
+        if not body.strip():
+            return
         with self.db.tx() as c:
             store.add_fact(c, job.ident, FactDraft(
-                subject=subject, predicate="视频", object=body[:200],
+                subject=subject, predicate="视频" if item.kind == "video" else "刷到的内容",
+                object=body[:200],
                 text=body[:500], confidence=0.6, kind="knowledge",
-            ), source=f"video:{item.ref}", source_kind="ingest")
+            ), source=f"{item.kind}:{item.ref}", source_kind="ingest")
 
     def _ambient_backlog(self, ident: Ident) -> bool:
         return (

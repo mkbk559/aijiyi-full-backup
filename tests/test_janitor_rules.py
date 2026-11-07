@@ -1,3 +1,5 @@
+import os
+os.environ.setdefault("AIJI_SHARED_MEMORY", "0")  # 只测身份隔离/统计，不测共享镜像
 """janitor 的两条**数据正确性**规则（去重合并 / 关联边封顶）——原先未覆盖。
 
 它们真的会改数据（软删 + 吸收 mentions / 删多余边），错一次就是记忆丢失，

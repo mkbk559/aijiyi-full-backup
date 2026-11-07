@@ -203,7 +203,7 @@ class TestIdentityStore(TmpDB):
             dy = [f.text for f in search_facts(d.conn(), DY, "住")]
             self.assertEqual(wx, ["用户住在上海"])
             self.assertEqual(dy, ["用户住在成都"])
-            self.assertEqual(d.read("SELECT COUNT(*) c FROM fact WHERE status='active'")[0]["c"], 2)
+            self.assertEqual(d.read("SELECT COUNT(*) c FROM fact WHERE status='active' AND platform<>'shared'")[0]["c"], 2)
             d.close()
         finally:
             d.close()
@@ -1193,7 +1193,7 @@ class TestReconcile(TmpDB):
             with d.tx() as c:
                 _, old = add_fact(c, DY, FactDraft("user", "居住地", "成都", "用户住在成都"))
             self.assertEqual(old, [])
-            self.assertEqual(d.read("SELECT COUNT(*) c FROM fact WHERE status='active'")[0]["c"], 2)
+            self.assertEqual(d.read("SELECT COUNT(*) c FROM fact WHERE status='active' AND platform<>'shared'")[0]["c"], 2)
         finally:
             d.close()
 

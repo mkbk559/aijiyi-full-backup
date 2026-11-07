@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import os
 import sqlite3
 import time
 from dataclasses import dataclass, field
@@ -369,7 +370,42 @@ def fact_keys(
     return keys[:max_keys]
 
 
+# 跨平台共享记忆（决策见 docs/agent/design/memory-sharing-2026-11-05.md）：
+# 主人自己的事实在平台身份之外**镜像**一份到 shared，这样 QQ 能想起抖音说过的话。
+SHARED_IDENT = Ident("shared", "owner", "global")
+_SHARE_FROM = ("qq", "douyin", "bilibili", "local")
+
+
 def add_fact(
+    conn: sqlite3.Connection,
+    ident: Ident,
+    draft: FactDraft,
+    *,
+    source: str = "",
+    source_kind: str = "model",
+    now: float | None = None,
+) -> tuple[int, list[int]]:
+    """写事实 + 镜像到 shared（镜像失败不影响主写入）。"""
+    out = _add_fact_impl(conn, ident, draft, source=source,
+                         source_kind=source_kind, now=now)
+    if (os.environ.get("AIJI_SHARED_MEMORY", "1") != "0"
+            and ident.platform in _SHARE_FROM
+            and ident.platform != SHARED_IDENT.platform):
+        try:
+            mirrored = FactDraft(
+                subject=draft.subject, predicate=draft.predicate,
+                object=draft.object, text=draft.text,
+                confidence=draft.confidence, kind=draft.kind,
+                extra=dict(draft.extra or {}, shared_from=ident.platform),
+            )
+            _add_fact_impl(conn, SHARED_IDENT, mirrored, source=source,
+                           source_kind="shared_mirror", now=now)
+        except Exception:  # noqa: BLE001 - 镜像只是加法，坏了不能拖垮主写入
+            pass
+    return out
+
+
+def _add_fact_impl(
     conn: sqlite3.Connection,
     ident: Ident,
     draft: FactDraft,

@@ -253,17 +253,32 @@ class Recognizers:
 
     def _link(self, item: Item) -> Envelope:
         url = item.url or item.text or ""
+        # 2026-11-05：调用方已经合成好文本时（刷内容学习：一批视频的标题+简介摘要），
+        # **不能**再拿页面标题顶掉它——这正是 excluded #165（_video 丢调用方文本）
+        # 的同一类 bug，只不过发生在 link 上：731 字的学习文本进库变成 0 字。
+        caller = (item.text or "").strip()
         if not url.startswith(("http://", "https://")):
             return Envelope("link", item.ref, "", 0.0, "unsupported", "link",
                             meta={"reason": "not_a_url"})
+        title = ""
+        guard_error = ""
         try:
             validate_public_http_url(url, resolver=self.resolver)
+            page = _timed(lambda: self.fetcher(url), self.timeout_s)
+            m = _TITLE_RE.search(page or "")
+            title = html.unescape(re.sub(r"\s+", " ", m.group(1)).strip()) if m else ""
         except UrlGuardError as exc:
+            guard_error = exc.code
+        except Exception as exc:  # noqa: BLE001 - 取标题失败不该拖垮已有文本
+            guard_error = type(exc).__name__
+        if caller:
+            text = caller if not title or title in caller else f"{title}\n{caller}"
+            return Envelope("link", item.ref, text, 0.9, "ok", "caller-text",
+                            meta={"url": url, "title": title,
+                                  **({"fetch_error": guard_error} if guard_error else {})})
+        if guard_error:
             return Envelope("link", item.ref, "", 0.0, "error", "link",
-                            meta={"reason": exc.code, "url": url})
-        page = _timed(lambda: self.fetcher(url), self.timeout_s)
-        m = _TITLE_RE.search(page or "")
-        title = html.unescape(re.sub(r"\s+", " ", m.group(1)).strip()) if m else ""
+                            meta={"reason": guard_error, "url": url})
         if not title:
             return Envelope("link", item.ref, "", 0.0, "error", "link",
                             meta={"reason": "no_title", "url": url})

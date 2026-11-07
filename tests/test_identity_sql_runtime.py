@@ -6,6 +6,8 @@
 这里直接挂 `set_trace_callback`，看的是**真正执行**的语句。
 """
 from __future__ import annotations
+import os
+os.environ.setdefault("AIJI_SHARED_MEMORY", "0")  # 只测身份隔离/统计，不测共享镜像
 
 import pathlib
 import re
