@@ -1,5 +1,7 @@
 """硬缺口验证：cited_ids 作用域正确性 + injection 口径 + 软删读路径一致性。"""
 from __future__ import annotations
+import os
+os.environ.setdefault("AIJI_SHARED_MEMORY", "0")  # 只测身份隔离/统计，不测共享镜像
 
 import sys
 import unittest

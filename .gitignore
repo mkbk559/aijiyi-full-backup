@@ -33,3 +33,8 @@ config/runtime.json
 
 # Vision Router 会话产物（截图/二维码等，会话态不入库）
 .dsh-vision-router/
+
+# 误在仓库根创建的 ~ 目录（真实主目录的镜像，勿删勿提交）
+~/
+.audit_secrets.txt
+10jdte6e

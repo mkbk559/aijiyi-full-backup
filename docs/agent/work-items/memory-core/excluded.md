@@ -1538,3 +1538,517 @@ AIJI_QQ_SPLIT_REPLY 默认 0→1、MIN_CHARS 60→30（长句一条发→按句�
    新增 web_search（Bing 免 key）/fetch_url（net_guard 校验+HTML转文本）/
    bili_search（B 站 api+完整浏览器头防 412）。全只读免审批。真机 4/4 绿。
    MCP 研究循环（mcp_research）是后台任务不是对话工具，已在跑。
+
+## 185. "Edge headless 在本机不可用"（旧结论）——**已推翻**（2026-11-05）
+
+旧档案说本机 Edge headless 被沙箱 ACL 拦住，`console_render` 因此长期红。真相是
+**只有 `--dump-dom` 那条路会挂**（`--headless=new` 起得来但 120s 不返回），
+换成 Playwright 驱动同一个 msedge：2.5s 渲染完、11 个导航、`js_ran=true`。
+**教训：把"某工具不可用"升级成"某能力不可用"之前，先换驱动再下结论。**
+
+## 186. Playwright 报 `EPERM ... mkdtemp '...\AppData\Local\Temp\playwright-artifacts-*'`
+
+不是浏览器问题，是**沙箱对用户 %TEMP% 没有 ACL**。把 `TEMP/TMP/TMPDIR` 指到
+`D:\AIJiYi\.tmp\pwtmp` 就好（`aiji/left_hand/browser.py::_prepare_temp` 与
+`tools/archcheck/console_render.py::_prepare_temp` 都这么做）。
+另一个必须的开关是 `--no-proxy-server`：全局 `HTTP_PROXY=127.0.0.1:7897`（Clash）没开时，
+Chromium 会把**所有请求**交给死代理 → 页面白屏 / `ERR_CONNECTION_REFUSED`。
+
+## 187. `Memory.ingest(kind="link")` 会丢调用方文本（#165 的 link 版）
+
+`recognize._link` 只抓页面 `<title>`，`item.text` 直接丢掉。后果：刷内容学习的 731 字
+进库变 0 字，`media.text` 空、`fact` 空，看起来"学了个寂寞"。已修：caller text 优先，
+标题只进 meta。**同族 bug 出现两次，说明"识别器重建文本"是系统性陷阱——新增 kind 先看这条。**
+
+## 188. ingest 不写 `turn`（所以"刷内容学习"必须知识兜底）
+
+`writer._handle_ingest` → `store.apply_extraction`，只落 `media` + `fact`，**没有 turn**。
+模型对第三方内容常判"没有用户事实"→ 0 fact → 召回为空。已把
+`_video_knowledge_fallback` 扩成 `_knowledge_fallback`（`extra["learn"]=True` 触发），
+刷 B 站内容因此有 1 条 knowledge fact 可召回。
+
+## 189. B 站排行榜裸调会 `code=-352`（风控），带登录 cookie 就正常
+
+2026-11-05 实测：无 cookie 连打 `ranking/v2` → `-352`；带 jar 里的 `buvid3/b_nut` → 200。
+所以 `ranking()` 现在接受 `cookie=`，被拒时退到 `popular`。同时发现 `bili_client` 用
+**裸 urllib** 会吃环境死代理（10061），已统一改走 `aiji.net`。
+
+## 190. 抖音 headless **不是**完全打不开——能开首页，但拿不到 feed 卡片
+
+实测：headless 打开 `douyin.com` 被重定向到 `/jingxuan`，`__ac_nonce/__ac_signature`
+都拿到了，DOM 1MB（壳渲染成功），但 `a[href*="/video"]` = 0、`data-e2e` 里只有
+导航/搜索/IM 入口 → **登录墙**。别再假设"headless 被验证页拦"，那是另一种情况；
+现在"0 卡片"会抛 `empty_feed` 并留截图，不再静默返回 `ok:true, count:0`。
+
+## 191. QQ 发消息不通的两个独立原因（别混）
+
+1. NapCat 的 `onebot11_*.json` 里 `httpServers.enable=true port=3000`，但**当前进程
+   没监听 3000**（上次监听是 11-04 20:44 那次会话）；
+2. QQ 现在停在**扫码登录页**（`D:\NapCat\shell\cache\qrcode.png` 10:02 还在刷新）。
+登录态一恢复，ws 与 3000 会一起回来。
+**"配置写了" ≠ "端口在听" ≠ "账号在线"，三层必须分别验证。**
+
+## 192. `Ident` 是冻结 dataclass，`ident.platform = x` 抛 `cannot assign to field`
+
+CLI 里按平台改身份必须重建：`type(base)(platform, uid, scope)`。而且这个异常会被
+`except AttributeError` 吞成"没有 feed 这个动作"（很误导）——所以 `cmd_social`
+现在把 AttributeError 单独翻译成 `unsupported` 并带原文。
+
+## 193. B 站"取消点赞"没有可用接口（`like=0` 恒 -400）
+
+2026-11-05 真号实测（全部原始响应已归档 `103502-bili-unlike-raw-*`、`103521-bili-unlike-candidates-*`）：
+
+| 请求 | 结果 |
+|---|---|
+| `POST x/web-interface/archive/like` `like=1` | `0`（第一次）/ `65006 重复操作`（第二次） |
+| `POST x/web-interface/archive/like` `like=0` | `-400 请求错误` |
+| `POST x/web-interface/archive/like/cancel` | `404` |
+| `POST x/v2/view/like/cancel` | `404` |
+| `app.bilibili.com/x/v2/view/like` `like=0` | `-101 账号未登录`（要 access_key） |
+
+**结论：B 站侧只能点赞、不能撤**（至少在只有 cookie 的 web 身份下）。
+适配器对 `unlike` 直接 `unsupported`。副作用：那次真机点赞留在了
+Av117547064168920 上，撤不掉——写动作真机验证要选"可接受残留"的对象。
+
+## 194. 旧点赞接口 `x/v2/view/like` 已 404
+
+现行是 `x/web-interface/archive/like`（表单 `aid` + `like` + `csrf`）。
+**凡是"接口已接但没真调过"的地方，先假设 URL 可能已过期**——这次就是 404 而不是参数错。
+
+## 195. 这台机器"桌面不渲染"：抓屏纯黑，但窗口 API 正常
+
+`show_qq_login.ps1` 把 QQ 主窗（hwnd 197750）从 `visible=false` 变成 `visible=true`，
+`gui_windows` 也能看到它；但 `CopyFromScreen` 与 `PrintWindow` 抓出来都是近纯黑
+（8 种颜色、均值 16）——说明当前**没有可用的桌面渲染**（锁屏/未连接/显示器关）。
+**所以"让用户在窗口里扫二维码"这条路走不通**，只能把二维码 PNG 贴进聊天让手机扫。
+`tools/snapshot_window.ps1` / `tools/print_window.ps1` 保留，等桌面恢复后仍可用。
+
+## 197. 抖音"发评论"：直连视频页里根本没有输入框
+
+2026-11-05 登录态就绪后实测（`is_login:true, cookies_seen:52`）：
+
+| 位置 | `contenteditable` 数量 | 结果 |
+|---|---|---|
+| `https://www.douyin.com/video/<id>` 直连 | 0 | 只有 `feed-comment-icon`、`comment-list`（能读评论），没有输入框 |
+| 首页 `/hot` 点卡片 → `?modal_id=…` 弹窗 | 0 | 同样只有 `feed-comment-icon` |
+| 点 `feed-comment-icon` 之后 | 0 | 面板没打开，DOM 里连 `comment-input` 都没出现 |
+
+所以 `_post_comment` 的前置不是"找输入框"，而是还得先让抖音把评论面板渲染出来
+（可能是 shadow DOM、也可能要滚到评论区底部、或者账号没绑手机不给评论）。
+**别再用"加大等待时间"这条路**——两次 5s/6s 都试过了。
+
+更新（同日 11:2x）：查到了真正的门槛——评论容器叫
+**`comment-input-un-login-container`**（"un-login" 字面意思），也就是说
+**抖音前端认为这个会话没登录**，压根不渲染输入框。所以问题不在选择器。
+
+## 200. 抖音登录"cookie 假阳性"：`is_login:true` 是假的
+
+2026-11-05 11:04 用户扫码后判定 `is_login:true, cookies_seen:52`，cookie 里
+`sessionid / sessionid_ss / sid_tt / uid_tt / sid_guard / login_time` 全都在
+（有效期到当晚），但**页面右上角仍然渲染 6 个可见的"登录"按钮**，
+评论区是 `comment-input-un-login-container`。
+
+→ 结论：**只看 cookie 名会撒谎**。登录判定必须带功能信号，
+现在 `_login_from()` 返回 `{is_login: cookie_ok AND login_buttons==0, cookie_ok, login_buttons}`，
+`begin_login()` 的轮询也改成"cookie + 0 个可见登录按钮"才算成功。
+（真·登录时要用户手机上点"确认登录"，只扫码不确认就会留下这种半登录 cookie。）
+
+## 201. headless 抓到的"抖音二维码"是 300x150 纯黑 canvas
+
+`_GRAB_QR_JS` 的 canvas 兜底抓到过一张 300x150、**均值 0、只有 1 种颜色**的图，
+存成 PNG 只有 1572 字节——看着像图，扫不了。现在落盘前过 `_looks_like_qr()`：
+尺寸 ≥120、宽高比接近 1:1、≥2 种颜色、灰度跨度 >64。
+
+## 202. Edge 退出码 21 = profile 被残留进程占着（"双击 bat 一闪就没"的真因）
+
+`launch_persistent_context` 报 `Target page, context or browser has been closed`，
+浏览器日志里 `process did exit: exitCode=21`。根因是上一次**有头**会话留下的
+`msedge.exe` 还握着 `data/browser/douyin`，连 `lockfile` 都在。
+本仓库已有 `browser.reap_profile()`（先杀占用该 profile 的 msedge，再删
+lockfile/SingletonLock/SingletonCookie），`BrowserSession.start()` 已经调它。
+
+⚠️ 副作用：**两个会话同时跑同一个 profile 会互相杀**（A 的 reap 把 B 的浏览器收掉），
+表现是 `TargetClosedError: Target page, context or browser has been closed`。
+所以同一时刻只让一个进程用 `douyin` profile。
+
+## 198. 用户反馈"login_douyin.bat 打不开、扫码不了"的真实原因
+
+不是脚本坏了：从我这侧跑 `social douyin login --wait 20` 是**成功**的
+（浏览器起来了，`cookies_seen:29`，截图 `data/temp/playwright/douyin-login.png`
+27748 种颜色，说明页面真的在渲染）。
+
+问题在**窗口里停的是抖音首页**，二维码要自己点"登录"才会出来，用户看到首页自然
+"没法扫码"。改法：`begin_login` 现在自动点开登录弹窗、把二维码抠成
+`data/temp/douyin-qr.png` 一起返回；人只要扫码，不用找按钮。
+
+## 199. 抖音 feed 会偶发 `empty_feed`（登录窗口刚关掉时）
+
+11:04 那次 `feed` 两个入口都 0 卡片，紧接着 11:06 再跑就正常（4 条）。
+差别是**上一次有头登录会话刚结束、profile 还被占用**。所以见到 `empty_feed`
+先重跑一次，别急着改选择器。
+
+## 196. Windows PowerShell 5.1 读无 BOM 的 .ps1 按 ANSI/GBK 解析
+
+带中文注释的脚本会报 `The string is missing the terminator`（引号被 GBK 拆坏）。
+**工具脚本一律 ASCII-only**，或者写成 UTF-8 with BOM。这条坑了 `show_qq_login.ps1` 两次。
+
+## 200. "cookie 里有 sessionid" 不等于"抖音认这个登录"
+
+2026-11-05 扫码后 `login_state()` 只看 cookie 名就报了 `is_login:true, cookies_seen:52`，
+但紧接着视频页 `document.body.innerText` 里明晃晃写着 **请先登录后发表评论**，
+容器 class 还是 `comment-input-un-login-cont`，首页同时渲染 6 个"登录"按钮。
+→ 判定登录必须**两个信号都满足**：登录类 cookie 存在 **且** 可见"登录"按钮数为 0。
+现在 `_login_from()` 就是这么算的（`login_buttons` 字段进返回值），别再只看 cookie。
+
+## 201. 有头会话残留的 `msedge.exe` 会锁死 profile（用户报的"bat 打不开"）
+
+症状：第一次有头会话正常；第二次 `launch_persistent_context` 要么立刻
+`Target page, context or browser has been closed`（Edge 退出码 **21**），要么干等
+**180s 超时**。根因是上一次的 Edge 进程没退出，仍然握着 `user-data-dir`
+（目录里 `lockfile` 也还在）。
+→ 已修：`BrowserSession.start()` 前 / `stop()` 后各跑一次 `reap_profile()`
+（PowerShell 查 `Win32_Process` 命令行里带该 profile 路径的 msedge 全杀，再删
+`lockfile`/`SingletonLock`/`SingletonCookie`），并且 launch 失败时清一次重试。
+证据：一次启动直接清掉 **10 个** 残留进程；`tests/test_browser_session.py` 3 条离线断言。
+**别再手工 `Stop-Process` 之后再跑**——交给 `reap_profile`。
+
+## 202. 抖音评论：`feed-comment-icon` 点不开，输入框不在 DOM
+
+直连 `https://www.douyin.com/video/<id>`（登录态已确认 `login_buttons=0`）时：
+
+| 动作 | 结果 |
+|---|---|
+| `querySelectorAll('[contenteditable="true"],textarea,[data-e2e="comment-input"]')` | **0 个** |
+| JS `el.click()` 点 `feed-comment-icon` | 返回 clicked，但面板不出现，input 依旧 0 |
+| Playwright `page.click('[data-e2e="feed-comment-icon"]', force=True)` | **Element is not visible** |
+
+→ 说明这个图标在直连页里没有布局（可能要求播放器进入某种状态，或要更大的 viewport）。
+下一步别再在直连页死磕：改走 **搜索页/首页点卡片进 `?modal_id=` 弹窗**，
+或把 viewport 拉到 1600×1000 让图标真正进可视区。
+
+## 203. 抖音 `/user/self` 会把页面直接搞崩
+
+访问 `https://www.douyin.com/user/self` 时 Playwright 抛
+`TargetClosedError: Target page, context or browser has been closed`（页面自杀）。
+**别用这个 URL 判登录态**，用首页的"登录按钮数"。
+
+## 204. 抖音搜索页点卡片 = 页面自杀；`/hot` 点卡片才是同页 modal
+
+- `https://www.douyin.com/search/…?type=video` 里 `a[href*="/video/"].click()` 之后
+  无论切到新 page 还是留在旧 page，都会 `TargetClosedError`（11:34 两次复现）。
+- `https://www.douyin.com/hot` 里同样点击则**正常**弹出 `?modal_id=…` 弹层，同一 page 可用。
+→ 抖音要"打开某个视频"，入口固定用 `/hot`（或信息流），**不要用搜索页**。
+
+## 205. 抖音连续自动化探测会让 `/hot` 也变空（风控冷却约 2 分钟）
+
+11:30–11:38 连续跑了 6~7 次浏览器探测（含 1600×1000 viewport、多次点击），
+`/hot` 与 `/` 两个入口同时返回 0 卡片（`empty_feed`），11:40 再跑就恢复 3 条。
+→ 不是选择器坏了，是**被冷却了**。连续探测要限速；见到空结果先等 1~2 分钟再判死。
+
+## 206. NapCat 没有"创建 QQ 群"的 API（自建群只能人工）
+
+在 `D:\NapCat\shell\napcat.mjs` 里搜 `create_group`，命中的只有：
+`create_group_file_folder`（群文件目录）、`allow_member_create_group`（群设置项）；
+OneBot 11 标准动作表里也没有建群。
+→ `group_create` 对 QQ 永久保持 `unsupported`，**建群是纯人工步骤**（手机 QQ 里建，再把小肥鱼拉进去）。
+
+## 207. 抖音 web 端根本不渲染评论输入框（不是选择器问题）
+
+2026-11-05 登录态已确认（`login_buttons=0`）后，把能想到的路都走了一遍：
+
+| 场景 | 动作 | `[contenteditable]/textarea` 数量 |
+|---|---|---|
+| 直连 `/video/<id>` | 什么都不做 | 0 |
+| 直连 `/video/<id>` | JS `feed-comment-icon.click()` | 0 |
+| 直连 `/video/<id>` | Playwright 真鼠标点图标 | 报 `Element is not visible` |
+| `/hot` → 卡片 → `?modal_id=` 弹层 | 停下来看 | 0（而且 `comment-list` 也是 null） |
+| `/hot` 弹层 | JS 点可见的图标 | 0 |
+| `/hot` 弹层 | Playwright 真鼠标点图标 | 点了不报错，但 DOM 里还是 0 |
+| 弹层里把评论列表滚到底 | 滚 4 轮 | 0 |
+
+网络侧同时抓到的（证明不是加载失败）：`aweme/v1/web/comment/list/` **200**、
+`aweme/v1/web/im/user/info/` **200**，控制台只有 `ERR_FAILED` 的静态资源报错。
+→ 评论**列表**能拿到，**输入框**就是不建。最可能是账号侧限制
+（未绑手机/实名，或该账号类型不给 PC 端评论），这属于**人工步骤**：
+在抖音 App 里确认该账号能不能评论。代码侧 `notes()` 已写明，别再改选择器重试。
+
+## 208. 抖音私信在 web 上是个空壳
+
+打开 `https://www.douyin.com/chat`（登录态已确认）：`document.title` 空、
+`body.innerText` 只有 `开启读屏标签 | 读屏标签已关闭 | 抖音聊天`，
+会话条目 **0**、`[contenteditable]/textarea` **0**。
+→ 抖音私信只在 App 内，网页端没有可用入口。`notes()["dm"]` 已改成这句话。
+
+
+## 209. 抖音评论框**确实能打开**（draft.js），但整页没有"发送"控件
+
+承接 #207：那条结论是"输入框不建"。11:31 又抓到更精确的一层，
+说明**输入框能建出来，卡的是发布**：
+
+| 动作 | 结果 |
+|---|---|
+| 真鼠标点 `.comment-input-inner-container`（"留下你的精彩评论吧"占位块） | ✅ 出现 `DIV.notranslate.public-DraftEditor-content`（**draft.js**） |
+| `page.keyboard.type("…")` | ✅ 编辑框读回一字不差（`typed` 字段已验证） |
+| 编辑框右侧 `commentInput-right-ct` | 只有 3 个 36×36 图标（表情 / @ / 图片），**没有发送按钮** |
+| 全站找可见的"发送 / 发布"文本节点 | 0 个 |
+| 按 Enter | ❌ 编辑框内容不变（`cleared:false`）、无 toast、评论数 10→10 |
+
+→ 所以 `COMMENT_INPUT` 现在首选 `.public-DraftEditor-content`、`COMMENT_OPEN` 首选
+`.comment-input-inner-container`（都已落地），**打字这一步是真通的**；
+发布这一步在 PC 网页版没有入口，和 #207 的账号侧结论一致。
+
+## 210. "写成功"的判定必须有第二个独立信号
+
+`_post_comment` 返回 `sent:true` 只代表"点了某个东西"，不代表发出去了。
+本次用视频信息区那组数字（点赞/评论/收藏/分享 = 787/10/150/22）做交叉判断：
+发完之后评论数仍是 10 → 没发出去。**所有写动作都要找第二个信号**
+（评论数、历史回读、message_id），别信自己那张回执。
+
+## 211. `data/platform_actions.jsonl` 里的"神秘 `qq dm key=1 text=hi`"是我们自己的测试
+
+绕了很久（一度怀疑有隐藏调度器）：每跑一次 `python -m unittest tests.test_platform_layer`
+就往**生产**账本追加 1~2 行
+`{"platform":"qq","action":"dm","key":"1","text":"hi","ok":false,"code":"transport_down"}`。
+
+根因：`test_build_without_onebot_reports_transport_down` 调的是
+`build(runtime={}, dry_run=False)`，而 `make_guard` 默认把日志指到
+`ACTION_LOG = data/platform_actions.jsonl` —— 测试动作写进了生产账本。
+
+修法（两层）：
+1. `registry._action_log()` 支持 `AIJI_ACTION_LOG` 覆盖；测试模块在 import registry
+   **之前**把它指到 `.tmp/platform_actions_test.jsonl`；
+2. 那条用例显式传 `log_path`，并断言行确实写在 `.tmp`。
+
+验证：跑完整个平台层测试后，生产账本**字节数 8651 → 8651 未变**。
+
+## 212. 回读校验如果查 `document.body.innerText`，会把自己刚打的草稿字算进去
+
+给抖音评论加回读校验时踩的第二个坑：`_comment_visible` 第一版查全文 innerText，
+而这句话此时**正躺在草稿框里**，于是"根本没发出去"依然判 `verified: true`
+（真机 11:56 复现）。改成只查 `[data-e2e="comment-list"]` 里的文字才对。
+→ 写动作的回读一定要**限定在结果区**，不能查全文。
+
+## 211. 抖音点赞是"UI 假成功"：数字会变，刷新就回滚
+
+2026-11-05 12:0x 真机：点 `[data-e2e="video-player-digg"]` 之后
+赞数 **787 → 788**（`route: js`，回执看起来完美）。但：
+
+| 检查 | 结果 |
+|---|---|
+| 同页读回 | 788 ✅ |
+| **重新打开这个视频** | **787** ❌（回滚了） |
+| `我的 - 喜欢`（`/user/self?showTab=like`） | 7 条旧视频里**没有**这条 ❌ |
+
+→ 抖音 PC 网页的点赞只改了前端数字，没落地。所以：
+- `like()` 现在必须"**点完再重载一次、数字仍然是新的**"才算成功，
+  否则抛 `like_not_persisted`（code 可判，不假装成功）；
+- capabilities 里 `like` 保持 `experimental`，notes 写明"刷新回落、喜欢列表没有"。
+
+这也是 #210 那条规矩的第二次实战：**回执 + 当场界面变化都可能是假的**，
+第二个独立信号（重载后的值 / 服务端列表）才作数。
+
+## 212. 主动聊天的证据以前"只在控制台里"，而且会被单测污染
+
+发现两件事：
+
+1. AstrBot 的日志只打到控制台窗口（`data/logs/astrbot.out.log` 根本不存在），
+   所以"主动聊天到底发没发"从前只能靠人去翻窗口 —— 这不满足"每项能力要有机器证据"。
+   解决：插件里新增 `_proactive_log()`，把每次决策/发送追加到
+   **`D:\AIJiYi\data\logs\proactive.jsonl`**（`event=sent|dropped`、session、text、
+   voice、memory_used、count）。
+2. 加上之后第一次跑 `test_main.py`，78 条单测**把生产证据文件写脏了**——
+   文件里出现 `group:g-proactive`、`group:g-sticker-proactive` 这些测试会话。
+   解决：`_proactive_log()` 在 `AIJI_PROACTIVE_LOG` 为空时直接 return，
+   `test_main.py` 在 import 插件前把该环境变量置空。已清空并复跑验证：78 条全绿、
+   文件 0 增长。
+
+教训：**证据文件必须先想清楚"谁会写它"**，否则测试就是最大的污染源。
+
+## 213. 抖音会话输入框的 class 是 `messageEditorinputArea`，不是 `.messageEditori`
+
+`.messageEditori` 是浏览器里被截断的类名前缀（真名
+`zone-container editor-kit-container messageEditorinputArea`，外层
+`messageEditorimChatEditorContainer`）。按前缀查选择器，点了会话也永远找不到输入框。
+→ 固定用 `[class*="messageEditorinputArea"]`（`aiji/heart/platforms/douyin.py::CHAT_EDITOR`）。
+
+## 214. `X-Aiji-Session` 头里不能放中文
+
+会话 id 用 `douyin:group:<群名>` 时，`urllib` 抛
+`UnicodeEncodeError: 'latin-1' codec can't encode characters`。
+→ 头里放 `urllib.parse.quote(session_id, safe=":")`（**固定同一套编码**，否则同一个群
+会落到不同记忆会话里）。
+
+## 215. B 站私信 -400 的根因：字段名写错（对照开源 SDK 才发现）
+
+参考 PyPI 上的 `bilibili-api-python` 17.4.2（`bilibili_api/session.py::send_msg`）：
+正确的表单是 `msg[content]`，**不是** `msg[msg_content]`，并且要带
+`msg[msg_status]=0`、`msg[new_face_version]=0`。
+改完立刻从 `code=-400 请求错误` 变成 **`code=21026 不能给自己发送消息哦~`** ——
+说明接口通了，只剩"收件人不能是自己"这一个业务限制。
+（自己给自己那个 mid 1402977803 就是测试号，所以 B 站私信还差一个真人收件人才能真正发出去。）
+
+## 216. 抖音网页版群聊/私信是**能用**的（推翻 #208）
+
+用户在 App 里加了群、关注了人之后，`https://www.douyin.com/chat` 立刻出现会话：
+`玖玖大王万岁≧▽≦(66)`（群）和 `霸王辣条丝`（群邀请 + 互相关注可私聊）。
+点会话 → 输入框 → 打字 → 回车，真机两头都验过：
+
+- 群里发 `大家好呀，我是小肥鱼，刚学会用抖音～` → 重开会话页回读到
+  `玛卡巴卡的小推车 | 大家好呀，我是小肥鱼，刚学会用抖音～`
+- `social douyin watch --peer 玖玖大王万岁 --once --yes` 读到 13 条消息、
+  挑中 `霸王辣条丝: 666`、生成 `哈哈你干嘛突然发666，我又没干嘛，就看会书而已。`
+  发出去后 `verified: true`，独立再开一次浏览器回读也看到了这句（带"已读"）。
+
+→ 所以 #208 的"空壳"结论只在**账号没加过群/没关注人**时成立；能力表已把
+`dm` / `group` 从 `experimental`/`unsupported` 改成 `ok`。
+
+## 217. 抖音**有**火花，而且网页端私信也计入火花
+
+用户 2026-11-05 澄清："抖音有续火花的功能，其他没有"。之前适配器写 `streak: unsupported`
+（"抖音没有火花"）是错的。查 GitHub 印证：`Xiaowu-0916/douyin-spark`（78★，Python+Playwright，
+就是打开 `douyin.com/chat` 每天发一条私信）README 原话："**网页端消息同样计入火花**"。
+→ `DouyinAdapter.streak()` 落地：每天一条私信 + 本地账本记连续天数。
+真机 2026-11-05 12:37 跑通：`days: 1, sent: true, verified: true, left_box: true`。
+注意：web 端 DOM 里**看不到**火花数字（翻遍私聊页 0 个含「火花」的节点），所以"天数"是本地账本，
+真实火花数以 App 为准。
+
+## 218. 从开源项目抄来的三条发送判定（douyin-spark）
+
+1. **消息离开输入框**才算发出（比只看正文更早更准）→ `_send_chat` 现在返回 `left_box`。
+2. **风控词表**："操作频繁 / 安全验证 / 访问频繁 / 请稍后再试 / 操作过于频繁" 命中就
+   抛 `rate_limited_security` 整轮中止（继续发只会让账号更凉）→ `_raise_if_blocked()`。
+3. **防错发**：点开会话后应校验标题，确认切对人再发（我们已按"命中名字才点"过滤，
+   标题校验待补，见 handoff）。
+
+## 219. 值得抄但还没抄的：抖音 IM 协议（事件驱动）
+
+- `zhinjs/douyin-im`（TS，14★）：抖音 Desktop IM 的 HTTP/WebSocket 协议封装，支持
+  私信/群聊/@/历史/撤回/已读/**建群**/好友与入群申请事件 —— 如果能用，抖音就能像 QQ 一样
+  **事件驱动**（现在是 5 分钟轮询）。作者自己也声明"已实现≠真实账号验收过"，风险自负。
+- `zzyong24/douyin-im-grabber`（Py，12★）：用 Chrome CDP 抓 IM 的 **protobuf** 响应导出群聊
+  历史 —— 比 DOM 读文本更可靠，可作为"读群"的升级路径。
+- 结论：现在这套（Playwright + DOM + 回读）**能用且有真机证据**；上协议层是"更快更稳"的
+  优化项，不是缺口。别为了抄而抄。
+
+## 220. 改完 aiji/ 的代码，服务不重启就等于没改（而且 restart 未必换进程）
+
+`tools/lifecycle.ps1 restart` 跑完打印的是 "Stack start requested"，但 8787 上的老进程
+（`D:\Python313\python.exe -m aiji.senses.cli ... serve`）还在监听，新代码不生效——
+2026-11-05 就因此白验了两轮共享记忆（fact 只落了 `local`，没有 `shared` 镜像）。
+正确做法：`Stop-Process -Id <监听 8787 的 pid> -Force` →
+`schtasks /Run /TN "AIJiYi Console Watchdog"` → 等 ~40s → **核对新 pid 的创建时间晚于代码
+修改时间**，再验。
+
+## 221. 共享记忆的 union 必须"跨 session"取
+
+`recall(query, ident, session=...)` 会按 session 过滤。抖音那句存在
+`local:douyin:group:验收群`，QQ 这边 session 是 `qq:friend:...`，带着 session 去查 shared
+永远 0 条（真机踩到）。→ `share.recall_union` 对 shared 那一侧强制 `session=None`。
+
+## 222. 抖音评论：不是"没找到按钮"，是服务端静默丢弃（有头无头一模一样）
+
+2026-11-05 13:17–13:25 用三个探针把这条彻底钉死（脚本在 `.tmp/probe/douyin_comment_*.py`，
+输出在 `data/temp/douyin-comment-*.json`）：
+
+1. **无头能打开视频页**：`title` 正常、`[data-e2e="comment-list"]` 存在；
+   但 `.public-DraftEditor-content` 初始 **0 个**——点评论图标（`feed-comment-icon`）会判"不可见"，
+   **点"留下你的精彩评论吧"这行字**才把 draft.js 编辑框叫出来（无头/有头都如此）。
+   → 已把它做成 `_post_comment` 的兜底路径。
+2. **回车确实会发请求**：`POST /aweme/v1/web/comment/publish`，payload 正确：
+   `aweme_id=7704219883617225993&text=<我们的句子>&text_extra=[]&paste_edit_method=non_paste`。
+   之前"没有发送按钮所以发不出去"的判断不完整——请求是发了。
+3. **服务端回 HTTP 200 + 空 body**：`resp.text() == ""`、`resp.json()` 直接 JSONDecodeError，
+   评论区刷新后仍然没有这条。
+4. **有头 vs 无头完全一致**（`douyin-comment-sign-headed.json` / `-headless.json`）：
+   两者请求都带签名参数、都回 200 空 body、`readback_has_text: false`。
+   → 所以这不是"无头被识别"，也不是自动化打字问题，是**账号/web 侧对该视频的评论发布被丢弃**。
+
+结论：`comment` 保持 `experimental`；错误信息现在会直接写出"HTTP 200 + 空 body"，
+不再是猜。要发评论只能在 App 里（人工）。
+
+顺带产物：`BrowserSession(offscreen=True)` + `AIJI_DOUYIN_OFFSCREEN=1`——
+把有头窗口挪到屏幕外（`--window-position=-32000,-32000`），用于 `/chat` 这类
+headless 会崩、但用户又不想看见窗口的场景。
+
+## 223. 抖音评论：请求完全合法、服务端回 `content-length: 0`（用户已确认 App 里能评论）
+
+用户 2026-11-05 14:20 明确表示"App 里可以评论"，于是把判定从"账号被限"改成"网页这条写路径被静默拒绝"。
+补做的四个探针（脚本 `.tmp/probe/douyin_comment_{multi,raw,readback_single,cdp}.py`）：
+
+1. **换视频也一样**：热门榜取两条（`7704003749563370752`、`7704245291281120930`），
+   流程都能走到 `comment/publish`，评论区都没有这句 → 不是单个视频关了评论。
+2. **参数完全合法**（这次打全了 38 个参数名）：`a_bogus`、`msToken`、`verifyFp`、`fp`、`uid`、
+   `webid`、`uifid` 全在；body 是 `aweme_id=…&text=<我们的句子>&text_extra=[]&paste_edit_method=non_paste`。
+3. **响应是"空 JSON"**，不是解码失败：
+   `status=200, content-type=application/json, content-length=0, body_bytes_len=0, x-tt-logid=2026…`
+   —— 抖音用"200 + 0 字节 JSON"表示静默拒绝。
+4. **不是自动化指纹**：`navigator.webdriver=false`、`navigator.plugins.length=5`、UA 正常；
+   有头/无头/（尝试）CDP 接管真 Edge 三条路都一样。
+   （CDP 这条路因为 `connect_over_cdp` 要 mkdtemp→须把 TEMP 钉到 `data/temp/playwright-cdp`，
+   且 Edge 复用 profile 时 `new_page` 报 Target crashed，未跑通，不是结论依赖项。）
+
+结论：**抖音 web 端对该账号的"评论写入"被服务端静默拒绝（读取一切正常）**。
+后续要真发评论只有两条：App/设备自动化（需安卓模拟器 + ADB，本机没有），或换号再试。
+`comment` 能力保持 `experimental`，错误信息直接写 `content-length: 0`。
+
+## 224. 参考 dsh-douyin-watch（另一个 DSH 插件）后：三条已排除的"我们以为" 
+
+`miqian-nomad/dsh-douyin-watch`（npm 包，DSH 插件，10 个工具含发评论）的源码注释给了关键情报，
+对照本机逐条验过：
+
+1. **"UA 带 HeadlessChrome 所以被吞"** —— 不是我们的情况。实测我们发出去那条
+   `comment/publish` 的请求头 UA 是完整 Edge UA（`...Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0`），
+   不含 `HeadlessChrome`。
+2. **"在页面上下文里 fetch 就能过"** —— 我们照做了（`douyin_comment_pagefetch.py`）：
+   页面里 `byted_acrawler` 存在、`frontierSign` 可用，但裸 fetch **仍然 200 + 0 字节**。
+3. **"补上签名就行"** —— 页面签名器只给老式 `X-Bogus`（`{"X-Bogus":"6Z8XIjdUxLKuDIMs"}`），
+   带上它再 POST **还是 200 + 0 字节**（`douyin_comment_signed.py`，`signed: true`）。
+
+它自己的结论正好解释这三点：**"没人过验证 = 页面被拦在验证页，发布接口回 `200 + 空 body`"**，
+而它的解法是**人工**：切有头 → 手动登录 + 过二次验证 + **亲手发一条评论** → 切回无头就正常了。
+我们还多验了一条它没写的：页面上验证码 iframe 常驻 DOM 但不可见（`iframe_visible: false`、
+`has_video: true`、标题是视频标题）——所以"有没有被拦"不能靠 iframe 存在与否判断，
+必须看**是否可见 + 标题是否变成验证码页**（已按这个口径写进探测逻辑）。
+
+→ 下一步是人工动作：14:33 已用我们的登录 profile 起了有头 Edge 打开那条视频页，
+请在窗口里发一条评论（有滑块/短信验证就过一次），之后自动路径才可能通。
+
+## 225. ✅ 抖音发评论**打通了**：关键是"人工过验证一次" + "页面上下文 fetch"
+
+2026-11-05 14:2x 用户在有头窗口里手工过验证并亲手发了一条评论。之后同一条自动化路径**立刻通了**：
+
+```
+页面里 fetch /aweme/v1/web/comment/publish  →  200 + 2948 字节 JSON
+{"comment":{"cid":"7704571082514711306","status":7,"text":"说得对，我也是这么想的"}}
+评论区回读 has_text = true
+```
+
+接着用适配器连发两条，全部拿到 cid：
+- `cid=7704571348132463396`（14:36，那次 CLI 因为响应体被截断误报 unverified，已修）
+- `cid=7704572417121551139`（14:39，`ok:true verified:true`）
+
+独立回读（另开页面、滚到评论区）三条都在，署名都是 `玛卡巴卡的小推车`：
+`说得对，我也是这么想的 | 这条我记住了，谢谢分享 | 这个细节讲得挺到位的`
+
+结论（撤回 #222/#223 里"网页端写不了"的判断，原因写清楚：
+那是**账号没在该端过验证**，不是接口不可用）：
+1. **平台侧**：`comment/publish` 完全可用；没过验证时服务端回 `200 + content-length:0`（静默丢弃），
+   过了验证就正常返回 `cid`。
+2. **自动化的正确姿势**：在**页面上下文里 fetch**，别点 UI（点 UI 会触发短信验证）。
+3. **实现**：`DouyinAdapter._post_comment` 已改成页面 fetch；拿到 `cid` 即 `verified:true`，
+   评论区 `visible` 只作参考（评论列表懒加载/审核中都不影响 cid 的权威性）。
+4. **人工步骤只剩一次性的**：账号若再次掉验证，跑 `douyin comment` 会报 `verify_required`，
+   那时需要有头窗口人工过一次（这也是另一个 DSH 插件 dsh-douyin-watch 的做法）。
+
+## 226. "提高 QQ 每日自动接话上限"是错的方向（已排除）
+
+看到 `本群今日自动接话已到上限` 时，第一反应是"把上限调高"。查了默认值：
+`AIJI_QQ_AUTO_HOURLY_MAX=8`、`AIJI_QQ_AUTO_DAILY_MAX=24`——**一个群一天已允许 24 条自动接话**，
+不是上限太低，是它说得太多。调高只会更吵，所以**不改**。真正的解法是让发言受作息与节奏约束
+（见抖音那边的 `_asleep_reason` / `_rate_ok` 闸门，方向一致）。
+
+## 227. "抖音发得勤 = 活跃"是错的（已排除）
+
+15:00–22:52 每 5 分钟一条、整夜不停（22:52 还在发），单小时 12 条。数据上"很活跃"，
+实际是机器人刷屏。已加作息闸门 + 每小时 2 条 + 每日 12 条 + 0–90s 随机抖动，
+"活跃度"要按**空档时段内**的发言衡量，不能按单日总数。

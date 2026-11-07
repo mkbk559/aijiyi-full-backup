@@ -52,8 +52,58 @@ def find_browser() -> str | None:
     return None
 
 
+def _prepare_temp() -> None:
+    """Playwright 的 mkdtemp 会落到 %TEMP%；本机沙箱对那里没有 ACL（EPERM）。
+
+    2026-11-05 实测：`EPERM: operation not permitted, mkdtemp
+    'C:\\Users\\...\\AppData\\Local\\Temp\\playwright-artifacts-XXXXXX'`。
+    把 TEMP/TMP/TMPDIR 指到工作区里就没事。
+    """
+    tmp = ROOT / ".tmp" / "pwtmp"
+    tmp.mkdir(parents=True, exist_ok=True)
+    for name in ("TEMP", "TMP", "TMPDIR"):
+        os.environ[name] = str(tmp)
+
+
+def _render_playwright() -> tuple[str, str]:
+    """真浏览器 + 驱动（2026-11-05 起默认走这条）。
+
+    为什么换掉 `--dump-dom`：那条路在本机 `--headless=new` 会**挂死**到 120s 超时
+    （console_render 的两个测试因此长期红），而 Playwright 驱动的同一个 Edge 秒开。
+    """
+    from playwright.sync_api import sync_playwright
+
+    _prepare_temp()  # 必须先于 launch
+    channel = "msedge" if Path(
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe").exists() else None
+    errors: list[str] = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(
+            headless=True, channel=channel, args=["--no-proxy-server"])
+        try:
+            page = browser.new_page()
+            page.on("pageerror", lambda exc: errors.append(f"Uncaught {exc}"))
+            page.goto(PAGE.as_uri(), wait_until="load", timeout=60_000)
+            page.wait_for_timeout(1200)  # 让生成器脚本把导航/节点注入完
+            dom = page.content()
+        finally:
+            browser.close()
+    return dom, "\n".join(errors)
+
+
 def render(browser: str) -> tuple[str, str]:
-    # 独立 user-data-dir：默认 profile 可能被别的实例占用，headless 直接起不来
+    """渲染一遍页面：优先 Playwright，失败才退回 `--dump-dom`（有超时）。"""
+    engine = os.environ.get("AIJI_RENDER_ENGINE", "playwright").strip().lower()
+    if engine != "dump":
+        try:
+            return _render_playwright()
+        except Exception as exc:  # noqa: BLE001 - 退路见下
+            err = f"playwright 渲染失败：{type(exc).__name__}: {exc}"
+        else:  # pragma: no cover
+            err = ""
+    else:
+        err = ""
+    # 退路：老办法（独立 user-data-dir，默认 profile 可能被别的实例占用）
     with tempfile.TemporaryDirectory(prefix="aiji-render-") as profile:
         proc = subprocess.run(
             [browser, "--headless=new", "--disable-gpu", "--no-first-run",
@@ -63,7 +113,7 @@ def render(browser: str) -> tuple[str, str]:
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=120,
         )
-    return proc.stdout or "", proc.stderr or ""
+    return proc.stdout or "", "\n".join(x for x in (err, proc.stderr or "") if x)
 
 
 def spec_navs() -> list[str]:
