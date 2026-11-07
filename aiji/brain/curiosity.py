@@ -102,10 +102,67 @@ def _search_web(topic: str, executor: Any) -> str:
     res = executor.execute(call)
     if not res.ok:
         return ""
-    # 结果是 "1. 标题\n   url" 列表；只留标题文本当学习材料
-    lines = [ln.strip() for ln in str(res.output).splitlines() if ln.strip()]
-    titles = [re.sub(r"^\d+\.\s*", "", ln) for ln in lines if not ln.startswith("http")][:4]
-    return "；".join(titles)
+    # 结果是 "1. 标题\n   url" 列表：标题给摘要，URL 给深读（_deep_read 用）
+    return str(res.output or "").strip()
+
+
+def _deep_read(topic: str, executor: Any, search_output: str) -> str:
+    """深读（2026-11-07）：搜到标题只是"书名"，读到正文摘要才是真学习。
+
+    实测网络边界（2026-11-07 真机）：百度百科/知乎/维基对脚本 UA 一律 403
+    （带浏览器头也没用），维基超时。**Bing 结果页自身的 b_lineclamp 摘要段
+    可达且内容质量高**（每条 2-3 句正文级摘要）。所以深读走两条路：
+    ① fetch_url 读第一条结果 URL（对不反爬的站点有效）；
+    ② 失败就 fetch Bing 搜索页抽 b_lineclamp 摘要段（本机的稳定路线）。
+    都失败退回标题串——深读是加分项不是依赖项。
+    """
+    import urllib.parse
+
+    from aiji.left_hand.actions.schema import ToolCall
+
+    # 路 ①：读第一条结果页
+    urls = [ln.strip() for ln in str(search_output or "").splitlines()
+            if ln.strip().startswith("http")][:1]
+    if urls:
+        try:
+            res = executor.execute(ToolCall(
+                id=f"curiosity-read-{int(time.time())}",
+                name="fetch_url",
+                arguments={"url": urls[0], "max_chars": 4000},
+            ))
+            if res.ok:
+                text = str(res.output or "").strip()
+                paras = [p.strip() for p in text.splitlines()
+                         if len(p.strip()) >= 30]
+                body = "\n".join(paras[:3])[:1200]
+                if len(body) >= 80:
+                    return body
+        except Exception:  # noqa: BLE001
+            pass
+    # 路 ②：Bing 搜索页摘要段（本机稳定源）。注意两点（真机翻过车）：
+    # - 不走 fetch_url 工具——那条路 Accept-Language 头不全时 Bing 会随机给法语页；
+    # - 查询只用主题词本身，**不带"是什么"**——带了 Bing 会把「光合作用」
+    #   拆成「光」（真机实测：返回光学释义），纯主题词的摘要才是正文级。
+    try:
+        url = ("https://www.bing.com/search?q="
+               + urllib.parse.quote(topic) + "&setmkt=zh-CN")
+        html = executor._http_get(url, timeout_s=20.0,
+                                  headers=executor._BROWSER_HEADERS)
+        caps = re.findall(
+            r"<p[^>]*class=\"b_lineclamp[^\"]*\"[^>]*>(.*?)</p>", html)
+        paras = []
+        for c in caps[:3]:
+            t = re.sub(r"<[^>]+>", "", c).strip()
+            t = t.replace("&ensp;", " ").replace("&#0183;", "·")
+            t = re.sub(r"^\d{4}年\d+月\d+日\s*", "", t)
+            if len(t) >= 30:
+                paras.append(t)
+        body = "\n".join(paras)[:1200]
+        if paras:
+            return body
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
 
 
 def learn_topic(
@@ -141,6 +198,20 @@ def learn_topic(
         return {"ok": False, "reason": "search_failed"}
     if not material:
         return {"ok": False, "reason": "empty_result"}
+    # 深读第一条结果（加分项：失败静默退回标题串）
+    deep = ""
+    try:
+        deep = _deep_read(topic, executor, material)
+    except Exception:  # noqa: BLE001
+        deep = ""
+    if deep:
+        material = deep
+    else:
+        # 退回标题串（老行为）：从 "1. 标题\n   url" 里只留标题
+        titles = [re.sub(r"^\d+\.\s*", "", ln.strip())
+                  for ln in material.splitlines()
+                  if ln.strip() and not ln.strip().startswith("http")][:4]
+        material = "；".join(titles)
     try:
         text = f"我查过「{topic}」：{material[:400]}"
         memory.ingest(

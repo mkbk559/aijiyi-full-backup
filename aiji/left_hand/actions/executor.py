@@ -243,7 +243,9 @@ class ActionExecutor:
         max_chars = max(500, min(20000, int(call.arguments.get("max_chars", 6000))))
         if not url:
             return ToolResult(call.id, call.name, False, error="url required")
-        html = self._http_get(url, timeout_s=20.0)
+        # 2026-11-07：不带浏览器头会被百度百科等直接 403（curiosity 深读翻的车）。
+        # web_search 一直用 _BROWSER_HEADERS，fetch 也要同款。
+        html = self._http_get(url, timeout_s=20.0, headers=self._BROWSER_HEADERS)
         text = self._html_to_text(html)[:max_chars]
         return ToolResult(call.id, call.name, True, output=text or "(empty page)")
 
@@ -252,9 +254,11 @@ class ActionExecutor:
         text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html,
                       flags=re.S | re.I)
         text = re.sub(r"<[^>]+>", " ", text)
-        text = (text.replace("&nbsp;", " ").replace("&amp;", "&")
-                .replace("&lt;", "<").replace("&gt;", ">")
-                .replace("&quot;", '"').replace("&#39;", "'"))
+        # 2026-11-07：数字实体（&#233; 等）以前不解码，Bing 页面里满屏
+        # é 这种乱码进学习文本。html.unescape 一并处理命名+数字实体。
+        import html as _html
+
+        text = _html.unescape(text)
         return re.sub(r"\s{2,}", " ", text).strip()
 
     def _bili_search(self, call: ToolCall) -> ToolResult:

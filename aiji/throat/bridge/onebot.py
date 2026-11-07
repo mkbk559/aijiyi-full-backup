@@ -21,6 +21,52 @@ _CQ_ANY = re.compile(r"\[CQ:[^\]]+\]")
 _ACTION = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
+# ---- 复读疲劳（A5，2026-11-07）------------------------------------------------
+# 真机证据：11-06 抖音对两个测试号循环文本回了 44 次（C1 已修抖音侧并删除）；
+# QQ 群里"你好呀"×8 同款循环没有任何拦截。一个真人被 @ 同一句话刷 N 遍，
+# 第二遍之后就不该每次都认真接。这里按 (scope, sender, 归一化文本) 计数，
+# 超过上限的事件降级为"只入记忆不回复"——被 @ 仍然记得说过什么，但不再陪刷。
+_REPEAT_WINDOW_S = 1800.0     # 半小时窗口
+_REPEAT_CAP = 2               # 窗口内同一人同一句话最多认真回 2 次
+
+
+def _norm_text(text: str) -> str:
+    """归一化：去空白/标点，只留字母数字+CJK，小写。复读机最爱改一个标点。"""
+    return "".join(
+        ch.lower() for ch in str(text or "")
+        if ch.isalnum() or "\u4e00" <= ch <= "\u9fff"
+    )
+
+
+class _RepeatFatigue:
+    """线程安全的小滑窗计数器（内存态，重启清零——正确：重启后可以再聊）。"""
+
+    def __init__(self, *, window_s: float = _REPEAT_WINDOW_S,
+                 cap: int = _REPEAT_CAP) -> None:
+        self.window_s = float(window_s)
+        self.cap = int(cap)
+        self._hits: dict[tuple[str, str, str], list[float]] = {}
+        self._lock = threading.Lock()
+
+    def tired(self, scope: str, sender: str, content: str,
+              now: float | None = None) -> bool:
+        """同 (群, 人, 文本) 半小时内第 cap+1 次出现 → True（疲劳）。"""
+        t = time.time() if now is None else float(now)
+        key = (str(scope), str(sender), _norm_text(content))
+        if not key[2]:
+            return False
+        with self._lock:
+            hits = [ts for ts in self._hits.get(key, []) if t - ts < self.window_s]
+            hits.append(t)
+            self._hits[key] = hits
+            # 顺手清过期键，防字典涨
+            if len(self._hits) > 5000:
+                for k in [k for k, v in self._hits.items()
+                          if all(t - ts >= self.window_s for ts in v)]:
+                    self._hits.pop(k, None)
+            return len(hits) > self.cap
+
+
 class OneBotCallError(RuntimeError):
     def __init__(
         self,
@@ -262,6 +308,8 @@ class OneBotBridge:
         self.group_mode = group_mode
         self.dedupe_ttl_s = max(1.0, float(dedupe_ttl_s))
         self.configured = bool(configured)
+        # A5 复读疲劳：只在群聊启用（私聊一对一刷屏自有 _qq_rate 限流兜底）
+        self.fatigue = _RepeatFatigue()
         self._queue: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1000)
         self._seen: dict[str, float] = {}
         self._lock = threading.Lock()
@@ -270,6 +318,7 @@ class OneBotBridge:
         self.stats = {
             "accepted": 0, "ignored": 0, "duplicate": 0,
             "replied": 0, "ingested": 0, "failed": 0, "rejected": 0,
+            "repeat_fatigued": 0,
         }
         self.last_event: float | None = None
         self.last_reply: str = ""
@@ -324,7 +373,8 @@ class OneBotBridge:
         self.last_event = now
         self.last_self_id = event["self_id"]
         self.last_sender_name = event["sender_name"]
-        return {"status": "accepted", "message_id": key}
+        return {"status": "accepted", "message_id": key,
+                **({"fatigued": True} if event.get("repeat_fatigued") else {})}
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -332,6 +382,18 @@ class OneBotBridge:
             if event is None:
                 return
             try:
+                # A5 复读疲劳：群里同人同句半小时第 3+ 次 → 只入记忆不回。
+                # 私聊不启用（一对一重复自有别的语义，且已有发送限流兜底）。
+                if (event.get("should_reply")
+                        and str(event.get("message_type")) == "group"
+                        and self.fatigue.tired(
+                            str(event.get("scope") or ""),
+                            str(event.get("sender_name")
+                                or event.get("user_id") or ""),
+                            str(event.get("content") or ""))):
+                    self.stats["repeat_fatigued"] += 1
+                    event = {**event, "should_reply": False,
+                             "repeat_fatigued": True}
                 if not event.get("should_reply", True):
                     if self.ingest_fn is None:
                         continue
@@ -361,6 +423,7 @@ class OneBotBridge:
             "last_error": self.last_error,
             "last_self_id": self.last_self_id,
             "last_sender_name": self.last_sender_name,
+            "repeat_cap": self.fatigue.cap,
             **self.stats,
         }
 

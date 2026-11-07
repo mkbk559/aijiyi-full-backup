@@ -1616,9 +1616,12 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
             """B2：life_loop 的"看视频/写小本子"落到真学习。
 
             主题来源按优先级：① self_memory 里最近的"plan"（日记里的"明天想…"）；
-            ② 最近的 curiosity 疑问（being_event kind='curiosity' 的原文）。
-            都没有就学当天日记里出现过的关键词——保证"看视频"不再是空转。
+            ② 最近的 curiosity 事件——但 summary 是「自己搜了一下「黑洞」，记住了
+            几条」这种句子，要抠「」里的主题本身，不能拿整句去搜（2026-11-07
+            真机翻过车：拿整句搜回来一堆"自己（汉语词语）_百度百科"）。
             """
+            import re as _re
+
             from aiji.brain import curiosity
 
             topic = ""
@@ -1635,7 +1638,9 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
                     events = memory.being_events(limit=10)
                     for ev in events:
                         if str(ev.get("kind") or "") == "curiosity":
-                            topic = str(ev.get("summary") or "")[:40]
+                            m = _re.search(r"「(.+?)」",
+                                           str(ev.get("summary") or ""))
+                            topic = (m.group(1) if m else "")[:40]
                             break
                 except Exception:  # noqa: BLE001
                     topic = ""
