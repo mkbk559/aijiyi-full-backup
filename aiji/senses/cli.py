@@ -743,7 +743,13 @@ def cmd_social(args: argparse.Namespace) -> int:
         return 0
 
     # 2) 账本（跨平台，不需要适配器）
-    if action in ("streak", "streak-refresh") and platform != "douyin":
+    # 2026-11-07：抖音/哔哩哔哩私聊群聊全链路删除后，火花账本只剩 QQ 一个平台可用；
+    # 抖音分支直接报下线，不再进 streak 逻辑。
+    if action in ("streak", "streak-refresh") and platform == "douyin":
+        _emit({"ok": False, "code": "removed",
+               "error": "抖音火花已随私聊/群聊一并删除（2026-11-07）"})
+        return 2
+    if action in ("streak", "streak-refresh"):
         try:
             m = _memory(args)
         except Exception as exc:  # noqa: BLE001
@@ -833,41 +839,12 @@ def cmd_social(args: argparse.Namespace) -> int:
                                  dry_run=not bool(getattr(args, "yes", False))).to_dict())
             return 0
         if action == "watch":
-            # 抖音群聊主动聊天：读群 → 让 aiji 想一句（和 QQ 同一套人格/记忆）→ 发
-            from aiji.heart.platforms import douyin_chat
-
-            group = peer or str(getattr(args, "peer_name", "") or "")
-            if getattr(args, "all", False):
-                # --all：扫所有会话（群 + 私聊），谁有新话回谁；每个会话独立限流
-                out = douyin_chat.run_all(
-                    adapter,
-                    ask=lambda t, s: douyin_chat.http_ask(
-                        t, session_id="douyin:peer:" + (s or "unknown"), sender=s),
-                    self_name="玛卡巴卡的小推车",
-                    dry_run=not bool(getattr(args, "yes", False)),
-                )
-                _emit({"ok": True, "platform": adapter.name, "action": "watch_all",
-                       **out})
-                return 0
-            if not group:
-                _emit({"ok": False, "code": "empty_peer",
-                       "error": "watch 需要 --peer <群名>（或 --all 扫全部会话）"})
-                return 2
-            session_id = f"douyin:group:{group}"
-            rounds = 1 if getattr(args, "once", False) else int(
-                getattr(args, "rounds", 1) or 1)
-            results = []
-            for i in range(rounds):
-                if i:
-                    time.sleep(float(getattr(args, "interval", 60) or 60))
-                results.append(douyin_chat.run_once(
-                    adapter, group,
-                    ask=lambda t, s: douyin_chat.http_ask(t, session_id=session_id,
-                                                          sender=s),
-                    dry_run=not bool(getattr(args, "yes", False))))
-            _emit({"ok": True, "platform": adapter.name, "action": "watch",
-                   "rounds": results})
-            return 0
+            # 2026-11-07 用户拍板删除：抖音私聊/群聊全链路下线（watchdog 无对象判定、
+            # 会话列表读不稳、浏览器每次冷启）。watch 动作保留入口但明确报下线，
+            # 免得旧脚本调用拿到 import error。
+            _emit({"ok": False, "code": "removed",
+                   "error": "抖音聊天链路已于 2026-11-07 下线（私聊/群聊全部移除）"})
+            return 2
         if action in ("feed", "learn"):
             rows = adapter.feed(limit)
             if action == "feed" and not getattr(args, "learn", False):

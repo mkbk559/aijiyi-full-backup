@@ -325,27 +325,16 @@ class BiliAdapterTest(unittest.TestCase):
                 a.comment("https://www.bilibili.com/video/BV1", "x")
         self.assertEqual(ctx.exception.code, "needs_login")
 
-    def test_dm_dry_run(self):
+    def test_dm_removed(self):
+        # 2026-11-07 用户拍板：B 站私信删除
         a = BiliAdapter(self._cred(), dry_run=True)
-        res = a.dm("123", "在吗")
-        self.assertTrue(res.dry_run)
-        self.assertEqual(res.detail["peer"], "123")
-
-    def test_dm_real_passes_confirm_and_logs(self):
-        root = pathlib.Path(make_tmp(self, "aiji-bili-dm-"))
-        a = BiliAdapter(self._cred(), dry_run=False, state_dir=root,
-                        guard=Guard(min_interval=0.0, log_path=root / "act.jsonl"))
-        with mock.patch("aiji.senses.bili_client.send_dm") as send:
-            send.return_value = mock.Mock(ok=True, rpid=None)
-            res = a.dm("123", "在吗")
-        self.assertFalse(res.dry_run)
-        self.assertEqual(send.call_args.kwargs["confirm"], True)
-        log = (root / "act.jsonl").read_text(encoding="utf-8").strip().splitlines()
-        self.assertEqual(json.loads(log[-1])["action"], "dm")
+        with self.assertRaises(PlatformError) as ctx:
+            a.dm("123", "在吗")
+        self.assertEqual(ctx.exception.code, "removed")
 
     def test_capabilities_are_honest(self):
         caps = BiliAdapter(self._cred()).capabilities()
-        self.assertEqual(caps["dm"], "experimental")   # 写路径未真验证
+        self.assertEqual(caps["dm"], "unsupported")   # 2026-11-07 用户拍板删除
         self.assertEqual(caps["comment"], "ok")        # 2026-11-04 真发过
         self.assertEqual(caps["group"], "unsupported")  # B 站没有群聊
 
@@ -548,31 +537,27 @@ class DouyinAdapterTest(unittest.TestCase):
             adapter.comment("https://www.douyin.com/user/abc", "随便说点")
         self.assertEqual(ctx.exception.code, "bad_url")
 
-    def test_dm_dry_run(self):
+    def test_dm_removed(self):
+        # 2026-11-07 用户拍板：抖音私聊/群聊/火花全链路删除
         a, factory = self._adapter(FakePage())
-        res = a.dm("小明", "在吗")
-        self.assertTrue(res.dry_run)
+        with self.assertRaises(PlatformError) as ctx:
+            a.dm("小明", "在吗")
+        self.assertEqual(ctx.exception.code, "removed")
         factory.assert_not_called()
 
-    def test_dm_peer_not_found(self):
-        # 会话列表里有别人、没有"查无此人" → peer_not_found，并把现有会话名列出来
-        page = FakePage(conversations=["玖玖大王万岁 (66) | 刚刚 | 还有派解说"])
-        a, _ = self._adapter(page, dry_run=False)
+    def test_group_removed(self):
+        a, factory = self._adapter(FakePage())
         with self.assertRaises(PlatformError) as ctx:
-            a.dm("查无此人", "在吗")
-        self.assertEqual(ctx.exception.code, "peer_not_found")
-        self.assertIn("玖玖大王万岁", ctx.exception.hint)
+            a.group("测试群", "大家好呀")
+        self.assertEqual(ctx.exception.code, "removed")
+        factory.assert_not_called()
 
-    def test_group_send_verifies_by_readback(self):
-        from aiji.heart.platforms.douyin import CHAT_EDITOR
-
-        page = FakePage(conversations=["玖玖大王万岁 (66)"],
-                        selectors={CHAT_EDITOR})
-        page.sink["publish_ok"] = True
-        a, _ = self._adapter(page, dry_run=False)
-        res = a.group("玖玖大王万岁", "大家好呀")
-        self.assertTrue(res.detail["sent"])
-        self.assertTrue(res.detail["verified"])
+    def test_streak_removed(self):
+        a, factory = self._adapter(FakePage())
+        with self.assertRaises(PlatformError) as ctx:
+            a.streak("小明", "续火花")
+        self.assertEqual(ctx.exception.code, "removed")
+        factory.assert_not_called()
 
     def test_login_state_without_cookies(self):
         page = FakePage()
@@ -588,9 +573,10 @@ class DouyinAdapterTest(unittest.TestCase):
 
     def test_capabilities_are_honest(self):
         caps = DouyinAdapter().capabilities()
-        # 2026-11-05 真机：/chat 会话列表 + .messageEditori + 回车，群里发完回读到了
-        self.assertEqual(caps["group"], "ok")
-        self.assertEqual(caps["dm"], "ok")
+        # 2026-11-07 用户拍板：私聊/群聊/火花全链路删除，能力如实降级
+        self.assertEqual(caps["group"], "unsupported")
+        self.assertEqual(caps["dm"], "unsupported")
+        self.assertEqual(caps["streak"], "unsupported")
         # 2026-11-05 真机：/hot 热点榜无需登录就有卡片，feed 因此从 experimental 升到 ok
         self.assertEqual(caps["feed"], "ok")
         # 2026-11-05 14:3x 真机：页面上下文 fetch 发评论拿到 cid，

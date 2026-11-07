@@ -25,17 +25,25 @@ ITEMS: dict[str, str] = {
 
 # 用户 2026-11-05 定调：**不做自建群**；火花只有抖音有，其他平台没有就不接。
 # 这些项在报告里显示成「—（该平台没有）」，不算缺口。
+# 2026-11-07 用户拍板：抖音/B 站私聊群聊全链路删除 → dm/group/streak 对这两家
+# 也归入"不是缺口"。
 NOT_APPLICABLE: dict[str, set[str]] = {
     "qq": {"feed"},
-    "douyin": {"group_create"},
-    "bilibili": {"streak", "group_create"},
+    "douyin": {"group_create", "dm", "group", "streak"},
+    "bilibili": {"streak", "group_create", "dm", "group"},
 }
-DROPPED = {"group_create": "用户明确说不需要（2026-11-05）"}
+DROPPED = {
+    "group_create": "用户明确说不需要（2026-11-05）",
+    "dm": "抖音/B 站私聊群聊全链路删除（2026-11-07 用户拍板）",
+    "group": "同上",
+    "streak": "火花依赖抖音私信，一并删除（2026-11-07）",
+}
 
 # 真机证据在哪些文件里（报告里直接给出路径，省得下次翻）
 EVIDENCE = {
     "qq": ["data/platform_actions.jsonl", "data/logs/astrbot.log"],
-    "douyin": ["data/logs/douyin_chat.log", "data/platform_actions.jsonl"],
+    # douyin_chat.log 已随 2026-11-07 删除清掉，证据只剩平台动作流水
+    "douyin": ["data/platform_actions.jsonl"],
     "bilibili": ["data/platform_actions.jsonl", "data/bili_cookies.jar"],
 }
 

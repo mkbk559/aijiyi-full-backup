@@ -371,29 +371,26 @@ class DouyinAdapter(Adapter):
     # ---- 能力 -------------------------------------------------------------
     def capabilities(self) -> dict[str, str]:
         return {
-            "dm": OK,                  # 2026-11-05 真机：/chat 会话 + 输入框 + 回读
-            "group": OK,               # 同上：真群里发过并回读到了
+            # 2026-11-07 用户拍板：抖音私聊/群聊/火花全链路删除。原来的 OK 状态与
+            # 真机验证记录见 git 历史（08168ca 之前）与 excluded。
+            "dm": UNSUPPORTED,
+            "group": UNSUPPORTED,
+            "streak": UNSUPPORTED,
             "comment": OK,             # 2026-11-05 真机：页面上下文 fetch，服务端回 cid
             "feed": OK,                # 2026-11-05 真机：/hot 热点榜无需登录就有真卡片
-            "streak": OK,              # 2026-11-05 真机：每天一条私信，days=1 verified
             "group_create": UNSUPPORTED,
             "like": EXPERIMENTAL,
         }
 
     def notes(self) -> dict[str, str]:
         return {
-            "dm": "走 www.douyin.com/chat：会话列表 → 点开 → .messageEditori 打字 → 回车"
-                  "（真机 2026-11-05；**必须用有头浏览器**，headless 打开 /chat 会崩）",
-            "group": "同 dm：抖音群就是一个会话。真机在「玖玖大王万岁≧▽≦(66)」群发过，"
-                     "重开会话页回读到「玛卡巴卡的小推车 | 大家好呀，我是小肥鱼…」",
+            "dm": "2026-11-07 下线（用户拍板删除私聊/群聊）",
+            "group": "2026-11-07 下线（用户拍板删除私聊/群聊）",
+            "streak": "2026-11-07 下线（火花依赖私信，一并删除）",
             "comment": "走**页面上下文 fetch**：在视频页里 fetch /aweme/v1/web/comment/publish，服务端返回 {comment:{cid:...}} 即算真发出（2026-11-05 真机 cid=7704571082514711306、7704571348132463396，评论区回读 has_text=true）。前提：账号已验证——人工在有头窗口过一次验证并亲手发一条之后才通；没过验证时服务端回 200+0 字节（静默丢弃），本适配器如实报 unverified，见 excluded#224",
             # 2026-11-05 实测：headless 能开首页（拿到 __ac_signature），但 feed 卡片为 0 ——
             # 是**登录墙**，不是验证页。据此 feed 现在遇 0 卡片抛 empty_feed，不静默 count=0。
             "feed": "走 /hot 热点榜（无需登录，真机 5 条已验）；首页推荐流需要登录态",
-            "streak": "抖音**有**火花（App 里的「连续聊天」计数）。web 端 DOM 里查不到火花"
-                      "的任何元素（2026-11-05 真机翻遍私聊页：0 个含「火花」的节点），"
-                      "所以这边只能保证「每天互发过一条」（adapter.streak 用本地账本记连续"
-                      "天数），真实火花数字以 App 为准。",
             "group_create": "抖音不支持自建群（网页）",
             "like": "点数字会变（787→788）但**刷新后回落**、'我的-喜欢'里也没有 → "
                     "PC 网页点赞不落地，见 excluded#211",
@@ -738,218 +735,27 @@ class DouyinAdapter(Adapter):
 
     def dm(self, peer: str, text: str, *, dry_run: bool | None = None,
            headless: bool | None = None) -> Result:
-        """私信。`peer` = 对方昵称（会话列表里的名字）。"""
-        return self._chat("dm", peer, text, dry_run=dry_run, headless=headless)
+        """私信。2026-11-07 用户拍板：私聊/群聊全链路删除。"""
+        raise PlatformError(
+            "removed", "抖音私聊已于 2026-11-07 下线（用户拍板删除）")
 
     def group(self, group_id: str | int, text: str, *, dry_run: bool | None = None,
               headless: bool | None = None) -> Result:
-        """群聊。`group_id` 用**群名**（抖音群没有对外数字 id）。"""
-        return self._chat("group", group_id, text, dry_run=dry_run, headless=headless)
+        """群聊。2026-11-07 用户拍板：私聊/群聊全链路删除。"""
+        raise PlatformError(
+            "removed", "抖音群聊已于 2026-11-07 下线（用户拍板删除）")
 
-    def _chat(self, action: str, peer: Any, text: str, *,
-              dry_run: bool | None, headless: bool | None) -> Result:
-        text = _unquote(text)
-        if not text:
-            raise PlatformError("empty_text", "内容为空")
-        dry = self.dry_run if dry_run is None else bool(dry_run)
-        if dry:
-            return Result(True, self.name, action, {"peer": str(peer), "text": text},
-                          dry_run=True, code="dry_run")
-        self.require(action)
-        self._check(action, str(peer))
-        # 2026-11-05 15:1x 复查：/chat 在 headless 下已经能正常加载（实测列出 2 个会话并成功发送），
-        # 所以不再需要"后台开个有头窗口"——那样会挡屏幕。默认 headless，窗口完全不出现。
-        want_headless = True if headless is None else bool(headless)
-        try:
-            out = self._with_session(
-                lambda s: self._send_chat(s, str(peer), text), headless=want_headless)
-        except PlatformError as exc:
-            self._log(action, str(peer), ok=False, code=exc.code,
-                      detail={"text": text})
-            raise
-        self._log(action, str(peer), ok=True, detail={"text": text,
-                                                      "verified": out.get("verified")})
-        return Result(True, self.name, action, {"peer": str(peer), "text": text, **out})
-
-    def _send_chat(self, session: Any, peer: str, text: str) -> dict[str, Any]:
-        stage_label = ""
-        try:
-            from aiji.brain import growth as _g
-
-            stage_label = _g.current().stage().label
-        except Exception:  # noqa: BLE001
-            pass
-        check_identity(text, stage_label=stage_label)
-        """抖音网页版私信/群聊是同一条路：会话列表 → 点开 → `.messageEditori` → 回车。
-
-        2026-11-05 真机：在"玖玖大王万岁≧▽≦(66)"群里发
-        `大家好呀，我是小肥鱼，刚学会用抖音～`，重开会话页回读能看到
-        `玛卡巴卡的小推车 | 大家好呀，我是小肥鱼，刚学会用抖音～`。
-        """
-        session.goto(CHAT)
-        items: list[Any] = []
-        for _ in range(12):
-            session.wait(2000)
-            if _is_verify(session):
-                raise PlatformError("verify_page", "抖音返回验证页", status=403)
-            items = session.page.query_selector_all(CONV_ITEM) or []
-            if items:
-                break
-        if not items:
-            raise PlatformError("empty_feed", "会话列表是空的（/chat 没加载出来）",
-                                hint="headless 打开 /chat 会崩，必须有头")
-        names: list[str] = []
-        target = None
-        for item in items:
-            try:
-                label = (item.inner_text() or "").replace("\n", " ")
-            except Exception:  # noqa: BLE001
-                label = ""
-            names.append(label[:30])
-            # 前缀优先：避免 peer="测试" 命中"测试群里的小王"这种别的会话
-            if peer and label.startswith(peer):
-                target = item
-                break
-        if target is None and peer:
-            for item in items:
-                try:
-                    label = (item.inner_text() or "").replace("\n", " ")
-                except Exception:  # noqa: BLE001
-                    continue
-                if peer in label:
-                    target = item
-                    break
-        if target is None:
-            raise PlatformError("peer_not_found", f"会话列表里没有「{peer}」",
-                                hint="现有会话：" + " / ".join(names)[:200])
-        target.click(force=True)
-        # 2026-11-05：之前点完就直接打字，点歪了也照发——这就是"发错消息"。
-        # 真机 dump 出活动类名是 `conversationConversationItemcurConversation`，以此为准。
-        opened_ok = False
-        for _ in range(6):
-            session.wait(1000)
-            try:
-                cls = target.evaluate("(n) => String(n.className || '')") or ""
-            except Exception:  # noqa: BLE001
-                cls = ""
-            if "curConversation" in cls:
-                opened_ok = True
-                break
-        if not opened_ok:
-            raise PlatformError(
-                "wrong_target",
-                f"点开「{peer}」之后，活动会话没切过去（拿到的类名里没有 curConversation），"
-                f"为免发错人，已中止",
-                hint="会话列表可能刚刚刷新/排序变了；重试一次或换个昵称",
-            )
-        editor = None
-        for _ in range(10):
-            session.wait(1500)
-            editor = (session.page.query_selector(CHAT_EDITOR)
-                      or session.page.query_selector('div[contenteditable="true"]'))
-            if editor is not None:
-                break
-        if editor is None:
-            raise PlatformError("selector_missing", "点开会话后没有输入框",
-                                hint=f"试过：{CHAT_EDITOR}, div[contenteditable=true]")
-        chunks = _split_message(text)
-        sent_chunks: list[str] = []
-        for ci, chunk in enumerate(chunks):
-            if ci:
-                session.wait(900)   # 条与条之间留点间隔
-                editor.click()
-                session.wait(300)
-            self._send_chunk(session, editor, chunk)
-            sent_chunks.append(chunk)
-        return {"sent": True, "verified": True, "chars": len(text),
-                "chunks": sent_chunks, "chunk_count": len(sent_chunks)}
-
-    def _send_chunk(self, session: Any, editor: Any, text: str) -> None:
-        """发一条（不拆）：打字 → 回车 → 回读确认。"""
-        editor.click()
-        session.wait(400)
-        session.page.keyboard.type(text, delay=45)
-        session.wait(700)
-        typed = session.page.evaluate(
-            "(sel) => { const e = document.querySelector(sel);"
-            " return e ? (e.innerText || '') : ''; }", CHAT_EDITOR) or ""
-        if text[:6] not in typed:
-            raise PlatformError("type_failed", "字没进输入框")
-        session.page.keyboard.press("Enter")
-        # 回读：会话里能看见这句话才算真发出去（同 comment 的教训，见 excluded#210）
-        # 另外两条借鉴自开源项目 Xiaowu-0916/douyin-spark（它也是 Playwright + /chat 续火花）：
-        #   1) "消息离开输入框"才算发出 —— 比只看正文更早、更准；
-        #   2) 命中"操作频繁/安全验证"就立刻停，别在被风控的状态下继续发。
-        verified = False
-        left_box = False
-        for _ in range(5):
-            session.wait(1600)
-            _raise_if_blocked(session)
-            try:
-                now_typed = session.page.evaluate(
-                    "(sel) => { const e = document.querySelector(sel);"
-                    " return e ? (e.innerText || '') : ''; }", CHAT_EDITOR) or ""
-                if text[:6] not in now_typed:
-                    left_box = True
-                if session.page.evaluate(
-                        "(t) => (document.body.innerText || '').includes(t)", text):
-                    verified = True
-                    break
-            except PlatformError:
-                raise
-            except Exception:  # noqa: BLE001
-                break
-        if not verified:
-            raise PlatformError("unverified", f"回车之后会话里没出现这句：{text[:12]}",
-                                hint=f"left_box={left_box} 可能被风控/未真正发送")
-        return None
-
-    # ---- 续火花 ------------------------------------------------------------
+    # ---- 续火花（2026-11-07 随私聊一并删除） -------------------------------
     STREAK_LEDGER = Path("data/douyin_streak.json")
 
     def streak(self, peer: str, text: str = "", *, dry_run: bool | None = None,
                headless: bool | None = None) -> Result:
-        """抖音火花：每天给这个好友发一条私信（互发才续得上）。
-
-        依据：开源项目 Xiaowu-0916/douyin-spark README 明说「网页端消息同样计入火花」，
-        它就是 Playwright + `/chat` 每天一条；所以这边不需要 App，也不需要额外的接口。
-        web 端 DOM 里看不到火花数字（2026-11-05 真机翻遍私聊页 0 个「火花」节点），
-        所以连续天数记在本地账本里，真实数字以 App 为准。
-        """
-        import json
-
-        peer = str(peer or "").strip()
-        if not peer:
-            raise PlatformError("empty_peer", "续火花要先说给谁发（--peer 昵称）")
-        today = time.strftime("%Y-%m-%d")
-        try:
-            ledger = json.loads(self.STREAK_LEDGER.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001 - 没有账本就从零开始
-            ledger = {}
-        slot = ledger.get(peer) or {"days": 0, "last": ""}
-        already = slot.get("last") == today
-        dry = self.dry_run if dry_run is None else bool(dry_run)
-        if dry or already:
-            return Result(
-                True, self.name, "streak",
-                {"peer": peer, "days": slot.get("days", 0), "already_today": already,
-                 "text": text},
-                dry_run=dry,
-                code="dry_run" if dry else "already_today")
-        body = (text or "").strip() or "今天也来跟你说句话，火花别断了呀～"
-        res = self.dm(peer, body, dry_run=False, headless=headless)
-        days = int(slot.get("days") or 0) + 1
-        ledger[peer] = {"days": days, "last": today, "text": body}
-        self.STREAK_LEDGER.parent.mkdir(parents=True, exist_ok=True)
-        self.STREAK_LEDGER.write_text(
-            json.dumps(ledger, ensure_ascii=False, indent=1), encoding="utf-8")
-        return Result(True, self.name, "streak",
-                      {"peer": peer, "days": days, "already_today": False,
-                       "text": body, **res.detail})
+        raise PlatformError(
+            "removed", "抖音火花依赖私信，已于 2026-11-07 一并下线（用户拍板删除）")
 
     # ---- 内部 -------------------------------------------------------------
     def chat_session(self, fn: Callable[[Any], Any]) -> Any:
-        """在**有头**浏览器里跑一段会话内逻辑（/chat 在 headless 下会崩）。"""
+        """在**有头**浏览器里跑一段会话内逻辑。2026-11-07：聊天链路已删，保留给 login。"""
         return self._with_session(fn, headless=False)
 
     def _with_session(self, fn: Callable[[Any], Any], *, headless: bool) -> Any:

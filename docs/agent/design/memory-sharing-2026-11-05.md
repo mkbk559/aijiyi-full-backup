@@ -24,7 +24,7 @@
 | 身份 | `aiji/hippocampus/store.py` | 加 `SHARED` 常量 + `Ident.is_owner()` |
 | 写 | `aiji/hippocampus/store.py` | `remember(..., mirror_shared=True)`：同一批 turn/fact 再写一份到 `SHARED` |
 | 读 | `aiji/hippocampus/recall.py` | `recall_union(query, ident, ...)`：两次 recall 合并去重 |
-| 接线 | `aiji/throat/server.py`（/v1）、AstrBot 插件、`aiji/heart/platforms/douyin_chat.py` | 都改用 `recall_union`；写路径打开镜像 |
+| 接线 | `aiji/throat/server.py`（/v1）、AstrBot 插件 | 都改用 `recall_union`；写路径打开镜像。（原还列了 `aiji/heart/platforms/douyin_chat.py`——该模块已于 2026-11-07 随抖音私聊/群聊删除） |
 | 观测 | `aiji/hippocampus/inject.py` | 注入的每条记忆带 `from_platform`，方便回读时判断来源 |
 
 ## 验收（下一轮按这个测）

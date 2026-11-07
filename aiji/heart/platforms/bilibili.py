@@ -84,7 +84,8 @@ class BiliAdapter(Adapter):
     # ---- 能力 -------------------------------------------------------------
     def capabilities(self) -> dict[str, str]:
         return {
-            "dm": EXPERIMENTAL,     # 写路径离线验过，真账号未发
+            # 2026-11-07 用户拍板：B 站私信删除（本来群聊就是 unsupported）
+            "dm": UNSUPPORTED,
             "group": UNSUPPORTED,
             "comment": OK,          # 2026-11-04 真机发过
             "feed": OK,             # 排行榜读路径已验证
@@ -95,7 +96,7 @@ class BiliAdapter(Adapter):
 
     def notes(self) -> dict[str, str]:
         return {
-            "dm": "web_im/send_msg 已接；真账号发信未验证",
+            "dm": "2026-11-07 下线（用户拍板删除私聊）",
             "group": "B 站没有群聊 web 接口（粉丝群只在 App 内）",
             "comment": "2026-11-04 真账号真发通过（rpid 已回查）",
             "feed": "用全站排行榜（免 wbi 签名）；推荐流需要 wbi，未接",
@@ -146,24 +147,8 @@ class BiliAdapter(Adapter):
                       {"aid": aid, "url": url, "text": text, "rpid": res.rpid})
 
     def dm(self, mid: str | int, text: str, *, dry_run: bool | None = None) -> Result:
-        text = str(text or "").strip()
-        if not text:
-            raise PlatformError("empty_text", "私信内容为空")
-        dry = self.dry_run if dry_run is None else bool(dry_run)
-        if dry:
-            return Result(True, self.name, "dm",
-                          {"peer": str(mid), "text": text}, dry_run=True,
-                          code="dry_run")
-        self._check("dm", str(mid))
-        try:
-            res = bili_client.send_dm(mid, text, self.cred, confirm=True,
-                                      state_dir=self.state_dir)
-        except Exception as exc:  # noqa: BLE001
-            err = _wrap(exc)
-            self._log("dm", str(mid), ok=False, code=err.code, detail={"text": text})
-            raise err from exc
-        self._log("dm", str(mid), ok=True, detail={"text": text})
-        return Result(True, self.name, "dm", {"peer": str(mid), "text": text})
+        """B 站私信。2026-11-07 用户拍板：私聊/群聊全链路删除（B 站本来也没有群聊）。"""
+        raise PlatformError("removed", "B 站私信已于 2026-11-07 下线（用户拍板删除）")
 
     def like(self, aid: int, *, dry_run: bool | None = None,
              unlike: bool = False) -> Result:
