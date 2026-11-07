@@ -23,11 +23,19 @@ class LifeLoop:
         poll_seconds: float = 60.0,
         rng: random.Random | None = None,
         clock: Callable[[], float] = time.time,
+        learner: Callable[[str, str], dict] | None = None,
     ) -> None:
+        """learner(activity_id, summary) -> result：真实学习动作的钩子（B2）。
+
+        life_loop 本身不 import brain（endocrine 是底层，brain 是高层，反向依赖
+        会把测试拖进联网）。watch_videos 活动发生时若有 learner，就把
+        "顺手记下一个想聊的话题"从空话变成真学一次。返回值只进 stats。
+        """
         self.store = store
         self.poll_seconds = max(5.0, float(poll_seconds))
         self.rng = rng or random.Random()
         self.clock = clock
+        self.learner = learner
         self.stats = {
             "steps": 0,
             "created": 0,
@@ -35,6 +43,8 @@ class LifeLoop:
             "errors": 0,
             "last_error": "",
             "last_event_at": 0.0,
+            "learn_tried": 0,
+            "learn_ok": 0,
         }
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -71,6 +81,16 @@ class LifeLoop:
         else:
             self.stats["created"] += 1
             self.stats["last_event_at"] = float(event["created_at"])
+            # B2：刷视频/写小本子的活动不能只是模板句。有 learner 时真学一次。
+            if self.learner is not None and str(event.get("id")) in (
+                    "watch_videos", "write_note"):
+                try:
+                    self.stats["learn_tried"] += 1
+                    res = self.learner(str(event["id"]), str(event.get("summary") or ""))
+                    if isinstance(res, dict) and res.get("ok"):
+                        self.stats["learn_ok"] += 1
+                except Exception as exc:  # noqa: BLE001 - 学习失败不影响生活推进
+                    self.stats["last_error"] = f"learner: {type(exc).__name__}"
         return event
 
     def snapshot(self) -> dict:

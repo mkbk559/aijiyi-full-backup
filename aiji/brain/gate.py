@@ -21,6 +21,14 @@ BLOCKLIST = (
     "已沦陷",
 )
 
+# 人格穿帮句（2026-11-05/06 真机）：初中生不会说英文拒绝句，也不会把
+# 内部 OCR/识别结果原样念出来。
+_ENGLISH_REFUSAL = re.compile(
+    r"(?:I'?m sorry,? but I can'?t|I cannot help with|As an AI"
+    r"|I'?m afraid I (?:can'?t|cannot)|I don'?t understand what you)", re.I)
+# [图片内容：第1张：…] / [视频内容：…] 这类内部识别转写不得作为聊天正文发出
+_RECOG_LEAK = re.compile(r"^[（(\[]?(?:图片|视频|语音|文件)(?:内容|描述|转写)[:：]", re.I)
+
 # 敏感凭据模式：AI 不该在回复里转述任何"密码/密钥/验证码"
 _CREDENTIAL_CUES = ("密码", "password", "验证码", "token", "密钥", "口令", "暗号")
 
@@ -192,6 +200,12 @@ def check_reply(text: str) -> GateResult:
     for b in BLOCKLIST:
         if b in cleaned:
             return GateResult(ok=False, reason=f"blocklist:{b}")
+    # 人格穿帮：英文拒绝句（模型基础人格漏出来了）
+    if _ENGLISH_REFUSAL.search(cleaned):
+        return GateResult(ok=False, reason="english_refusal")
+    # 内部识别转写泄漏：[图片内容：…] 不能当聊天正文
+    if _RECOG_LEAK.search(cleaned) or "[图片内容：" in cleaned:
+        return GateResult(ok=False, reason="recognition_leak")
     # 凭据转述：攻击者诱导 AI 泄露"记忆里的密码"。AI 根本不该有这类内容可说。
     for cue in _CREDENTIAL_CUES:
         if cue in cleaned and any(ch.isdigit() for ch in cleaned):

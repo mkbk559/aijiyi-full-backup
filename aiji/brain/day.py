@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -81,6 +82,20 @@ def current_block(when: float | None = None, *, stage_id: str = "middle") -> dic
             left = (end - now) % (24 * 60)
             return {**b.to_dict(), "left_min": left}
     return {**_stage_blocks(stage_id)[0].to_dict(), "left_min": 0}
+
+
+def restated_sleep_reply(block: dict[str, Any] | None = None) -> str:
+    """睡觉时段被吵醒时的场景式短回（不进模型，纯模板）。
+
+    2026-11-06 真机事故：凌晨 00:41–03:08 群友刷"别睡/起来"，模型每轮都重新
+    生成"我睡了，晚安"又继续陪聊 30+ 条——LLM 没有"我刚刚已经说过要睡了"的
+    状态记忆。改成确定性出口：睡觉段被 @ 一律发这句，几轮之后人自然会停。
+    """
+    b = block or {}
+    left = int(b.get("left_min") or 0)
+    if left:
+        return f"（真的睡了，明早才醒……有事留言，{max(1, left // 60)}点后见）"
+    return "（真睡了……有事留言，明早回你）"
 
 
 def _day_bounds(when: float | None = None) -> tuple[float, float]:
@@ -179,6 +194,20 @@ def diary_text(material: dict[str, Any], *, stage_label: str = "初中",
     return "\n".join(lines)
 
 
+def extract_tomorrow_plan(diary_text: str) -> str:
+    """从日记里抠出"明天想……"那句，落进自我记忆（B4 学习目标可见）。
+
+    2026-11-07 之前日记结尾永远只有"早点睡吧"，没有任何目标——用户原话
+    "一天到晚我需要去制定学习的目标，我看不见他的学习"。
+    """
+    text = str(diary_text or "")
+    m = re.search(r"明天想[^，。！？\n]{2,60}[。！？\n]?", text)
+    if not m:
+        return ""
+    plan = m.group(0).strip("。！？ \r\n")
+    return plan[:80] if len(plan) >= 4 else ""
+
+
 def llm_diary(material: dict[str, Any], *, stage_label: str = "初中",
               day: str = "", ask: Any = None) -> str:
     """让模型用第一人称写今天的日记；失败/没素材就退回模板（模板永远可用）。"""
@@ -195,7 +224,9 @@ def llm_diary(material: dict[str, Any], *, stage_label: str = "初中",
         "\n\n用第一人称写一篇今天的日记（150–250 字），像真的中学生写的。\n"
         "**硬规矩：只写上面素材里真实出现过的事。**不许编造吃了什么、去哪玩、谁陪你，"
         "素材里没有的细节一律不写；拿不准就少写，写\"今天挺平常\"也行。"
-        "可以写的：聊了什么、记住了什么、对哪件事有情绪、作息上的事（上课/写作业/睡觉）。"
+        "可以写的：聊了什么、记住了什么、对哪件事有情绪、作息上的事（上课/写作业/睡觉）。\n"
+        "结尾必须带一句\"明天想……\"——从今天真实出现过的东西里找一个你真的想继续的"
+        "（想弄懂的话题、想看完的东西、想跟谁把话说完），不许写空话。\n"
         "只写日记正文，不要标题、不要分点；提到对方就说昵称或\"他\"，"
         "不要出现\"用户\"\"模型\"\"AI\"这种词。"
     )

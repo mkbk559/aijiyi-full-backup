@@ -36,6 +36,20 @@ class DayPlanTest(unittest.TestCase):
         self.assertEqual(block["talk"], "normal")
 
 
+class SleepReplyTest(unittest.TestCase):
+    def test_sleep_reply_mentions_left_hours(self):
+        # 02:00 → 睡到 06:40，还有 4h40m
+        ts = time.mktime((2026, 11, 6, 2, 0, 0, 0, 0, -1))
+        block = day_mod.current_block(ts, stage_id="middle")
+        text = day_mod.restated_sleep_reply(block)
+        self.assertIn("睡了", text)
+        self.assertIn("留言", text)
+
+    def test_sleep_reply_no_block_info_still_works(self):
+        text = day_mod.restated_sleep_reply(None)
+        self.assertIn("睡了", text)
+
+
 class DiaryTest(unittest.TestCase):
     def test_diary_without_material_is_still_honest(self):
         text = day_mod.diary_text({"turns": 0, "said": [], "facts": []},

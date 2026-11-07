@@ -101,15 +101,36 @@ def read_messages(session: Any, *, limit: int = 20) -> list[dict[str, Any]]:
     return list(rows)[-limit:]
 
 
+def _norm_text(text: str) -> str:
+    """归一化文本：去空白/标点差异，让'你好呀'和'你好呀 '落同一个键。"""
+    return "".join(ch for ch in str(text or "")
+                   if ch.isalnum() or "\u4e00" <= ch <= "\u9fff").lower()
+
+
 def pick_reply_target(messages: list[dict[str, Any]], *, self_name: str,
-                      seen: set[str]) -> dict[str, Any] | None:
-    """挑一条"该回"的消息：不是自己发的、没回过、最新的那条。"""
+                      seen: set[str],
+                      repeat_cap: int = 2) -> dict[str, Any] | None:
+    """挑一条"该回"的消息：不是自己发的、没回过、最新的那条。
+
+    repeat_cap（2026-11-07 回声室事故）：同一个发件人**同一句话**（归一化后）
+    在窗口里出现超过 N 次就不再接——11-06 对两个测试号全天回了 44 次，对面
+    '你好呀'发 8 遍他换了 8 种花样认真接，这是回声室不是聊天。
+    """
+    counts: dict[str, int] = {}
+    for msg in messages:
+        if self_name and self_name in (msg.get("sender") or ""):
+            continue
+        key = f"{msg.get('sender','')}|{_norm_text(msg.get('text',''))}"
+        counts[key] = counts.get(key, 0) + 1
     for msg in reversed(messages):
         if not msg.get("text"):
             continue
         if self_name and self_name in (msg.get("sender") or ""):
             continue
         if msg_key(msg) in seen:
+            continue
+        key = f"{msg.get('sender','')}|{_norm_text(msg.get('text',''))}"
+        if counts.get(key, 0) > repeat_cap:
             continue
         return msg
     return None

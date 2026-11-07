@@ -1171,13 +1171,24 @@ def cmd_day(args: Any) -> int:
         return 0
     if what == "diary":
         day_str = args.date or time.strftime("%Y-%m-%d")
-        material = day_mod.day_facts(_memory(args))
-        text = day_mod.llm_diary(material, stage_label=stage.label, day=day_str,
-                                 ask=_diary_ask)
-        path = day_mod.write_diary(text, day=day_str)
-        _emit({"ok": True, "day": day_str, "path": str(path), "chars": len(text),
-               "turns": material.get("turns", 0),
-               "facts": len(material.get("facts") or []), "preview": text[:160]})
+        m = _memory(args)
+        try:
+            material = day_mod.day_facts(m)
+            text = day_mod.llm_diary(material, stage_label=stage.label, day=day_str,
+                                     ask=_diary_ask)
+            path = day_mod.write_diary(text, day=day_str)
+            # B4：日记里的"明天想……"落进自我记忆，life_loop 次日看得见
+            plan = day_mod.extract_tomorrow_plan(text)
+            plan_id = 0
+            if plan:
+                plan_id = m.remember_self(plan, kind="plan", scope="default",
+                                         importance=0.7)
+            _emit({"ok": True, "day": day_str, "path": str(path), "chars": len(text),
+                   "turns": material.get("turns", 0),
+                   "facts": len(material.get("facts") or []), "preview": text[:160],
+                   "tomorrow_plan": plan, "self_memory_id": plan_id})
+        finally:
+            m.close()
         return 0
     if what == "audit":
         import json as _json

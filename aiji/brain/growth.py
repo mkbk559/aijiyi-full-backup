@@ -57,10 +57,16 @@ WEIGHTS: dict[str, float] = {
     "reflection": 2.0,
     "trait": 5.0,
     "session": 3.0,
-    "turn": 0.1,      # 每 10 轮 1 学分
+    "turn": 0.02,     # 每 50 轮 1 学分（2026-11-07 降权：纯聊天不是学习）
     "learn": 2.0,
+    # 2026-11-07（B5，"用分数远远不够"审计）：说话量降权、学习量加权。
+    # turn 从 0.1/轮 降到 0.02/轮（纯聊天不该涨分），好奇心自主搜索 3 分/次
+    # （真的学到东西），自我目标 4 分/条（写下的"明天想…"）。
+    "curiosity_learn": 3.0,
+    "self_goal": 4.0,
 }
-COUNTABLE = ("fact", "reflection", "trait", "session", "turn", "learn")
+COUNTABLE = ("fact", "reflection", "trait", "session", "turn", "learn",
+             "curiosity_learn", "self_goal")
 
 
 # 同进程内多人格副本并发写账本时把写入串起来（跨进程靠唯一临时名 + replace 重试）
@@ -229,6 +235,13 @@ def db_counts(db: Any) -> dict[str, float]:
             "session": ("SELECT COUNT(*) FROM (SELECT DISTINCT platform, "
                         "platform_user_id, scope, session FROM turn)"),
             "turn": "SELECT COUNT(*) FROM turn",
+            # B5：好奇心的学习产物（extra 里带 source='curiosity' 的事实）
+            "curiosity_learn": ("SELECT COUNT(*) FROM fact"
+                                " WHERE extra LIKE '%\"source\": \"curiosity\"%'"
+                                " OR extra LIKE '%curiosity%'"),
+            # B5：自我记忆里的目标（日记"明天想…"落进去的 plan）
+            "self_goal": ("SELECT COUNT(*) FROM self_memory"
+                           " WHERE kind='plan' AND status='active'"),
         }
         for name, sql in queries.items():
             try:

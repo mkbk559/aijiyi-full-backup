@@ -230,6 +230,29 @@ class Head:
             self.memory.being_snapshot(now=now)
             if hasattr(self.memory, "being_snapshot") else {}
         )
+        # ---- A1 作息硬闸（2026-11-07）：睡觉段不进模型，直接模板短回 ----
+        # 事故依据：11-06 凌晨 00:41–03:08 "睡/起"拉扯 30+ 条（模型每轮重新生成
+        # "我睡了晚安"然后继续陪聊）。IM 平台（qq/onebot/wechat 等）必须硬闸；
+        # 其他入口（本地调试/API/控制台）不受作息限制，方便白天测。
+        if str(ident.platform).lower() in IM_PLATFORMS:
+            try:
+                stage_probe = growth_mod.current().stage().id
+            except Exception:  # noqa: BLE001 - 成长引擎坏了别拦着聊天
+                stage_probe = "middle"
+            _block = day_mod.current_block(now, stage_id=stage_probe)
+            if _block.get("kind") == "sleep":
+                text = day_mod.restated_sleep_reply(_block)
+                if remember and text:
+                    self.memory.exchange(
+                        ident, session, query, text, extra=extra)
+                return HeadReply(
+                    text=text,
+                    query=query,
+                    session=session,
+                    finish_reason="stop",
+                    reason="day_gate:sleep",
+                    life=being_before,
+                )
         idle_s = float(being_before.get("idle_s", 0.0) or 0.0)
         if proactive and being_before and not being_before.get("proactive_ok", True):
             return HeadReply(
@@ -561,6 +584,14 @@ class Head:
 
         if remember and text:
             self.memory.exchange(ident, session, query, text, extra=extra)
+        # B1 好奇心闭环（2026-11-07）：回复里承认"不知道"且问题有明确主题 →
+        # 异步去搜一次并写进 knowledge。学习失败不影响对话。
+        if text and not proactive:
+            try:
+                from aiji.brain import curiosity
+                curiosity.maybe_learn_async(self.memory, query, text)
+            except Exception:  # noqa: BLE001 - 学习是加分项，不是主链路
+                pass
         if proactive and text and hasattr(self.memory, "being_mark_proactive"):
             being_snapshot = self.memory.being_mark_proactive(now=time.time())
         if proactive and text and hasattr(self.memory, "proactive_spend"):
@@ -602,8 +633,14 @@ class Head:
             return ""
         talk = {"none": "这会儿不方便多聊，回一两句就好",
                 "short": "只能短句回", "normal": "有空，可以正常聊"}.get(block.get("talk"), "")
+        # 上课/写作业（talk=none 且不是睡觉段）：IM 平台必须有硬兜底——
+        # 提示词约束挡不住 11-05 的 36+94+39 句。睡觉段已在入口硬闸，不在这。
+        hard = ""
+        if block.get("talk") == "none" and block.get("kind") != "sleep":
+            hard = ("——这是硬规矩：这一小时你正在上课/写作业，最多回一句，"
+                    "回完就去干自己的事，绝不要继续接话。")
         return (f"\n\n## 现在\n{time.strftime('%H:%M')}，"
-                f"你正在：{block.get('what')}（到 {block.get('end')}）。{talk}。")
+                f"你正在：{block.get('what')}（到 {block.get('end')}）。{talk}。{hard}")
 
     @staticmethod
     def _needs_style_rewrite(text: str, query: str) -> bool:

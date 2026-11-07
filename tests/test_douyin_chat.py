@@ -67,6 +67,28 @@ class PickTargetTest(unittest.TestCase):
         m = {"sender": "a", "text": "b"}
         self.assertEqual(douyin_chat.msg_key(m), douyin_chat.msg_key(dict(m)))
 
+    def test_repeat_fatigue_ignores_looped_text(self):
+        """回声室止损：同一个人同一句话刷 3 遍以上，不再接。"""
+        msgs = [{"sender": "测试", "text": "你好呀"} for _ in range(4)]
+        self.assertIsNone(douyin_chat.pick_reply_target(
+            msgs, self_name="我", seen=set()))
+
+    def test_repeat_fatigue_counts_per_sender(self):
+        """两个不同的人各说一次同样的句子，不算刷屏。"""
+        msgs = [{"sender": "甲", "text": "你好呀"},
+                {"sender": "乙", "text": "你好呀"}]
+        target = douyin_chat.pick_reply_target(
+            msgs, self_name="我", seen=set())
+        self.assertIsNotNone(target)
+
+    def test_repeat_fatigue_under_cap_still_replies(self):
+        """说两遍（=cap）还在容忍范围，第三遍开始不接。"""
+        msgs = [{"sender": "测试", "text": "阱里。"},
+                {"sender": "测试", "text": "阱里。"}]
+        target = douyin_chat.pick_reply_target(
+            msgs, self_name="我", seen=set())
+        self.assertIsNotNone(target)
+
 
 class RunOnceTest(unittest.TestCase):
     def setUp(self):

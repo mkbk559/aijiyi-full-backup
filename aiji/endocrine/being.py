@@ -56,6 +56,13 @@ INTERACTION_KINDS = frozenset((
     "joy", "success", "curiosity",
 ))
 
+# 工程巡检类事件（mcp_research/being_checkup 等）不属于"人设的生活"：
+# 2026-11-05 真机事故——mcp_research 的"去 GitHub 翻了 68 个仓库"进了
+# self_events 提示词，导致初中生在 QQ 里说"我刚才在翻 GitHub 看项目"。
+ENGINEERING_KINDS = frozenset((
+    "mcp_research", "being_checkup", "selftest", "maintenance",
+))
+
 
 @dataclass(frozen=True, slots=True)
 class LifeActivity:
@@ -586,14 +593,17 @@ class BeingStore:
 
     def self_events(self, *, limit: int = 5) -> list[dict[str, Any]]:
         marks = ",".join("?" for _ in INTERACTION_KINDS)
+        eng = ",".join("?" for _ in ENGINEERING_KINDS)
         return [
             dict(row) for row in self.db.read(
                 "SELECT kind,summary,valence_delta,energy_delta,created_at"
                 " FROM being_event WHERE persona=?"
-                f" AND kind NOT IN ({marks}) ORDER BY id DESC LIMIT ?",
+                f" AND kind NOT IN ({marks})"
+                f" AND kind NOT IN ({eng}) ORDER BY id DESC LIMIT ?",
                 (
                     self.persona,
                     *sorted(INTERACTION_KINDS),
+                    *sorted(ENGINEERING_KINDS),
                     max(1, int(limit)),
                 ),
             )

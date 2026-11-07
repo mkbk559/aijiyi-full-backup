@@ -1611,8 +1611,41 @@ def make_server(memory: Memory, host: str = "127.0.0.1", port: int = 8787) -> Th
     ):
         poll_seconds = max(
             5.0, float(os.environ.get("AIJI_LIFE_LOOP_POLL", "60")))
+
+        def _life_learner(activity_id: str, summary: str) -> dict:
+            """B2：life_loop 的"看视频/写小本子"落到真学习。
+
+            主题来源按优先级：① self_memory 里最近的"plan"（日记里的"明天想…"）；
+            ② 最近的 curiosity 疑问（being_event kind='curiosity' 的原文）。
+            都没有就学当天日记里出现过的关键词——保证"看视频"不再是空转。
+            """
+            from aiji.brain import curiosity
+
+            topic = ""
+            try:
+                rows = memory.self_memory(scope=None, limit=10)
+                for row in rows:
+                    if str(row.get("kind") or "") == "plan":
+                        topic = str(row.get("text") or "")[:40]
+                        break
+            except Exception:  # noqa: BLE001
+                topic = ""
+            if not topic:
+                try:
+                    events = memory.being_events(limit=10)
+                    for ev in events:
+                        if str(ev.get("kind") or "") == "curiosity":
+                            topic = str(ev.get("summary") or "")[:40]
+                            break
+                except Exception:  # noqa: BLE001
+                    topic = ""
+            if not topic:
+                return {"ok": False, "reason": "no_topic"}
+            return curiosity.learn_topic(memory, topic)
+
         memory.life_loop = LifeLoop(
-            memory.being, poll_seconds=poll_seconds).start()
+            memory.being, poll_seconds=poll_seconds,
+            learner=_life_learner).start()
         srv.life_loop = memory.life_loop
     # `settings.sticker_update` 是配置里的意愿；`AIJI_STICKER_UPDATE=0` 是运维/测试的
     # 临时开关（跟 AIJI_LIFE_LOOP、AIJI_MCP_RESEARCH_LOOP 同一层语义）。

@@ -15,6 +15,7 @@ import gc
 import shutil
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +43,15 @@ def _sweep(path: Path) -> None:
 
 
 def make_tmp(case: Any, prefix: str = "aiji-test-") -> Path:
-    """建临时目录并把它挂到用例的清理链上（tearDown 之后才删，删不掉留到进程退出）。"""
-    path = Path(tempfile.mkdtemp(prefix=prefix))
+    """建临时目录并把它挂到用例的清理链上（tearDown 之后才删，删不掉留到进程退出）。
+
+    2026-11-07：`tempfile.mkdtemp()` 在本机（DSH 沙箱 + Windows ACL）建出的目录
+    带 0o700 语义，同进程的 sqlite 都打不开（unable to open database file），
+    全套件 453 个同类报错的根因。改用 `os.makedirs`（0o777）——行为一致，
+    但 sqlite 能写。位置仍走 tempfile.gettempdir()，所以设 TMP 环境变量依然有效。
+    """
+    root = Path(tempfile.gettempdir())
+    path = root / f"{prefix}{uuid.uuid4().hex[:12]}"
+    path.mkdir(parents=True, exist_ok=True, mode=0o777)
     case.addCleanup(_sweep, path)
     return path
