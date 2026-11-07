@@ -628,3 +628,33 @@ selfcheck 把 dm/group/streak 对这两家归 NOT_APPLICABLE（DROPPED 记录原
 
 验证：matrix 抖音 dm/group/streak=unsupported；73+63 测试过；全量 1458 passed /
 4 环境项；doc_ref_check 回绿；服务 18:5x 重启拿到新代码（实例 23316）。
+
+## 2026-11-07 19:2x：Bing 真机验证 + 当前问题全景（用户问"还有什么问题"）
+
+**好奇心搜索真机全通**（此前档案记的"公网 SSL 拦"对 Bing 不成立）：
+- `web_search` 走 Bing 国际版免 key 直连，本机实测 3 条真结果（百度百科/知乎）；
+- `learn_topic(真库)` 端到端：搜索→抽取→fact 表落两行（本体+shared 镜像，
+  19:30:04，id 22450/22451）——**第一次查不到是 ingest 异步 worker 没 flush**，
+  验证时必须 sleep 后再查（这条写进经验）；
+- 40 个行为测试全绿。
+
+**链路存活盘点（19:2x 实测）**：8787 服务 ok（facts 626）；NapCat=QQ 进程 3908
+听 6099；AstrBot 13988 听 6199；QQ 今天 0 条 turn = 真没人说话（11-06 的 200 条
+user turn 全是测试账号刷的）；日记触发器确认在跑（11-06 22:05:51 准时写）。
+
+**当前问题清单（按优先级）**：
+1. **今晚数据自证**（明早查）：22:30–06:40 QQ sleep 闸是否 0 条；22:05 日记是否
+   带"明天想…"并落 self_memory(kind=plan)；life_loop 的 learn_tried 是否>0。
+2. **A5 QQ 侧重复疲劳**：C1 只修了抖音（已删）；QQ 群里同一人复读同一句的疲劳
+   拦截还没做——QQ 是现在唯一活着的社交面，值得补。
+3. **真网学习只验了 Bing 搜索**：fetch_url（点进结果页读全文）没验；学到的
+   "标题串"信息量浅——下一步学习质量要看 fetch_url 深读。
+4. **C3 B站无真人收件人**：评论链路活着但没人看（只有用户自己的账号）——
+   用户决定要不要在 B 站找真视频真评论区发。
+5. **A4 大肥鱼名称归属**：人格档案里"大肥鱼"指代不明（旧昵称？别人？），
+   日记里出现"他不是大肥鱼"这种含混句。
+6. **测试环境债**：venv 无 pytest（ensurepip 踩 mkdtemp 坑）；本轮一直用 uv 缓存
+   环境 `IhRHzUG-ae-fgIJm`（补过 websockets）——机器重启后缓存目录可能被 uv 清，
+   到时重跑 `uv run --with pytest`（先清 4 个代理变量+UV_CACHE_DIR 指到 .tmp）。
+7. **Windows 任务计划残留**：douyin watchdog 任务指向已删脚本，每 5 分钟静默
+   失败——用户在任务计划程序里删掉即可。
