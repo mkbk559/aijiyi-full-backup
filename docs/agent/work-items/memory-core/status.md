@@ -609,3 +609,22 @@ sleep 闸的线上行为由数据自证：明早查 turn 表 22:30–06:40 段 q
 **已知残留**：C3（B站无真人收件人，只有用户能解）、A4（大肥鱼名称归属）、A5（QQ 侧
 重复疲劳——C1 只修了抖音）、真网搜索（本机公网 SSL 拦，curiosity 的 web_search 真
 搜需要出网机验证；机器上 Bing 直连是 pypi 通/通用 API 拦的选择性网络，未试 Bing）。
+
+## 2026-11-07 晚：抖音/B 站私聊群聊全链路删除（commit 38d8208）
+
+用户报告「每次聊天都重新打开浏览器、识别了也不回、聊天消息几乎为 0」，日志实锤：
+watchdog 每 5 分钟冷启浏览器扫会话——18:07 轮识别到「明天要考试啦」但撞上服务重启
+（URLError 10061），18:12/18:17 两轮 peers=[]（会话列表没加载）。识别率天然不稳
+是架构决定的（每次冷启新浏览器实例扫一遍）。用户拍板：算了，全删。
+
+删了：douyin_chat.py 模块、tools 的 watchdog/loop 脚本、config/状态/streak 账本/
+全部轮次日志、douyin.py 的 dm/group/streak/_chat/_send_chat/_send_chunk、
+bilibili.py 的 dm、cli 的 watch/streak 分支、test_douyin_chat.py；
+selfcheck 把 dm/group/streak 对这两家归 NOT_APPLICABLE（DROPPED 记录原因）。
+
+保留：抖音/B 站 feed/comment/like（刷视频学习链路完好）、QQ 全链路、
+两平台的历史 turn 记忆（记忆本体不删）。**计划任务里 watchdog 任务指向的脚本已
+不存在 → 任务每 5 分钟静默失败，无害；有空在任务计划里手动删掉这条任务。**
+
+验证：matrix 抖音 dm/group/streak=unsupported；73+63 测试过；全量 1458 passed /
+4 环境项；doc_ref_check 回绿；服务 18:5x 重启拿到新代码（实例 23316）。
