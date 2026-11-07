@@ -94,10 +94,10 @@ class GrowthBookTest(unittest.TestCase):
         self.db.add("reflection", 5)   # 5 × 2.0
         self.db.add("trait", 2)        # 2 × 5.0
         self.db.add_sessions(3)        # 3 × 3.0
-        self.db.add("turn", 30)        # 30 → 3.0
+        self.db.add("turn", 30)        # 33 × 0.02（B5 降权后；旧行为 33/10=3.3）
         got = self.engine(1060.0).sync(self.db, force=True)
-        # turn 一列：30 条 + add_sessions 造的 3 条 = 33 → 3.3 学分
-        self.assertAlmostEqual(got["xp"], 10 + 10 + 10 + 9 + 3.3, places=1)
+        # turn 一列：30 条 + add_sessions 造的 3 条 = 33 → 33×0.02 = 0.66 学分
+        self.assertAlmostEqual(got["xp"], 10 + 10 + 10 + 9 + 0.66, places=1)
 
     def test_sync_is_idempotent(self):
         self.engine(1000.0).sync(self.db, force=True)

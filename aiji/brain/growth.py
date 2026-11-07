@@ -425,8 +425,6 @@ class Growth:
             base = counts[name] if base is None else float(base)
             delta = max(0.0, counts[name] - base)
             value = delta * WEIGHTS.get(name, 0.0)
-            if name == "turn":
-                value = round(delta) / 10.0
             detail[name] = round(delta, 1)
             gained += value
             baseline[name] = counts[name]
