@@ -658,3 +658,24 @@ user turn 全是测试账号刷的）；日记触发器确认在跑（11-06 22:0
    到时重跑 `uv run --with pytest`（先清 4 个代理变量+UV_CACHE_DIR 指到 .tmp）。
 7. **Windows 任务计划残留**：douyin watchdog 任务指向已删脚本，每 5 分钟静默
    失败——用户在任务计划程序里删掉即可。
+
+## 2026-11-07 20:2x：A5/A4/深读 全部落地（commit 6081cfe）
+
+用户确认"他是玛卡巴卡，修复所有"后，把问题清单里可修的三项全部做完：
+
+| 项 | 实现 | 验证 |
+|---|---|---|
+| A5 QQ 复读疲劳 | onebot.py：群聊同 (群,人,归一化文本) 半小时第 3+ 次只入记忆不回；私聊不启用；换人不连坐 | test_onebot_fatigue 8 例（含桥接层竞态同步）；服务端 /api/integrations/onebot repeat_cap=2 已上线 |
+| A4 身份归属 | 核验无需改码：names.json 已定稿（QQ=小肥鱼要答应、抖音=玛卡巴卡的小推车、大肥鱼=声线名不是人），names_line 已注入 head 提示词 | head.py:362 注入点确认 |
+| B1 学习深读 | curiosity._deep_read 两级：fetch_url 读结果页 → 退 Bing b_lineclamp 摘要段 | 真机：learn_topic('光合作用') 落库为正文级三段（光反应/暗反应/碳同化） |
+
+**深读路上的三个真机翻车点（都修了，别再踩）**：
+1. 百科/知乎/维基对脚本 UA 一律 403（带浏览器头也没用）——Bing 自身是唯一稳定源；
+2. executor._html_to_text 以前不解码数字实体（&#233;）——已补 html.unescape；
+3. Bing 查询带"是什么"会把「光合作用」拆成「光」——只用主题词。
+
+**life_loop 主题来源 bug**：curiosity 事件 summary 是「自己搜了一下「黑洞」…」
+整句，直接拿去搜会搜回"自己（汉语词语）"——server.py 已改为正则抠「」内主题。
+
+全量：1467 passed / 4 已知环境项。服务 20:2x 重启（实例 424），疲劳闸已生效。
+今晚数据自证点不变：sleep 闸、22:05 日记+plan、life_loop learn 计数。
