@@ -576,5 +576,36 @@ reflection/trait/self_memory/growth.json + platform_actions.jsonl + douyin_chat_
 是谁。对面是测试号/机器人，属回声室。教训：**闭合性判定必须包含"对面是人"与"生活证据链"，
 不能只数发送成功率。**
 
-**待修方向（用户尚未拍板）**：作息硬闸全平台化、好奇心接搜索（"我不知道X"→查→写knowledge）、
-life_loop 看视频改真学（feed+look/listen）、小本子接线+次日执行、学分改口径。
+**待修方向（已拍板"开工"，见下节实施记录）**。
+
+## 2026-11-07 傍晚 A/B/C 组行为修复（commit 08168ca）
+
+用户拍板"开工"，按定好的优先级全部实施并验证：
+
+| 项 | 实现 | 验证 |
+|---|---|---|
+| A1 作息硬闸 | head.py IM sleep 段模板短回（day_gate:sleep，零模型调用）；day line talk=none 硬规矩句 | test_day_gate 3 例（qq 凌晨零调用 / local 不受限 / 硬规矩进提示词）；rest 段真机回话正常 |
+| A2 穿帮源头 | being.py ENGINEERING_KINDS 从 self_events 剔除（mcp_research 不再进"我的生活"提示词） | 走 test_being 全量 |
+| A3 出口补漏 | gate.py: english_refusal + recognition_leak 两个新拦截 | test_gate_leak 6 例 |
+| C1 回声室止损 | douyin_chat pick_reply_target 归一化重复疲劳（>2 次同文本不接） | test_douyin_chat 3 例 |
+| B1 好奇心接搜索 | curiosity.py 新模块；head 出口触发；7 天幂等+2/h 限流 | 单测 11 例 + e2e（INGEST→ok→二次拦截） |
+| B2 看视频真学 | life_loop learner 钩子；server 启动接 curiosity（主题取 plan→curiosity 疑问） | test_being 回归 |
+| B4 目标可见 | 日记强制"明天想…" + extract_tomorrow_plan + day diary 落 self_memory(kind=plan) | test_curiosity 3 例 |
+| B5 学分改口径 | growth: turn 0.1→0.02；curiosity_learn=3/self_goal=4；db_counts 容老库 | test_curiosity + test_growth 回归 |
+
+**测试基建大修（顺带）**：`tempfile.mkdtemp`（0o700 语义）在本机 ACL 下 sqlite 打不开
+（A/B 对照实锤：makedirs 同位置一切正常）——conftest.py 全局替换 mkdtemp/
+TemporaryDirectory 为 makedirs 实现。全量：**453 环境性报错 → 4**（1470 passed）。
+4 个残余均为缓存测试环境缺依赖（rapidocr/octop_gateway）或沙箱管道+GBK（档案已知），
+venv unittest 验证通过（admin_snapshots OK）。本轮 pytest 环境是 uv 临时缓存
+`archive-v0/IhRHzUG-ae-fgIJm`（补了 websockets），venv 本身无 pytest（ensurepip 也踩
+mkdtemp 坑）——**下一轮跑 pytest 用同款 uv --with pytest（先清四个代理变量）**。
+
+**线上切换**：18:07 杀掉双实例（17644/20024，12:03/12:04 起，SO_REUSEADDR 同端口
+双 LISTENING——**双实例问题本身值得留意**），18:11 watchdog 计划任务拉起单实例
+21640（life_loop steps=2 确认新进程），/health ok，rest 段真机回话正常。
+sleep 闸的线上行为由数据自证：明早查 turn 表 22:30–06:40 段 qq 是否为 0。
+
+**已知残留**：C3（B站无真人收件人，只有用户能解）、A4（大肥鱼名称归属）、A5（QQ 侧
+重复疲劳——C1 只修了抖音）、真网搜索（本机公网 SSL 拦，curiosity 的 web_search 真
+搜需要出网机验证；机器上 Bing 直连是 pypi 通/通用 API 拦的选择性网络，未试 Bing）。
