@@ -38,8 +38,30 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 RVC = ROOT / "voice-engine" / "rvc"
-DEFAULT_MODEL = RVC / "assets" / "weights" / "dafeiyu.pth"
-DEFAULT_INDEX = RVC / "assets" / "indices" / "dafeiyu_added_IVF948_Flat_nprobe_1_dafeiyu_v2.index"
+def _pick_model() -> Path:
+    """权重在 11-03 之后改名成了 makabaka*.pth（dafeiyu 是旧名），这里按存在性挑。"""
+    weights = RVC / "assets" / "weights"
+    for name in ("makabaka.pth", "dafeiyu.pth"):
+        p = weights / name
+        if p.exists():
+            return p
+    found = sorted(weights.glob("*.pth"))
+    return found[0] if found else weights / "makabaka.pth"
+
+
+def _pick_index() -> Path:
+    """索引同理；找不到就返回一个不存在的路径（VC 那边会当成"不用索引"处理）。"""
+    indices = RVC / "assets" / "indices"
+    for pat in ("*makabaka*.index", "*dafeiyu*.index"):
+        hits = sorted(indices.glob(pat))
+        if hits:
+            return hits[0]
+    return indices / "none.index"
+
+
+DEFAULT_MODEL = _pick_model()
+DEFAULT_INDEX = _pick_index()
+
 
 
 def _short_error(exc: BaseException) -> str:
