@@ -1,0 +1,332 @@
+{
+  "version": 1,
+  "created_at": 1793405473.6527128,
+  "queries": [
+    "topic:mcp-server \"server\" in:name stars:>20 archived:false pushed:>2025-10-31",
+    "mcp server in:name,description stars:>20 archived:false pushed:>2025-10-31",
+    "mcp-server-fetch in:name,description stars:>5 archived:false pushed:>2025-10-31"
+  ],
+  "discovered": 57,
+  "fetched_readmes": 8,
+  "eligible": 0,
+  "candidates": [
+    {
+      "full_name": "microsoft/playwright-mcp",
+      "url": "https://github.com/microsoft/playwright-mcp",
+      "description": "Playwright MCP server",
+      "stars": 38874,
+      "updated_at": "2026-10-30T23:44:22Z",
+      "license": "Apache-2.0",
+      "topics": [
+        "mcp",
+        "playwright"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "fetch",
+        "list",
+        "read",
+        "documentation",
+        "docs"
+      ],
+      "risk_capabilities": [
+        "command",
+        "write",
+        "create",
+        "update",
+        "send",
+        "browser automation"
+      ],
+      "install_hint": "npx -y @playwright/mcp@latest",
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/microsoft/playwright-mcp/main/README.md: ## Playwright MCP A Model Context Protocol (MCP) server that provides browser automation capabilities using [Playwright](https://playwright.dev). This server enables LLMs to interact with web pages through structured accessibility snapshots, bypassing the need for screenshots or visually-tuned models. ### Playwright MCP vs Playwright CLI This package provides MCP interface into Playwright. If you are using a **coding agent**, you might benefit from using the [CLI+SKILLS](https://github.com/microsoft/playwright-cli) instead. - **CLI**: Modern **coding agents** increasingly favor CLI–based workflows exposed as SKILLs over MCP because CLI invocations are more token-efficient: they avoid loading large tool schemas and verbose accessibility trees into the model context, allowing agents to act through concise, purpose-built commands. This makes CLI + SKILLs better suited for high-throughput coding agents that must balance browser automation with large codebases, tests, and reasoning within limited context windows.<br>**Learn more about [Playwright CLI with SKILLS](https://github.com/microsoft/playwright-cli)**. - **MCP**: MCP remains relevant for specialized agentic loops that benefit from persistent state, rich introspection, and iterative reasoning over page structure, such as exploratory automation, self-healing tests, or long-running autonomous workflows where maintaining continuous browser context outweighs token cost concerns. ### Key Features - **Fast and lightweight**. Uses Playwright's accessibility tree, not pixel-based input. - **LLM-friendly**. No vision models needed, operates ",
+      "score": 17.948
+    },
+    {
+      "full_name": "punkpeye/awesome-mcp-servers",
+      "url": "https://github.com/punkpeye/awesome-mcp-servers",
+      "description": "A collection of MCP servers.",
+      "stars": 97091,
+      "updated_at": "2026-10-30T23:46:06Z",
+      "license": "MIT",
+      "topics": [
+        "ai",
+        "mcp"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "list",
+        "read",
+        "discover"
+      ],
+      "risk_capabilities": [
+        "command",
+        "publish",
+        "post",
+        "trade",
+        "payment",
+        "credential",
+        "browser automation"
+      ],
+      "install_hint": "",
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md: # Awesome MCP Servers [![ไทย](https://img.shields.io/badge/Thai-Click-blue)](README-th.md) [![English](https://img.shields.io/badge/English-Click-yellow)](README.md) [![繁體中文](https://img.shields.io/badge/繁體中文-點擊查看-orange)](README-zh_TW.md) [![简体中文](https://img.shields.io/badge/简体中文-点击查看-orange)](README-zh.md) [![日本語](https://img.shields.io/badge/日本語-クリック-青)](README-ja.md) [![한국어](https://img.shields.io/badge/한국어-클릭-yellow)](README-ko.md) [![Português Brasileiro](https://img.shields.io/badge/Português_Brasileiro-Clique-green)](README-pt_BR.md) [![Discord](https://img.shields.io/discord/1312302100125843476?logo=discord&label=discord)](https://glama.ai/mcp/discord) [![Subreddit subscribers](https://img.shields.io/reddit/subreddit-subscribers/mcp?style=flat&logo=reddit&label=subreddit)](https://www.reddit.com/r/mcp/) > [!IMPORTANT] > [ray.run](https://ray.run/) – from idea to a production-grade MCP server in under a minute! 🦜 <sup><a href=\"https://glama.ai/advertise\">Ad</a></sup> A curated list of awesome Model Context Protocol (MCP) servers. * [What is MCP?](#what-is-mcp) * [Clients](#clients) * [Remote Servers](#remote-servers) * [Tutorials](#tutorials) * [Community](#community) * [Legend](#legend) * [Server Implementations](#server-implementations) * [Frameworks](#frameworks) * [Tips & Tricks](#tips-and-tricks) ## What is MCP? [MCP](https://modelcontextprotocol.io/) is an open protocol that enables AI models to securely interact with local and remote resources through standardized server implementations. This list focuses on production-ready and experimental MCP servers that extend",
+      "score": 17.936
+    },
+    {
+      "full_name": "DayuanJiang/next-ai-draw-io",
+      "url": "https://github.com/DayuanJiang/next-ai-draw-io",
+      "description": "Draw and edit draw.io diagrams by chatting with an AI. Web app, desktop app, and an MCP server for Claude Code, Cursor, Codex and VS Code.",
+      "stars": 36508,
+      "updated_at": "2026-10-30T22:57:47Z",
+      "license": "Apache-2.0",
+      "topics": [
+        "ai",
+        "architecture-diagram",
+        "claude-code",
+        "diagram-generator",
+        "diagrams",
+        "draw-io",
+        "drawio",
+        "electron",
+        "flowchart",
+        "gemini-cli-extension",
+        "llm",
+        "mcp",
+        "mcp-server",
+        "nextjs"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "list",
+        "read",
+        "docs",
+        "discover"
+      ],
+      "risk_capabilities": [
+        "command",
+        "write",
+        "post",
+        "send",
+        "deploy",
+        "payment"
+      ],
+      "install_hint": "npx -y @next-ai-drawio/mcp-server@latest",
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/DayuanJiang/next-ai-draw-io/main/README.md: <div align=\"center\"> # Next AI Draw.io **Draw and edit draw.io diagrams by chatting with an AI.** English | [中文](./docs/cn/README_CN.md) | [日本語](./docs/ja/README_JA.md) [![TrendShift](https://trendshift.io/api/badge/repositories/15449)](https://next-ai-drawio.jiang.jp/) [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Sponsor](https://img.shields.io/badge/Sponsor-❤-ea4aaa)](https://github.com/sponsors/DayuanJiang) [**Live Demo**](https://next-ai-drawio.jiang.jp/) · [**Docs**](https://next-ai-drawio.jiang.jp/en/docs) · [**Gallery**](https://next-ai-drawio.jiang.jp/en/gallery) · [**Desktop App**](https://github.com/DayuanJiang/next-ai-draw-io/releases) · [**MCP Server**](https://next-ai-drawio.jiang.jp/en/mcp) </div> https://github.com/user-attachments/assets/66b9f12f-219f-4d62-acc0-0725e6850eec Describe a diagram in a sentence and the AI draws it on a real draw.io canvas. Edit it by hand like any draw.io file, or select a few shapes and tell the AI what to change. Every AI change is a version you can compare, restore or undo, and the result exports as `.drawio`, `.png` or `.svg`. Available as a web app, a desktop app for Windows, macOS and Linux, and an MCP server for AI agents such as Claude Code, Cursor and VS Code. ## Highlights **Draw** - Architecture diagrams, flowcharts, sequence diagrams and more from one sentence, with built-in AWS, Azure, GCP and Kubernetes icon libraries - Connectors can carry a flowing animation - Upload a screenshot or a sketch and the AI redraws it; upload PDF, Markdown, ",
+      "score": 17.812
+    },
+    {
+      "full_name": "github/github-mcp-server",
+      "url": "https://github.com/github/github-mcp-server",
+      "description": "GitHub's official MCP Server",
+      "stars": 34101,
+      "updated_at": "2026-10-30T23:58:23Z",
+      "license": "MIT",
+      "topics": [
+        "github",
+        "mcp",
+        "mcp-server"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "query",
+        "list",
+        "read",
+        "documentation",
+        "docs"
+      ],
+      "risk_capabilities": [
+        "terminal",
+        "command",
+        "create",
+        "update",
+        "publish",
+        "deploy",
+        "credential"
+      ],
+      "install_hint": "docker run (review required)",
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/github/github-mcp-server/main/README.md: [![Go Report Card](https://goreportcard.com/badge/github.com/github/github-mcp-server/v2)](https://goreportcard.com/report/github.com/github/github-mcp-server/v2) # GitHub MCP Server The GitHub MCP Server connects AI tools directly to GitHub's platform. This gives AI agents, assistants, and chatbots the ability to read repositories and code files, manage issues and PRs, analyze code, and automate workflows. All through natural language interactions. ### Use Cases - Repository Management: Browse and query code, search files, analyze commits, and understand project structure across any repository you have access to. - Issue & PR Automation: Create, update, and manage issues and pull requests. Let AI help triage bugs, review code changes, and maintain project boards. - CI/CD & Workflow Intelligence: Monitor GitHub Actions workflow runs, analyze build failures, manage releases, and get insights into your development pipeline. - Code Analysis: Examine security findings, review Dependabot alerts, understand code patterns, and get comprehensive insights into your codebase. - Team Collaboration: Access discussions, manage notifications, analyze team activity, and streamline processes for your team. Built for developers who want to connect their AI tools to GitHub context and capabilities, from simple natural language queries to complex multi-step agent workflows. ### Using the Go module The Go module path is `github.com/github/github-mcp-server/v2`. Library consumers must use this prefix in imports, for example `github.com/github/github-mcp-server/v2/pkg/github`, and in `go get` commands. No ",
+      "score": 17.664
+    },
+    {
+      "full_name": "headroomlabs-ai/headroom",
+      "url": "https://github.com/headroomlabs-ai/headroom",
+      "description": "Compress tool outputs, logs, files, and RAG chunks before they reach the LLM. 20% fewer tokens for coding agents, 60-95% fewer tokens for JSON, same answers. Library, proxy, MCP server.",
+      "stars": 78382,
+      "updated_at": "2026-10-31T00:00:29Z",
+      "license": "Apache-2.0",
+      "topics": [
+        "agent",
+        "ai",
+        "anthropic",
+        "claude-code",
+        "compression",
+        "context-engineering",
+        "context-window",
+        "cursor",
+        "fastapi",
+        "langchain",
+        "llm",
+        "mcp",
+        "openai",
+        "prompt-engineering",
+        "proxy",
+        "python",
+        "rag",
+        "token-optimization",
+        "tokens",
+        "typescript"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "read",
+        "docs"
+      ],
+      "risk_capabilities": [
+        "terminal",
+        "command",
+        "remove",
+        "write",
+        "create",
+        "post",
+        "send",
+        "deploy",
+        "credential"
+      ],
+      "install_hint": "",
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/headroomlabs-ai/headroom/main/README.md: <div align=\"center\"> <img src=\".github/assets/hero.svg\" alt=\"Headroom — the context compression layer for AI agents. A 55,957 token agent prompt compresses to the 24,340 tokens actually sent to the model, and the FATAL line at item 67 survives byte for byte.\" width=\"880\"> <a href=\"https://trendshift.io/repositories/20881\" target=\"_blank\"><img src=\"https://trendshift.io/api/badge/repositories/20881\" alt=\"headroomlabs-ai/headroom | Trendshift — #1 Repository Of The Day\" width=\"250\" height=\"55\"/></a> <p> <a href=\"https://github.com/headroomlabs-ai/headroom\"><img src=\"https://img.shields.io/github/stars/headroomlabs-ai/headroom?style=flat&color=00F0B5&labelColor=0C1118&label=stars\" alt=\"GitHub stars\"></a> <a href=\"https://github.com/headroomlabs-ai/headroom/actions/workflows/ci.yml\"><img src=\"https://github.com/headroomlabs-ai/headroom/actions/workflows/ci.yml/badge.svg\" alt=\"CI\"></a> <a href=\"https://pypi.org/project/headroom-ai/\"><img src=\"https://img.shields.io/pypi/v/headroom-ai.svg?color=00F0B5&labelColor=0C1118&label=pypi\" alt=\"PyPI\"></a> <a href=\"https://www.npmjs.com/package/headroom-ai\"><img src=\"https://img.shields.io/npm/v/headroom-ai.svg?color=00F0B5&labelColor=0C1118&label=npm\" alt=\"npm\"></a> <a href=\"https://huggingface.co/chopratejas/kompress-v2-base\"><img src=\"https://img.shields.io/badge/model-kompress--v2--base-65D8FF?labelColor=0C1118\" alt=\"Model\"></a> <a href=\"https://docs.headroomlabs.ai/docs\"><img src=\"https://img.shields.io/badge/docs-online-00F0B5?labelColor=0C1118\" alt=\"Docs\"></a> <a href=\"LICENSE\"><img src=\"https://img.shields.io/badge/license-Apache%202.0-98A4B3",
+      "score": 17.471
+    },
+    {
+      "full_name": "zylon-ai/private-gpt",
+      "url": "https://github.com/zylon-ai/private-gpt",
+      "description": "Complete API layer for private AI applications on local models: RAG, skills, tools, MCP, text-to-sql, and more. Works with any OpenAI-compatible inference server.",
+      "stars": 57622,
+      "updated_at": "2026-10-30T23:27:45Z",
+      "license": "Apache-2.0",
+      "topics": [
+        "ai",
+        "ai-tools",
+        "on-premise"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "query",
+        "list",
+        "read",
+        "documentation",
+        "docs",
+        "inspect"
+      ],
+      "risk_capabilities": [
+        "terminal",
+        "shell",
+        "update",
+        "post",
+        "send",
+        "deploy"
+      ],
+      "install_hint": "",
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/zylon-ai/private-gpt/main/README.md: ![Banner image](./fern/docs/assets/privategpt_banner.png) <div align=\"center\"> **PrivateGPT is the open-source API layer that turns local models into production AI applications.** [![Tests](https://github.com/zylon-ai/private-gpt/actions/workflows/tests.yml/badge.svg)](https://github.com/zylon-ai/private-gpt/actions/workflows/tests.yml?query=branch%3Amain) [![Website](https://img.shields.io/website?up_message=check%20it&down_message=down&url=https%3A%2F%2Fdocs.privategpt.dev%2F&label=Documentation)](https://docs.privategpt.dev/) [![Discord](https://img.shields.io/discord/1164200432894234644?logo=discord&label=PrivateGPT)](https://discord.gg/F8KCFeZbkx) [![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/ZylonPrivateGPT)](https://twitter.com/ZylonPrivateGPT) <a href=\"https://trendshift.io/repositories/8691\" target=\"_blank\"><img src=\"https://trendshift.io/api/badge/repositories/8691\" alt=\"zylon-ai%2Fprivate-gpt | Trendshift\" style=\"width: 250px; height: 55px;\" width=\"250\" height=\"55\"/></a> </div> --- Running a model locally is only the first step. To build useful AI applications you need a set of higher-level building blocks. PrivateGPT provides that layer as an open-source API following the Claude API model — so you can build private AI products without rebuilding the same backend primitives from scratch, and without depending on cloud APIs. Production-tested: [PrivateGPT powers Zylon](#privategpt-vs-zylon), the on-premise AI platform providing Private AI to enterprises across the globe. ```text Your app / agent / workflow / UI | PrivateGPT API | OpenAI-compatible inferen",
+      "score": 16.803
+    },
+    {
+      "full_name": "t8y2/dbx",
+      "url": "https://github.com/t8y2/dbx",
+      "description": "25 MB lightweight cross-platform database client for 100+ databases, including MySQL, PostgreSQL, SQLite, Redis, MongoDB, DuckDB, SQL Server, and Dameng. Built-in AI, MCP Server, CLI, desktop and Docker. | 轻量级跨平台数据库管理工具，支持 MySQL、PostgreSQL、SQLite、Redis、MongoDB、达梦等 100+ 数据库，提供桌面端、Docker、CLI、内置 AI 助手和 MCP。",
+      "stars": 28265,
+      "updated_at": "2026-10-31T00:09:57Z",
+      "license": "Apache-2.0",
+      "topics": [
+        "ai",
+        "cli",
+        "clickhouse",
+        "database",
+        "database-client",
+        "database-management",
+        "docker",
+        "gui",
+        "mcp",
+        "mongodb",
+        "mysql",
+        "postgresql",
+        "redis",
+        "rust",
+        "sql-server",
+        "sqlite",
+        "tauri",
+        "vue"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "list",
+        "read",
+        "docs"
+      ],
+      "risk_capabilities": [
+        "post"
+      ],
+      "install_hint": "",
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/t8y2/dbx/main/README.md: <div align=\"center\"> <p style=\"font-size: 18px; white-space: nowrap;\"><strong>100+ databases in 25 MB. Desktop, Docker, CLI, built-in AI assistant, and MCP Server.</strong></p> <p> <img src=\"https://dl.dbxio.com/assets/readme-hero-20260925.png\" alt=\"DBX screenshot\" width=\"820\" /> </p> <p> <a href=\"https://github.com/t8y2/dbx/releases\"><img src=\"https://img.shields.io/endpoint?url=https%3A%2F%2Fshieldcn.dev%2Fgithub%2Fdownloads%2Ft8y2%2Fdbx%2Fshields.json&amp;style=for-the-badge\" /></a> <a href=\"https://qm.qq.com/cgi-bin/qm/qr?k=&group_code=1087880322\"><img src=\"https://img.shields.io/badge/QQ_群-1087880322-EB1923?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iODYiIHdpZHRoPSI4NiIgdmlld0JveD0iMCAwIDEyMCAxNDUiPjxwYXRoIGZpbGw9IiNmYWFiMDciIGQ9Ik02MC41MDMgMTQyLjIzN2MtMTIuNTMzIDAtMjQuMDM4LTQuMTk1LTMxLjQ0NS0xMC40Ni0zLjc2MiAxLjEyNC04LjU3NCAyLjkzMi0xMS42MSA1LjE3NS0yLjYgMS45MTgtMi4yNzUgMy44NzQtMS44MDcgNC42NjMgMi4wNTYgMy40NyAzNS4yNzMgMi4yMTYgNDQuODYyIDEuMTM2em0wIDBjMTIuNTM1IDAgMjQuMDM5LTQuMTk1IDMxLjQ0Ny0xMC40NiAzLjc2IDEuMTI0IDguNTczIDIuOTMyIDExLjYxIDUuMTc1IDIuNTk4IDEuOTE4IDIuMjc0IDMuODc0IDEuODA1IDQuNjYzLTIuMDU2IDMuNDctMzUuMjcyIDIuMjE2LTQ0Ljg2MiAxLjEzNnptMCAwIi8+PHBhdGggZD0iTTYwLjU3NiA2Ny4xMTljMjAuNjk4LS4xNCAzNy4yODYtNC4xNDcgNDIuOTA3LTUuNjgzIDEuMzQtLjM2NyAyLjA1Ni0xLjAyNCAyLjA1Ni0xLjAyNC4wMDUtLjE4OS4wODUtMy4zNy4wODUtNS4wMUMxMDUuNjI0IDI3Ljc2OCA5Mi41OC4wMDEgNjAuNSAwIDI4LjQyLjAwMSAxNS4zNzUgMjcuNzY5IDE1LjM3NSA1NS40MDFjMCAxLjY0Mi4wOCA0LjgyMi4wODYgNS4wMSAwIDAgLjU4My42MTUgMS42NS45MTMgNS4xOSAxLjQ0NCAyMi4wOSA1LjY1IDQzLjMxMiA1Ljc5NXptNTYuMjQ1IDIzLjAyYy0xLj",
+      "score": 15.256
+    },
+    {
+      "full_name": "PrefectHQ/fastmcp",
+      "url": "https://github.com/PrefectHQ/fastmcp",
+      "description": "🚀 The fast, Pythonic way to build MCP servers and clients.",
+      "stars": 28247,
+      "updated_at": "2026-10-30T22:09:59Z",
+      "license": "Apache-2.0",
+      "topics": [
+        "agents",
+        "fastmcp",
+        "llms",
+        "mcp",
+        "mcp-clients",
+        "mcp-servers",
+        "mcp-tools",
+        "model-context-protocol",
+        "python"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "list",
+        "read",
+        "documentation",
+        "docs",
+        "discover"
+      ],
+      "risk_capabilities": [
+        "create",
+        "deploy"
+      ],
+      "install_hint": "",
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/PrefectHQ/fastmcp/main/README.md: <div align=\"center\"> <!-- omit in toc --> <picture> <source width=\"550\" media=\"(prefers-color-scheme: dark)\" srcset=\"https://raw.githubusercontent.com/PrefectHQ/fastmcp/main/docs/assets/brand/f-watercolor-waves-4-dark.png\"> <source width=\"550\" media=\"(prefers-color-scheme: light)\" srcset=\"https://raw.githubusercontent.com/PrefectHQ/fastmcp/main/docs/assets/brand/f-watercolor-waves-4.png\"> <img width=\"550\" alt=\"FastMCP Logo\" src=\"https://raw.githubusercontent.com/PrefectHQ/fastmcp/main/docs/assets/brand/f-watercolor-waves-2.png\"> </picture> # FastMCP 🚀 <strong>Move fast and make things.</strong> *Made with 💙 by [Prefect](https://www.prefect.io/)* [![Docs](https://img.shields.io/badge/docs-gofastmcp.com-blue)](https://gofastmcp.com) [![Discord](https://img.shields.io/badge/community-discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/uu8dJCgttd) [![PyPI - Version](https://img.shields.io/pypi/v/fastmcp.svg)](https://pypi.org/project/fastmcp) [![TypeScript](https://img.shields.io/npm/v/%40prefecthq%2Ffastmcp-ts?label=typescript&color=3178c6)](https://github.com/PrefectHQ/fastmcp-ts) [![Tests](https://github.com/PrefectHQ/fastmcp/actions/workflows/run-tests.yml/badge.svg)](https://github.com/PrefectHQ/fastmcp/actions/workflows/run-tests.yml) [![License](https://img.shields.io/github/license/PrefectHQ/fastmcp.svg)](https://github.com/PrefectHQ/fastmcp/blob/main/LICENSE) <a href=\"https://trendshift.io/repositories/21461\" target=\"_blank\"><img src=\"https://trendshift.io/api/badge/repositories/21461\" alt=\"prefecthq%2Ffastmcp | Trendshift\" style=\"width: 250px; height: 55px;\" width=\"250\" he",
+      "score": 15.255
+    }
+  ]
+}

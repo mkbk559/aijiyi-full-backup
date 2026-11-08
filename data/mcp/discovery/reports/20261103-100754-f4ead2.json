@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "created_at": 1793671674.882677,
+  "queries": [
+    "duckduckgo mcp server in:name,description stars:>5 archived:false pushed:>2025-11-03",
+    "mcp-server-fetch in:name,description stars:>5 archived:false pushed:>2025-11-03",
+    "topic:mcp-server \"server\" in:name stars:>20 archived:false pushed:>2025-11-03",
+    "mcp server in:name,description stars:>20 archived:false pushed:>2025-11-03"
+  ],
+  "discovered": 0,
+  "fetched_readmes": 0,
+  "eligible": 0,
+  "candidates": [],
+  "summary": "去 GitHub 翻了 MCP：检查 0 个仓库，读了 0 份 README，筛出 0 个只读候选。优先看：暂无。只记录，不会自动安装或执行。"
+}

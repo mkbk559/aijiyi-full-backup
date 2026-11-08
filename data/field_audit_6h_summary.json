@@ -1,0 +1,124 @@
+{
+  "status": "stopped_early_by_user",
+  "requested_duration_seconds": 21600,
+  "started_at": "2026-11-01T18:36:15.873690+08:00",
+  "last_sample_at": "2026-11-01T23:25:30.850194+08:00",
+  "recorded_duration_seconds": 17355,
+  "samples": 290,
+  "health_failures": 0,
+  "max_pending": 56,
+  "qq_assistant_first": 537,
+  "qq_assistant_last": 836,
+  "alert_sample_counts": {
+    "onebot_disconnected": 4,
+    "astrbot_down": 4,
+    "assistant_reply_stalled": 19,
+    "writer_backlog_rising": 5,
+    "transport_or_model_errors": 47,
+    "agent2api_token_rate_high": 277,
+    "napcat_webui_down": 1,
+    "agent2api_timeout_rate_high": 8
+  },
+  "logged_error_count": 133,
+  "latest_logged_errors": [
+    "1200, data=None, message='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\\n{\\n    \"result\": 299,\\n    \"errMsg\": \"本群每分钟只能发5条消息\\\\u0000\"\\n}\\n', wording='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\\n{\\n    \"result\": 299,\\n    \"errMsg\": \"本群每分钟只能发5条消息\\\\u0000\"\\n}\\n', echo={'seq': 1082}, stream='normal-action'>\u001b[0m",
+    "1200, data=None, message='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\\n{\\n    \"result\": 299,\\n    \"errMsg\": \"本群每分钟只能发5条消息\\\\u0000\"\\n}\\n', wording='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\\n{\\n    \"result\": 299,\\n    \"errMsg\": \"本群每分钟只能发5条消息\\\\u0000\"\\n}\\n', echo={'seq': 1084}, stream='normal-action'>\u001b[0m",
+    "    raise ActionFailed(result=result)",
+    "          └ <class 'aiocqhttp.exceptions.ActionFailed'>",
+    "1200, data=None, message='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\\n{\\n    \"result\": 299,\\n    \"errMsg\": \"本群每分钟只能发5条消息\\\\u0000\"\\n}\\n', wording='EventChecker Failed: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\\n{\\n    \"result\": 299,\\n    \"errMsg\": \"本群每分钟只能发5条消息\\\\u0000\"\\n}\\n', echo={'seq': 1084}, stream='normal-action'>\u001b[0m"
+  ],
+  "last_sample": {
+    "ts": 1793546730.8501937,
+    "time": "2026-11-01 23:25:30",
+    "health": {
+      "ok": true,
+      "pending": 18,
+      "queue_depth": 16,
+      "mcp": {
+        "running": true,
+        "working": false,
+        "runs": 7,
+        "errors": 0,
+        "last_run_at": 1793545735.9766726,
+        "last_error": "",
+        "interval_s": 3600.0,
+        "initial_delay_s": 60.0,
+        "latest": {
+          "created_at": 1793545674.596839,
+          "discovered": 68,
+          "fetched_readmes": 10,
+          "eligible": 1,
+          "summary": "去 GitHub 翻了 MCP：检查 68 个仓库，读了 10 份 README，筛出 1 个只读候选。优先看：nickclyde/duckduckgo-mcp-server。只记录，不会自动安装或执行。"
+        }
+      },
+      "stickers": null,
+      "error": null
+    },
+    "aiji": {
+      "qq_user": 13142,
+      "qq_assistant": 836,
+      "latest_assistant": 1793546720.7269075,
+      "dead": 0
+    },
+    "agent2api": {
+      "last_30m_requests": 210,
+      "last_30m_tokens": 219460,
+      "last_30m_200": 162,
+      "last_30m_408": 47,
+      "latest_request_ms": 1793546720507,
+      "today": {
+        "date": "2026-11-01",
+        "requests": 3080,
+        "successful": 3077,
+        "tokens": 2950443
+      },
+      "balances": [
+        {
+          "provider": "autoclaw",
+          "accounts": 2,
+          "remaining": 47693.0
+        },
+        {
+          "provider": "catpaw",
+          "accounts": 2,
+          "remaining": 0.0
+        },
+        {
+          "provider": "codearts",
+          "accounts": 2,
+          "remaining": 7899.26
+        },
+        {
+          "provider": "kuku",
+          "accounts": 2,
+          "remaining": 100.0
+        },
+        {
+          "provider": "loomy",
+          "accounts": 2,
+          "remaining": 40000.0
+        },
+        {
+          "provider": "qoder",
+          "accounts": 2,
+          "remaining": 1400.0
+        },
+        {
+          "provider": "raccoon",
+          "accounts": 2,
+          "remaining": 20890.0
+        },
+        {
+          "provider": "trae",
+          "accounts": 1,
+          "remaining": 700.0
+        },
+        {
+          "provider": "zcode",
+          "accounts": 2,
+          "remaining": 0.0
+        }
+      ]
+    }
+  }
+}

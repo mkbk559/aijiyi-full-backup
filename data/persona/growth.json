@@ -1,0 +1,40 @@
+{
+  "schema": 2,
+  "born_at": 1793680965.279521,
+  "xp": 3681.24,
+  "scale": 1.0,
+  "baseline": {
+    "fact": 710.0,
+    "reflection": 215.0,
+    "trait": 217.0,
+    "session": 101.0,
+    "turn": 2708.0,
+    "learn": 0.0,
+    "curiosity_learn": 14.0,
+    "self_goal": 1.0
+  },
+  "db_path": "D:\\AIJiYi\\data\\aiji.db",
+  "stage": "middle",
+  "stage_since": 1793852025.6709137,
+  "milestones": [
+    {
+      "stage": "middle",
+      "label": "初中",
+      "at": 1793852025.6709197,
+      "xp": 1218.3
+    }
+  ],
+  "last_sync": 1794097739.9249492,
+  "reset_note": "首次建成学分账本：历史存量（旧人格时期学的）全部计为基线，从 0 学分开始长大",
+  "last_gain": 40.08,
+  "last_detail": {
+    "fact": 18.0,
+    "reflection": 1.0,
+    "trait": 2.0,
+    "session": 0.0,
+    "turn": 4.0,
+    "learn": 0.0,
+    "curiosity_learn": 2.0,
+    "self_goal": 1.0
+  }
+}

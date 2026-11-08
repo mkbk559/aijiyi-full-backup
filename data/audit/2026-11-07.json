@@ -1,0 +1,18 @@
+{
+ "day": "2026-11-07",
+ "sent": 4,
+ "fails": 2,
+ "duplicates": {},
+ "identity_conflicts": [],
+ "per_hour": {
+  "12": 2,
+  "17": 2
+ },
+ "busiest_hour": 2,
+ "fail_codes": {
+  "douyin:group:identity_conflict": 1,
+  "douyin:group:empty_feed": 1
+ },
+ "problems": [],
+ "healthy": true
+}

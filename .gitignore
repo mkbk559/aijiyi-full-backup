@@ -1,7 +1,35 @@
 __pycache__/
 *.pyc
 .tmp/
-data/
+# 2026-11-08 全量上传：data/ 大部分是可再生的缓存（browser/backups/songs/temp），
+# 记忆本体走文件级白名单（见文件末尾 !data/... 条目）。
+data/*
+!data/aiji.db
+!data/aiji.db-wal
+!data/aiji.db-shm
+!data/memory.db
+!data/persona/
+!data/diary/
+!data/voices/
+!data/social/
+!data/music/
+!data/t2i_templates/
+!data/audit/
+!data/bili_actions.jsonl
+!data/bili_cookies.jar
+!data/cmd_config.json
+!data/monitors.on
+!data/field_monitor.jsonl
+!data/platform_actions.jsonl
+!data/service_state.txt
+!data/social_selfcheck.json
+!data/field_audit_6h_summary.json
+!data/field_audit_30m_summary.json
+!data/evidence/
+!data/mcp/
+!data/learn_state.json
+!data/growth.json
+!data/being.json
 .venv/
 voice-engine/**/.venv/
 voice-engine/models/
@@ -17,6 +45,11 @@ build/
 *.db
 *.db-wal
 *.db-shm
+# 例外：记忆本体 db（全量上传白名单见文件头）
+!data/aiji.db
+!data/aiji.db-wal
+!data/aiji.db-shm
+!data/memory.db
 # RVC 引擎运行时（3 GB 权重 + venv + 训练产物，不进仓库）
 voice-engine/rvc/
 voice-engine/*/assets/

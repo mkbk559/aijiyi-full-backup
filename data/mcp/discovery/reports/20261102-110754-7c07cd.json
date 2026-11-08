@@ -1,0 +1,350 @@
+{
+  "version": 1,
+  "created_at": 1793588874.7352152,
+  "queries": [
+    "duckduckgo mcp server in:name,description stars:>5 archived:false pushed:>2025-11-02",
+    "mcp-server-fetch in:name,description stars:>5 archived:false pushed:>2025-11-02",
+    "topic:mcp-server \"server\" in:name stars:>20 archived:false pushed:>2025-11-02",
+    "mcp server in:name,description stars:>20 archived:false pushed:>2025-11-02"
+  ],
+  "discovered": 50,
+  "fetched_readmes": 10,
+  "eligible": 1,
+  "candidates": [
+    {
+      "full_name": "nickclyde/duckduckgo-mcp-server",
+      "url": "https://github.com/nickclyde/duckduckgo-mcp-server",
+      "description": "A Model Context Protocol (MCP) server that provides web search capabilities through DuckDuckGo, with additional features for content fetching and parsing.",
+      "stars": 1563,
+      "updated_at": "2026-11-01T15:57:07Z",
+      "license": "MIT",
+      "topics": [],
+      "risk": "read_only",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "query"
+      ],
+      "risk_capabilities": [],
+      "install_hint": "uvx duckduckgo-mcp-server",
+      "platform_compatible": true,
+      "direct_install": true,
+      "eligible": true,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/nickclyde/duckduckgo-mcp-server/main/README.md: # DuckDuckGo Search MCP Server [![PyPI version](https://img.shields.io/pypi/v/duckduckgo-mcp-server)](https://pypi.org/project/duckduckgo-mcp-server/) [![PyPI downloads](https://img.shields.io/pypi/dm/duckduckgo-mcp-server)](https://pypi.org/project/duckduckgo-mcp-server/) [![Python versions](https://img.shields.io/pypi/pyversions/duckduckgo-mcp-server)](https://pypi.org/project/duckduckgo-mcp-server/) A Model Context Protocol (MCP) server that provides web search capabilities through DuckDuckGo, with additional features for content fetching and parsing. ## Quick Start ```bash uvx duckduckgo-mcp-server ``` ## Features - **Web Search**: Search DuckDuckGo with advanced rate limiting and result formatting - **Content Fetching**: Retrieve and parse webpage content with intelligent text extraction - **Long URL Shortening**: Over-long result URLs become short `ref://` tokens that `fetch_content` accepts directly, saving context - **Rate Limiting**: Built-in protection against rate limits for both search and content fetching - **Error Handling**: Comprehensive error handling and logging - **LLM-Friendly Output**: Results formatted specifically for large language model consumption ## Installation Install from PyPI using `uv`: ```bash uv pip install duckduckgo-mcp-server ``` ## Usage ### Running with Claude Desktop 1. Download [Claude Desktop](https://claude.ai/download) 2. Create or edit your Claude Desktop configuration: - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json` - On Windows: `%APPDATA%\\Claude\\claude_desktop_config.json` Add the following configurat",
+      "score": 21.97
+    },
+    {
+      "full_name": "apify/apify-mcp-server",
+      "url": "https://github.com/apify/apify-mcp-server",
+      "description": "The Apify MCP server enables your AI agents to extract data from social media, search engines, maps, e-commerce sites, or any other website using thousands of ready-made scrapers, crawlers, and automation tools available on the Apify Store.",
+      "stars": 14272,
+      "updated_at": "2026-11-02T02:42:19Z",
+      "license": "MIT",
+      "topics": [
+        "agents",
+        "ai",
+        "mcp",
+        "mcp-server"
+      ],
+      "risk": "review_required",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "list",
+        "read",
+        "documentation",
+        "docs",
+        "discover",
+        "inspect"
+      ],
+      "risk_capabilities": [
+        "write",
+        "create",
+        "update",
+        "publish",
+        "send"
+      ],
+      "install_hint": "npx -y @apify/actors-mcp-server",
+      "platform_compatible": true,
+      "direct_install": true,
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/apify/apify-mcp-server/master/README.md: <p align=\"center\"> <a href=\"https://mcp.apify.com\"> <img alt=\"Apify MCP server\" src=\"docs/apify-mcp-server-header.png\" width=\"100%\"> </a> </p> <p align=\"center\"> <a href=\"https://mcp.apify.com\"><img src=\"https://img.shields.io/badge/Any_MCP_client-Get_config-F86606?style=for-the-badge&logo=modelcontextprotocol&logoColor=white\" alt=\"Get the config for any MCP client\" height=\"32\"></a> </p> <p align=\"center\"> <a href=\"https://www.npmjs.com/package/@apify/actors-mcp-server\"><img src=\"https://img.shields.io/npm/v/@apify/actors-mcp-server.svg\" alt=\"npm version\"></a> <a href=\"https://www.npmjs.com/package/@apify/actors-mcp-server\"><img src=\"https://img.shields.io/npm/dm/@apify/actors-mcp-server.svg\" alt=\"npm downloads\"></a> <a href=\"https://github.com/apify/apify-mcp-server/actions/workflows/on_master.yaml\"><img src=\"https://github.com/apify/apify-mcp-server/actions/workflows/on_master.yaml/badge.svg?branch=master\" alt=\"CI status\"></a> <a href=\"./LICENSE.md\"><img src=\"https://img.shields.io/github/license/apify/apify-mcp-server\" alt=\"MIT license\"></a> </p> <p align=\"center\"> <a href=\"https://github.com/apify/apify-mcp-server/stargazers\"><img src=\"https://img.shields.io/github/stars/apify/apify-mcp-server?style=social\" alt=\"GitHub stars\"></a> <a href=\"https://discord.apify.com\"><img src=\"https://img.shields.io/badge/Discord-Join_the_community-5865F2?logo=discord&logoColor=white\" alt=\"Apify Discord\"></a> </p> # Apify MCP server Connect your agent to the largest marketplace of tools for AI. **The official Apify Model Context Protocol (MCP) server gives AI agents web scraping, data extraction, a",
+      "score": 23.772
+    },
+    {
+      "full_name": "pinkpixel-dev/web-scout-mcp",
+      "url": "https://github.com/pinkpixel-dev/web-scout-mcp",
+      "description": "An MCP server providing web search and content extraction capabilities. Integrates DuckDuckGo search functionality and URL content extraction into your MCP environment, enabling AI assistants to search the web and extract webpage content.",
+      "stars": 151,
+      "updated_at": "2026-10-30T10:34:49Z",
+      "license": "Apache-2.0",
+      "topics": [
+        "ai-assistant",
+        "ai-tools",
+        "cheerio",
+        "content-extraction",
+        "crawler",
+        "duckduckgo",
+        "duckduckgo-search",
+        "google-search",
+        "mcp",
+        "mcp-server",
+        "web-content",
+        "web-crawler",
+        "web-scraper",
+        "web-scraping",
+        "web-search",
+        "web-search-agent"
+      ],
+      "risk": "read_only",
+      "read_only_capabilities": [
+        "search",
+        "query",
+        "list"
+      ],
+      "risk_capabilities": [],
+      "install_hint": "npx -y @smithery/cli",
+      "platform_compatible": true,
+      "direct_install": false,
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/pinkpixel-dev/web-scout-mcp/main/README.md: <p align=\"center\"> <img src=\"assets/logo.png\" alt=\"Web Scout MCP Logo\" width=\"300\"/> </p> <h1 align=\"center\">Web Scout MCP Server</h1> <p align=\"center\"> <a href=\"https://www.npmjs.com/package/@pinkpixel/web-scout-mcp\"><img src=\"https://img.shields.io/npm/v/@pinkpixel/web-scout-mcp.svg\" alt=\"npm version\"></a> <a href=\"https://github.com/pinkpixel-dev/web-scout-mcp/blob/main/LICENSE\"><img src=\"https://img.shields.io/badge/license-MIT-blue.svg\" alt=\"License\"></a> <a href=\"https://nodejs.org/en/\"><img src=\"https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg\" alt=\"Node.js Version\"></a> <a href=\"https://smithery.ai/servers/pinkpixel-dev/web-scout-mcp\"><img alt=\"Smithery Badge\" src=\"https://smithery.ai/badge/pinkpixel-dev/web-scout-mcp\"></a> </p> <p align=\"center\"> <a href=\"https://glama.ai/mcp/servers/pinkpixel-dev/web-scout-mcp\"><img src=\"https://glama.ai/mcp/servers/pinkpixel-dev/web-scout-mcp/badges/score.svg\" alt=\"web-scout-mcp MCP server\" /></a> <a href=\"https://mseep.ai/app/pinkpixel-dev-web-scout-mcp\"><img src=\"https://mseep.net/pr/pinkpixel-dev-web-scout-mcp-badge.png\" alt=\"MseeP.ai Security Assessment Badge\" width=\"200\" /></a> </p> <p align=\"center\"> An MCP server for web search using DuckDuckGo and content extraction, with support for multiple URLs and memory optimizations. </p> ## ✨ Features - 🔍 **DuckDuckGo Search**: Fast and privacy-focused web search capability - 📄 **Content Extraction**: Clean, readable text extraction from web pages - 🚀 **Parallel Processing**: Support for extracting content from multiple URLs simultaneously - 💾 **Memory Optimization**: Smart ",
+      "score": 16.895
+    },
+    {
+      "full_name": "liketrek/TREK",
+      "url": "https://github.com/liketrek/TREK",
+      "description": "The most complete open-source travel planner: real-time collaboration, bookings, budgets, packing lists, journals, offline PWA, SSO and an AI-ready MCP server, with planet-wide place search and routing built in.",
+      "stars": 15306,
+      "updated_at": "2026-11-02T02:49:25Z",
+      "license": "AGPL-3.0",
+      "topics": [
+        "budget-tracker",
+        "collaborative",
+        "docker",
+        "itinerary",
+        "mcp-server",
+        "offline-first",
+        "open-source",
+        "openstreetmap",
+        "packing-list",
+        "pwa",
+        "real-time",
+        "self-hosted",
+        "selfhosted",
+        "travel",
+        "travel-app",
+        "travel-journal",
+        "travel-planner",
+        "tripit",
+        "wanderlog"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "read-only",
+        "search",
+        "fetch",
+        "list",
+        "read",
+        "docs"
+      ],
+      "risk_capabilities": [
+        "shell",
+        "write",
+        "create",
+        "publish"
+      ],
+      "install_hint": "docker run (review required)",
+      "platform_compatible": true,
+      "direct_install": false,
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/liketrek/TREK/main/README.md: <div align=\"center\"> <picture> <source media=\"(prefers-color-scheme: dark)\" srcset=\"docs/logo-trek-light.svg\" /> <source media=\"(prefers-color-scheme: light)\" srcset=\"docs/logo-trek-dark.svg\" /> <img src=\"docs/logo-trek-dark.svg\" alt=\"TREK\" height=\"96\" /> </picture> ### Every part of your trip. One app you own. TREK has grown from a travel planner into a whole ecosystem for trips: plan together in real time on a live map, build hikes, tours and road trips, keep bookings and shared costs in order, pack, write the journal, lay out the photo book and hand the busy work to the built-in AI. Self-hosted, on the web, on your phone and offline. <br /> <a href=\"https://demo.liketrek.com\"><img alt=\"Demo\" src=\"https://img.shields.io/badge/Demo-try-111827?style=for-the-badge\" /></a> &nbsp; <a href=\"https://hub.docker.com/r/mauriceboe/trek\"><img alt=\"Docker\" src=\"https://img.shields.io/badge/Docker-ready-2496ED?style=for-the-badge\" /></a> &nbsp; <a href=\"https://sonarcloud.io/project/overview?id=liketrek_TREK\"><img alt=\"Sonar Quality Gate\" src=\"https://img.shields.io/sonar/quality_gate/liketrek_TREK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge\" /></a> &nbsp; <img alt=\"GitHub Actions Workflow Status\" src=\"https://img.shields.io/github/actions/workflow/status/liketrek/TREK/test.yml?branch=main&style=for-the-badge\"> &nbsp; <a href=\"https://discord.gg/NhZBDSd4qW\"><img alt=\"Discord\" src=\"https://img.shields.io/badge/Discord-join-5865F2?style=for-the-badge\" /></a> &nbsp; <a href=\"https://kanban.pakulat.org/shared/I4wxF6inOOMB0C6hH6kQm3efyNxFjwyI\"><img alt=\"Roadmap\" src=\"https://img.shields.io/badge/Roadm",
+      "score": 14.924
+    },
+    {
+      "full_name": "yokingma/one-search-mcp",
+      "url": "https://github.com/yokingma/one-search-mcp",
+      "description": "🚀 OneSearch MCP Server: Web Search & Scraper & Extract,  Support agent-browser, SearXNG, Tavily, DuckDuckGo, Bing, etc.",
+      "stars": 147,
+      "updated_at": "2026-10-24T06:52:42Z",
+      "license": "MIT",
+      "topics": [
+        "agent-browser",
+        "bing-mcp",
+        "duckduckgo-mcp",
+        "google-search-mcp",
+        "mcp-server",
+        "modelcontextprotocol",
+        "searxng-mcp",
+        "tavily-mcp"
+      ],
+      "risk": "review_required",
+      "read_only_capabilities": [
+        "search"
+      ],
+      "risk_capabilities": [
+        "write"
+      ],
+      "install_hint": "npx -y agent-browser",
+      "platform_compatible": true,
+      "direct_install": true,
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/yokingma/one-search-mcp/main/README.md: # 🚀 OneSearch MCP Server: Web Search, URL Discovery, Scraper & Content Prep A Model Context Protocol (MCP) server implementation that integrates with multiple search providers for web search, local browser search, URL discovery, and scraping capabilities with agent-browser. ## Features - Web search, scrape, discover URLs, and preprocess content from websites. - Support multiple search engines and web scrapers: **SearXNG**, **Tavily**, **DuckDuckGo**, **Bing**, **Google**, **Zhipu (智谱)**, **Exa**, **Bocha (博查)**, **You.com**, etc. - **Local web search** (browser search), support multiple search engines: **Bing**, **Google**, **Baidu**, **Sogou**, etc. - Use `agent-browser` for browser automation. - Free, no API keys required. - **Enabled tools:** `one_search`, `one_scrape`, `one_map`, `one_extract` ## Current Tool Surface - `one_search` - Returns search results from the configured provider. - `one_map` - Discovers links from a starting URL by loading the page in the browser and extracting links from its HTML. - Supported input fields: `url`, `search`, `includeSubdomains`, `limit`. - This is not a sitemap crawler; removed fields such as `ignoreSitemap` and `sitemapOnly` are rejected at the schema boundary. - `one_scrape` - Scrapes one page and returns content selected by `formats`. - Supported input fields: `url`, `formats`, `waitFor`, `timeout`, `skipTlsVerification`, `allowExecuteJavascript`, `actions`. - Supported formats: `markdown`, `html`, `rawHtml`, `links`, `screenshot`, `screenshot@fullPage`. - Supported bounded pre-scrape actions: `wait`, `click`, `write`, `press`, `scroll`. - ",
+      "score": 13.837
+    },
+    {
+      "full_name": "OEvortex/ddg_search",
+      "url": "https://github.com/OEvortex/ddg_search",
+      "description": "A powerful Model Context Protocol (MCP) server for web search and URL content extraction using DuckDuckGo.",
+      "stars": 43,
+      "updated_at": "2026-10-06T07:13:00Z",
+      "license": "NOASSERTION",
+      "topics": [],
+      "risk": "read_only",
+      "read_only_capabilities": [
+        "search",
+        "query"
+      ],
+      "risk_capabilities": [],
+      "install_hint": "npx -y @oevortex/ddg_search@latest",
+      "platform_compatible": true,
+      "direct_install": true,
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/OEvortex/ddg_search/main/README.md: <div align=\"center\"> <a href=\"https://www.npmjs.com/package/@oevortex/ddg_search\"> <img src=\"https://img.shields.io/npm/v/@oevortex/ddg_search.svg\" alt=\"npm version\" /> </a> <a href=\"https://github.com/OEvortex/ddg_search/blob/main/LICENSE\"> <img src=\"https://img.shields.io/badge/License-Apache%202.0-blue.svg\" alt=\"License: Apache 2.0\" /> </a> <a href=\"https://youtube.com/@OEvortex\"> <img src=\"https://img.shields.io/badge/YouTube-%40OEvortex-red.svg\" alt=\"YouTube Channel\" /> </a> <h1>DDG Search</h1> <p> <strong>Web search and AI-powered answers from the command line or MCP.</strong><br> DuckDuckGo, IAsk AI, and Monica AI. No API keys required. </p> </div> --- ## Quick Start ```bash # Search from the command line npx -y @oevortex/ddg_search@latest \"your search query\" # Or install globally npm install -g @oevortex/ddg_search ddg \"your search query\" ``` ## Usage ### CLI ```bash # Basic web search (DuckDuckGo) ddg \"quantum computing\" # Get more results ddg \"latest news\" -n 10 # AI-generated answer (IAsk) ddg \"explain recursion\" -m ai # AI-generated answer (Monica) ddg \"hello world\" -m ai -b monica # IAsk with options ddg \"gravity\" -m ai --iask-mode academic --detail-level comprehensive ``` ### Flags | Flag | Description | Default | |------|-------------|---------| | `-m, --mode` | `web` or `ai` | `web` | | `-b, --backend` | `iask` or `monica` (AI mode only) | `iask` | | `-n, --num-results` | Number of results (1-20, web mode) | `3` | | `--iask-mode` | `question`, `academic`, `forums`, `wiki`, `thinking` | `thinking` | | `--detail-level` | `concise`, `detailed`, `comprehensive` | — | | `-h, --h",
+      "score": 13.167
+    },
+    {
+      "full_name": "pranavms13/web-search-mcp",
+      "url": "https://github.com/pranavms13/web-search-mcp",
+      "description": "A Model Context Protocol (MCP) server that provides web search functionality using a headless Chrome browser to scrape Google, DuckDuckGo and Bing search results.",
+      "stars": 16,
+      "updated_at": "2026-10-01T08:19:34Z",
+      "license": "MIT",
+      "topics": [
+        "bing-search",
+        "duckduckgo-search",
+        "google-search",
+        "mcp",
+        "mcp-server",
+        "web-scraping"
+      ],
+      "risk": "read_only",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "query",
+        "list"
+      ],
+      "risk_capabilities": [],
+      "install_hint": "",
+      "platform_compatible": true,
+      "direct_install": false,
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/pranavms13/web-search-mcp/main/README.md: # Web Search MCP [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/pranavms13/web-search-mcp) A Model Context Protocol (MCP) server that provides web search functionality by scraping Google, DuckDuckGo, and Bing search results through a headless browser. [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=web-search-mcp&config=eyJjb21tYW5kIjoidXZ4IGdpdCtodHRwczovL2dpdGh1Yi5jb20vcHJhbmF2bXMxMy93ZWItc2VhcmNoLW1jcCIsImVudiI6e319) ## Features - **Multi-Engine Search**: Searches Google, DuckDuckGo, and Bing with automatic fallback when an engine is blocked or returns nothing - **Structured Results**: Titles, URLs, domains, snippets, and rankings — with redirect URLs unwrapped to their real destinations - **Web Page Content**: Fetch and extract text content from any webpage - **Pluggable Browser Backends**: Selenium + headless Chrome (default) or the lightweight [Obscura](https://github.com/h4ckf0r0day/obscura) headless browser, selected via an environment variable - **MCP Compatible**: Fully compatible with Claude Desktop and other MCP clients ## Tools Available ### `search_web` Search the web across multiple engines (Google → DuckDuckGo → Bing) with automatic fallback and return structured results. **Parameters:** - `query` (string): The search query string - `max_results` (int, optional): Maximum number of results to return (default: 10, max: 100) - `include_snippets` (bool, optional): Whether to include text snippets (default: true) **Returns:** - List of search results with: - `title`: Page title - `url`",
+      "score": 10.021
+    },
+    {
+      "full_name": "mseri/snf-mcp",
+      "url": "https://github.com/mseri/snf-mcp",
+      "description": "A Model Context Protocol server for DuckDuckGo search and web content fetching (using ocaml-mcp by avsm)",
+      "stars": 8,
+      "updated_at": "2026-03-23T17:17:39Z",
+      "license": "ISC",
+      "topics": [
+        "fetch-tools",
+        "mcp-server",
+        "ocaml",
+        "search"
+      ],
+      "risk": "read_only",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "query"
+      ],
+      "risk_capabilities": [],
+      "install_hint": "",
+      "platform_compatible": true,
+      "direct_install": false,
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/mseri/snf-mcp/main/README.md: # Web fetch and search MCP Server A Model Context Protocol (MCP) server that provides web search, Wikipedia search, and web content fetching capabilities, written in OCaml using the eio asynchronous runtime. ## Features - **DuckDuckGo Search**: Search the web using DuckDuckGo's search engine - **Wikipedia Search**: Search Wikipedia for articles and content - **Web Content Fetching**: Fetch and parse content from web pages, with support for both cleaned-up HTML and Markdown formats - **Rate Limiting**: Built-in rate limiting to respect service limits - **MCP Protocol**: Fully compatible with the Model Context Protocol specification (vendoring <https://tangled.sh/@anil.recoil.org/ocaml-mcp/>) - **Asynchronous**: Built on Eio for efficient concurrent operations ## Tools Provided ### `search` Search DuckDuckGo and return formatted results. **Parameters:** - `query` (string, required): The search query string - `max_results` (integer, optional): Maximum number of results to return (default: 10) **Example:** ```json { \"query\": \"OCaml programming language\", \"max_results\": 5 } ``` ### `search_wikipedia` Search Wikipedia and return formatted results. **Parameters:** - `query` (string, required): The search query string - `max_results` (integer, optional): Maximum number of results to return (default: 10) **Example:** ```json { \"query\": \"OCaml programming language\", \"max_results\": 5 } ``` ### `fetch_content` Fetch and parse content from a webpage URL. **Parameters:** - `url` (string, required): The webpage URL to fetch content from - `max_length` (integer, optional): Maximum length (in bytes) of content t",
+      "score": 8.515
+    },
+    {
+      "full_name": "sweetcornna/free-search-mcp",
+      "url": "https://github.com/sweetcornna/free-search-mcp",
+      "description": "Local-first, no-API-key MCP server for web search, fetch, and document reading. Multi-engine (DuckDuckGo, Mojeek, Startpage), smart Playwright fallback, FTS5 cache, LLM-tuned output.",
+      "stars": 169,
+      "updated_at": "2026-10-31T14:06:49Z",
+      "license": "MIT",
+      "topics": [
+        "claude",
+        "duckduckgo",
+        "llm",
+        "mcp",
+        "model-context-protocol",
+        "mojeek",
+        "playwright",
+        "python",
+        "search",
+        "websearch"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "query",
+        "read",
+        "docs",
+        "lookup"
+      ],
+      "risk_capabilities": [
+        "shell"
+      ],
+      "install_hint": "uvx --from",
+      "platform_compatible": true,
+      "direct_install": true,
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/sweetcornna/free-search-mcp/main/README.md: # free-search-mcp <!-- mcp-name: io.github.sweetcornna/free-search-mcp --> https://github.com/user-attachments/assets/354b522a-ef6b-4547-bb07-c80c6268a5e8 <p align=\"center\"><sub>Music: “Ethereal Space (cdk Mix)” by cdk, <a href=\"https://ccmixter.org/files/cdk/34151\">ccmixter.org/files/cdk/34151</a>, licensed <a href=\"https://creativecommons.org/licenses/by/3.0/\">CC BY 3.0</a>.</sub></p> [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml) [![MCP](https://img.shields.io/badge/MCP-2026--07--28-purple.svg)](https://modelcontextprotocol.io/specification/2026-07-28) free-search-mcp is a local-first Model Context Protocol server that needs no API key. It lets any LLM (Claude, GPT, a local Ollama model, …) search the web, fetch and clean up pages, and read documents, and you never sign up for a search API. It combines ideas from several open-source MCP servers in one Python package, and adds the output shaping for LLMs and the reliability work that each of them lacked. ```text research(\"how does reciprocal rank fusion work\", depth=3) ↓ # Research brief: how does reciprocal rank fusion work _engines: duckduckgo, bing, yahoojp, anysearch · sources: 3 · ~3,400 tokens_ ## Sources - [1] Reciprocal rank fusion | Elasticsearch Reference — <https://…> - [2] Hybrid Search Scoring (RRF) | Microsoft Learn — <https://…> - [3] RRF explained in 4 mins — Medium — <https://…> ## Documents …full Markdown bodies of each page, ready for the LLM to read… ``` That was one tool call. It returned three sources ",
+      "score": 6.139
+    },
+    {
+      "full_name": "sunwu51/orz-mcp",
+      "url": "https://github.com/sunwu51/orz-mcp",
+      "description": "MCP server with web_search and web_fetch tools. Searches Brave, DuckDuckGo. Supports HTTP proxy.",
+      "stars": 13,
+      "updated_at": "2026-10-19T17:46:34Z",
+      "license": "",
+      "topics": [
+        "mcp",
+        "webfetch",
+        "websearch"
+      ],
+      "risk": "blocked",
+      "read_only_capabilities": [
+        "search",
+        "fetch",
+        "query"
+      ],
+      "risk_capabilities": [
+        "deploy"
+      ],
+      "install_hint": "npx -y @modelcontextprotocol/inspector",
+      "platform_compatible": true,
+      "direct_install": true,
+      "eligible": false,
+      "auto_install_allowed": false,
+      "readme_excerpt": "Content type text/plain; charset=utf-8 cannot be simplified to markdown, but here is the raw content: Contents of https://raw.githubusercontent.com/sunwu51/orz-mcp/main/README.md: # ORZ MCP 一个提供 **web_search** 和 **web_fetch** 能力的 MCP (Model Context Protocol) 服务器。 让你的 AI 助手（Claude、Cursor、OpenCode 等）能够搜索互联网和抓取网页内容。 ## 功能 ### web_search 通过 **DuckDuckGo** 搜索网页，自动去重、过滤广告。 - **入参**: `query`（搜索关键词）、`num_results`（返回数量，默认 8） - **返回**: `{ url, title, summary }[]` ### web_fetch 抓取指定 URL 的网页内容，默认简化为 Markdown 格式。 - **入参**: `url`、`max_char_size`（最大字符数，默认 50000）、`simplify`（是否简化，默认 true） - **返回**: 纯文本字符串（Markdown 格式） - 内置 10 秒超时（覆盖重定向、`<meta refresh>` 跳转和读取正文） - 支持表格（GFM）、保留代码块换行；PDF、图片等非文本类型会明确报错，不返回乱码 - Streamable HTTP 版内置 SSRF 防护：拒绝回环、内网、链路本地（如云元数据 `169.254.169.254`）等地址，每次重定向都会重新校验 ## 两种使用方式（二选一） ORZ MCP 提供 **stdio** 和 **Streamable HTTP** 两种 MCP 传输协议的实现，功能完全一致，根据你的需求选择其中一种即可。 | | stdio | Streamable HTTP | |---|---|---| | 运行方式 | 通过 npx 本地启动 | 远程 HTTP 服务（Netlify Functions） | | 适用场景 | 本地运行，支持代理 | 开箱即用，支持云端部署、住宅代理 | | 代理支持 | 支持 `--proxy` 命令行参数与环境变量 | 支持环境变量 `PROXY_URL`（如住宅 IP 代理） | | 依赖 | Node.js >= 18 | 无 | --- ### 方式一：stdio（通过 npx 本地运行） 无需安装，直接通过 `npx` 运行。 在你的 MCP 客户端配置中添加： **1. 配置住宅代理（或科学上网代理）：** ```json { \"mcpServers\": { \"orz\": { \"type\": \"stdio\", \"command\": \"npx\", \"args\": [\"-y\", \"orz-mcp\", \"--proxy\", \"http://user:pass@proxy-host:port\"] } } } ``` --- ### 方式二：Streamable HTTP（远程连接） 无需本地安装任何东西，直接连接部署在 Netlify 上的远程服务。 ```json { \"mcpServers\": { \"orz\": { \"type\": \"http\", \"url\": \"https://<your-netlify-domain>/mcp\" } } } ``` 如果你的 MCP 客户端不支持直接 URL 连接，可以通过 `mcp-remote` 桥接： ```json { \"mcpServers\": { \"orz\": { \"command\": \"npx\", \"args\": [\"mcp-remote@next\", \"https://<your-netlify-domain>/mcp\"] } } } ``` --- ## 配置文件位置 不同的 MCP 客户端配置文件位置不同： - **Claude Desktop**: `~/Library/Application Support/Claude/cl",
+      "score": -0.43
+    }
+  ],
+  "summary": "去 GitHub 翻了 MCP：检查 50 个仓库，读了 10 份 README，筛出 1 个只读候选。优先看：nickclyde/duckduckgo-mcp-server。只记录，不会自动安装或执行。"
+}

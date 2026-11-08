@@ -1,0 +1,165 @@
+{
+  "started_at": 1793483072.4341593,
+  "finished_at": 1793484872.434518,
+  "samples": 30,
+  "health_failures": 0,
+  "max_pending": 16,
+  "qq_assistant_first": 274,
+  "qq_assistant_last": 275,
+  "agent_requests_delta": 37,
+  "agent_tokens_delta": 54352,
+  "last_sample": {
+    "ts": 1793484813.462107,
+    "time": "2026-11-01 06:13:33",
+    "health": {
+      "ok": true,
+      "pending": 0,
+      "queue_depth": 0,
+      "mcp": {
+        "running": true,
+        "working": false,
+        "runs": 1,
+        "errors": 0,
+        "last_run_at": 1793482125.1785681,
+        "last_error": "",
+        "interval_s": 3600.0,
+        "initial_delay_s": 60.0,
+        "latest": {
+          "created_at": 1793481929.1191275,
+          "discovered": 68,
+          "fetched_readmes": 10,
+          "eligible": 1,
+          "summary": "去 GitHub 翻了 MCP：检查 68 个仓库，读了 10 份 README，筛出 1 个只读候选。优先看：ismailsaoulaj/reddit-mcp-server。只记录，不会自动安装或执行。"
+        }
+      },
+      "stickers": {
+        "running": true,
+        "initial_delay_s": 30.0,
+        "interval_s": 3600.0,
+        "runs": 1,
+        "failures": 0,
+        "last_error": "",
+        "last_update": {
+          "ok": true,
+          "status": "ok",
+          "added": 19,
+          "updated": 0,
+          "failed": 0,
+          "partial": false,
+          "failures": [],
+          "preserved": 8,
+          "total": 28,
+          "feed_url": "https://cdn.jsdelivr.net/gh/cheems135/dsh-qq-bridge@main/assets/preset/manifest.json",
+          "took_ms": 28645.1
+        },
+        "started_at": 1793481869.1043406,
+        "stopped_at": 0.0,
+        "service": {
+          "directory": "D:\\AstrBot\\data\\sticker_packs\\aiji",
+          "manifest": "D:\\AstrBot\\data\\sticker_packs\\aiji\\manifest.json",
+          "source": "online_feed+local_manifest",
+          "remote_fetch": true,
+          "auto_update_capable": true,
+          "feed_url": "https://cdn.jsdelivr.net/gh/cheems135/dsh-qq-bridge@main/assets/preset/manifest.json",
+          "count": 28,
+          "name": "aiji-online",
+          "moods": [
+            "angry",
+            "curious",
+            "eating",
+            "happy",
+            "misc",
+            "playful",
+            "proud",
+            "question",
+            "sad",
+            "shy",
+            "speechless",
+            "tired"
+          ],
+          "last_update": {
+            "ok": true,
+            "status": "ok",
+            "added": 0,
+            "updated": 0,
+            "failed": 0,
+            "partial": false,
+            "failures": [],
+            "preserved": 8,
+            "total": 28,
+            "feed_url": "https://cdn.jsdelivr.net/gh/cheems135/dsh-qq-bridge@main/assets/preset/manifest.json",
+            "took_ms": 17309.7,
+            "finished_at": 1793481945.0653994
+          }
+        }
+      },
+      "error": null
+    },
+    "aiji": {
+      "qq_user": 6369,
+      "qq_assistant": 275,
+      "latest_assistant": 1793484774.7657285,
+      "dead": 0
+    },
+    "agent2api": {
+      "last_30m_requests": 51,
+      "last_30m_tokens": 60845,
+      "last_30m_200": 39,
+      "last_30m_408": 12,
+      "latest_request_ms": 1793484799852,
+      "today": {
+        "date": "2026-11-01",
+        "requests": 768,
+        "successful": 768,
+        "tokens": 748914
+      },
+      "balances": [
+        {
+          "provider": "autoclaw",
+          "accounts": 2,
+          "remaining": 48824.0
+        },
+        {
+          "provider": "catpaw",
+          "accounts": 2,
+          "remaining": 0.0
+        },
+        {
+          "provider": "codearts",
+          "accounts": 2,
+          "remaining": 7899.26
+        },
+        {
+          "provider": "kuku",
+          "accounts": 2,
+          "remaining": 100.0
+        },
+        {
+          "provider": "loomy",
+          "accounts": 2,
+          "remaining": 40000.0
+        },
+        {
+          "provider": "qoder",
+          "accounts": 2,
+          "remaining": 1400.0
+        },
+        {
+          "provider": "raccoon",
+          "accounts": 2,
+          "remaining": 20890.0
+        },
+        {
+          "provider": "trae",
+          "accounts": 1,
+          "remaining": 700.0
+        },
+        {
+          "provider": "zcode",
+          "accounts": 2,
+          "remaining": 0.0
+        }
+      ]
+    }
+  }
+}

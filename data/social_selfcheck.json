@@ -1,0 +1,244 @@
+{
+ "ts": 1794030152.74971,
+ "generated_at": "2026-11-07 13:42:32",
+ "live": false,
+ "platforms": {
+  "qq": {
+   "capabilities": {
+    "dm": "ok",
+    "group": "ok",
+    "comment": "unsupported",
+    "feed": "unsupported",
+    "streak": "ok",
+    "group_create": "experimental",
+    "like": "ok"
+   },
+   "notes": {
+    "comment": "QQ 空间评论不在 OneBot 链路上（social_service 里是另一条）",
+    "feed": "QQ 没有可刷的公开内容流",
+    "group_create": "标准 OneBot 无建群动作；未在 NapCat 上验证存在",
+    "streak": "火花本身由 QQ 计算，这里管的是'今天有没有互动'"
+   },
+   "items": {
+    "dm": {
+     "label": "私聊",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 0,
+     "unverified_sends": 3,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "group": {
+     "label": "群聊 / 主动聊天",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "feed": {
+     "label": "刷视频学习",
+     "status": "unsupported",
+     "not_applicable": true,
+     "status_label": "—（该平台没有）",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "streak": {
+     "label": "续火花",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "comment": {
+     "label": "发评论",
+     "status": "unsupported",
+     "not_applicable": false,
+     "status_label": "❌ 不支持",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    }
+   },
+   "evidence": [
+    "data/platform_actions.jsonl",
+    "data/logs/astrbot.log"
+   ],
+   "extra_capabilities": [
+    "group_create",
+    "like"
+   ]
+  },
+  "bilibili": {
+   "capabilities": {
+    "dm": "experimental",
+    "group": "unsupported",
+    "comment": "ok",
+    "feed": "ok",
+    "streak": "unsupported",
+    "group_create": "unsupported",
+    "like": "ok"
+   },
+   "notes": {
+    "dm": "web_im/send_msg 已接；真账号发信未验证",
+    "group": "B 站没有群聊 web 接口（粉丝群只在 App 内）",
+    "comment": "2026-11-04 真账号真发通过（rpid 已回查）",
+    "feed": "用全站排行榜（免 wbi 签名）；推荐流需要 wbi，未接",
+    "streak": "B 站没有连续互动计数；对应动作是每天点赞/观看",
+    "like": "2026-11-05 真机点赞成功（has/like 回查 liked=1）；取消点赞被 -400 拒（见 excluded#193）"
+   },
+   "items": {
+    "dm": {
+     "label": "私聊",
+     "status": "experimental",
+     "not_applicable": false,
+     "status_label": "⚠ experimental",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "group": {
+     "label": "群聊 / 主动聊天",
+     "status": "unsupported",
+     "not_applicable": false,
+     "status_label": "❌ 不支持",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "feed": {
+     "label": "刷视频学习",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "streak": {
+     "label": "续火花",
+     "status": "unsupported",
+     "not_applicable": true,
+     "status_label": "—（该平台没有）",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "comment": {
+     "label": "发评论",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    }
+   },
+   "evidence": [
+    "data/platform_actions.jsonl",
+    "data/bili_cookies.jar"
+   ],
+   "extra_capabilities": [
+    "group_create",
+    "like"
+   ]
+  },
+  "douyin": {
+   "capabilities": {
+    "dm": "ok",
+    "group": "ok",
+    "comment": "ok",
+    "feed": "ok",
+    "streak": "ok",
+    "group_create": "unsupported",
+    "like": "experimental"
+   },
+   "notes": {
+    "dm": "走 www.douyin.com/chat：会话列表 → 点开 → .messageEditori 打字 → 回车（真机 2026-11-05；**必须用有头浏览器**，headless 打开 /chat 会崩）",
+    "group": "同 dm：抖音群就是一个会话。真机在「玖玖大王万岁≧▽≦(66)」群发过，重开会话页回读到「玛卡巴卡的小推车 | 大家好呀，我是小肥鱼…」",
+    "comment": "走**页面上下文 fetch**：在视频页里 fetch /aweme/v1/web/comment/publish，服务端返回 {comment:{cid:...}} 即算真发出（2026-11-05 真机 cid=7704571082514711306、7704571348132463396，评论区回读 has_text=true）。前提：账号已验证——人工在有头窗口过一次验证并亲手发一条之后才通；没过验证时服务端回 200+0 字节（静默丢弃），本适配器如实报 unverified，见 excluded#224",
+    "feed": "走 /hot 热点榜（无需登录，真机 5 条已验）；首页推荐流需要登录态",
+    "streak": "抖音**有**火花（App 里的「连续聊天」计数）。web 端 DOM 里查不到火花的任何元素（2026-11-05 真机翻遍私聊页：0 个含「火花」的节点），所以这边只能保证「每天互发过一条」（adapter.streak 用本地账本记连续天数），真实火花数字以 App 为准。",
+    "group_create": "抖音不支持自建群（网页）",
+    "like": "点数字会变（787→788）但**刷新后回落**、'我的-喜欢'里也没有 → PC 网页点赞不落地，见 excluded#211"
+   },
+   "items": {
+    "dm": {
+     "label": "私聊",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 4,
+     "unverified_sends": 0,
+     "last_ts": 1793862750.7748995,
+     "last_at": "2026-11-05 15:12:30"
+    },
+    "group": {
+     "label": "群聊 / 主动聊天",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 121,
+     "unverified_sends": 0,
+     "last_ts": 1794024812.487655,
+     "last_at": "2026-11-07 12:13:32"
+    },
+    "feed": {
+     "label": "刷视频学习",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "streak": {
+     "label": "续火花",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 0,
+     "unverified_sends": 0,
+     "last_ts": 0,
+     "last_at": ""
+    },
+    "comment": {
+     "label": "发评论",
+     "status": "ok",
+     "not_applicable": false,
+     "status_label": "✅ ok",
+     "real_sends": 2,
+     "unverified_sends": 3,
+     "last_ts": 1793860769.491171,
+     "last_at": "2026-11-05 14:39:29"
+    }
+   },
+   "evidence": [
+    "data/logs/douyin_chat.log",
+    "data/platform_actions.jsonl"
+   ],
+   "extra_capabilities": [
+    "group_create",
+    "like"
+   ]
+  }
+ },
+ "data_dir": "data"
+}
